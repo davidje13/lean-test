@@ -1,0 +1,31 @@
+[PASS] suite: function.spec.mjs [xx]
+[PASS]   describe: function-type definition [xx]
+[PASS]     test: is discovered and has globals passed in [xx]
+[PASS] suite: nested/sub.spec.mjs [xx]
+[PASS]   describe: sub file [xx]
+[PASS]     test: is discovered and has globals available [xx]
+[PASS] suite: object.spec.mjs [xx]
+[PASS]   describe: object-type definition [xx]
+[PASS]     test: is discovered and has globals available [xx]
+[PASS] suite: suite.spec.js [xx]
+[PASS]   describe: commonjs .spec import [xx]
+[PASS]     test: is discovered and has globals available [xx]
+[PASS] suite: suite.spec.mjs [xx]
+[PASS]   describe: es6 .spec import [xx]
+[PASS]     test: is discovered and has globals available [xx]
+[PASS] suite: suite.test.js [xx]
+[PASS]   describe: commonjs .test import [xx]
+[PASS]     test: is discovered and has globals available [xx]
+[PASS] suite: suite.test.mjs [xx]
+[PASS]   describe: es6 .test import [xx]
+[PASS]     test: is discovered and has globals available [xx]
+
+Total:    7
+Pass:     7
+Errors:   0
+Failures: 0
+Skipped:  0
+Duration: xx
+
+PASS
+EXIT: 0

@@ -1,0 +1,23 @@
+[PASS] suite: async.spec.mjs [xx]
+[PASS]   describe: async [xx]
+[PASS]     test: waits for async tests to complete [xx]
+[PASS]     describe: allows async describe blocks [xx]
+[PASS]       test: test1 [xx]
+[PASS]       test: test2 [xx]
+[PASS]     describe: does not leak async definitions to next block [xx]
+[PASS]       test: test3 [xx]
+[FAIL] suite: basics.spec.mjs [xx]
+[PASS]   test: runs tests and records success [xx]
+[FAIL]   test: records failures [xx]
+           Failure in test:
+           expected failure
+
+Total:    6
+Pass:     5
+Errors:   0
+Failures: 1
+Skipped:  0
+Duration: xx
+
+FAIL
+EXIT: 1

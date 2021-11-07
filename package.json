@@ -1,0 +1,33 @@
+{
+  "name": "lean-test",
+  "version": "1.0.0",
+  "description": "a tiny, extensible test runner",
+  "bin": "./build/bin/run.mjs",
+  "main": "build/index.js",
+  "module": "src/index.mjs",
+  "types": "index.d.ts",
+  "files": [
+    "build/**/*",
+    "index.d.ts"
+  ],
+  "scripts": {
+    "test": "./src/bin/run.mjs src && rollup --config rollup.config.js && ./test/run.sh"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/davidje13/lean-test.git"
+  },
+  "keywords": [
+    "test",
+    "unit-test"
+  ],
+  "author": "David Evans",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/davidje13/lean-test/issues"
+  },
+  "homepage": "https://github.com/davidje13/lean-test#readme",
+  "devDependencies": {
+    "rollup": "^2.59.0"
+  }
+}
