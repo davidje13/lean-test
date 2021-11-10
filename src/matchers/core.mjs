@@ -1,7 +1,5 @@
-import assert from 'assert/strict';
 import { seq } from '../utils.mjs';
-
-const ANY = Symbol();
+import { checkEquals, delegateMatcher, ANY } from './checkEquals.mjs';
 
 export const not = (matcher) => (...args) =>
 	seq(matcher(...args), ({ success, message }) => ({ success: !success, message }));
@@ -9,36 +7,79 @@ export const not = (matcher) => (...args) =>
 export const withMessage = (message, matcher) => (...args) =>
 	seq(matcher(...args), ({ success }) => ({ success, message }));
 
-export const equals = (expected) => (actual) => {
-	try {
-		assert.deepStrictEqual(actual, expected);
-		return { success: true, message: `Expected value not to equal ${expected}, but did.` };
-	} catch (e) {
-		const message = e.message.replace(/^[^\r\n]*[\r\n]+|[\r\n]+$/g, '');
-		return { success: false, message };
-	}
-};
+export const equals = (expected) => (actual) => checkEquals(expected, actual, 'value');
 
 export const same = (expected) => (actual) => {
 	if (expected === actual) {
 		return { success: true, message: `Expected value not to be ${expected}, but was.` };
 	}
-	const equalResult = equals(expected)(actual);
+	const equalResult = checkEquals(expected, actual, 'value');
 	if (equalResult.success) {
 		return { success: false, message: `Expected exactly ${expected}, but got a different (but matching) instance.` };
 	} else {
-		return { success: false, message: equalResult.message };
+		return equalResult;
+	}
+};
+
+export const isTrue = () => (actual) => {
+	if (actual === true) {
+		return { success: true, message: `Expected value not to be true, but was.` };
+	} else {
+		return { success: false, message: `Expected true, but got ${actual}.` };
+	}
+};
+
+export const isTruthy = () => (actual) => {
+	if (actual) {
+		return { success: true, message: `Expected value not to be truthy, but got ${actual}.` };
+	} else {
+		return { success: false, message: `Expected truthy value, but got ${actual}.` };
+	}
+};
+
+export const isFalse = () => (actual) => {
+	if (actual === false) {
+		return { success: true, message: `Expected value not to be false, but was.` };
+	} else {
+		return { success: false, message: `Expected false, but got ${actual}.` };
+	}
+};
+
+export const isFalsy = () => (actual) => {
+	if (!actual) {
+		return { success: true, message: `Expected value not to be falsy, but got ${actual}.` };
+	} else {
+		return { success: false, message: `Expected falsy value, but got ${actual}.` };
+	}
+};
+
+export const isNull = () => (actual) => {
+	if (actual === null) {
+		return { success: true, message: `Expected value not to be null, but was.` };
+	} else {
+		return { success: false, message: `Expected null, but got ${actual}.` };
+	}
+};
+
+export const isUndefined = () => (actual) => {
+	if (actual === undefined) {
+		return { success: true, message: `Expected value not to be undefined, but was.` };
+	} else {
+		return { success: false, message: `Expected undefined, but got ${actual}.` };
+	}
+};
+
+export const isNullish = () => (actual) => {
+	if (actual === null || actual === undefined) {
+		return { success: true, message: `Expected value not to be nullish, but got ${actual}.` };
+	} else {
+		return { success: false, message: `Expected nullish value, but got ${actual}.` };
 	}
 };
 
 export const resolves = (expected = ANY) => (input) => {
 	function resolve(actual) {
-		if (typeof expected === 'function') {
-			return expected(actual);
-		} else if (expected !== ANY) {
-			return equals(expected)(actual);
-		}
-		return { success: true, message: `Expected ${input} not to resolve, but resolved to ${actual}.` };
+		return delegateMatcher(expected, actual, 'resolved value');
 	}
 	function reject(actual) {
 		return { success: false, message: `Expected ${input} to resolve, but threw ${actual}.` };
@@ -65,16 +106,12 @@ export const throws = (expected = ANY) => (input) => {
 		}
 	}
 	function reject(actual) {
-		if (typeof expected === 'function') {
-			return expected(actual);
-		} else if (typeof expected === 'string') {
+		if (typeof expected === 'string' && actual instanceof Error) {
 			if (!actual.message.includes(expected)) {
 				return { success: false, message: `Expected ${input} to throw ${expected}, but threw ${actual}.` };
 			}
-		} else if (expected !== ANY) {
-			return equals(expected)(actual);
 		}
-		return { success: true, message: `Expected ${input} not to throw, but threw ${actual}.` };
+		return delegateMatcher(expected, actual, 'thrown value');
 	}
 
 	try {

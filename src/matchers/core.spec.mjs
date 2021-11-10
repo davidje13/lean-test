@@ -100,7 +100,6 @@ describe('same', {
 
 const ASYNC_PASS = () => Promise.resolve({ success: true, message: 'msg' });
 const ASYNC_FAIL = () => Promise.resolve({ success: false, message: 'msg' });
-const ASYNC_ERROR = () => Promise.reject(new Error('nope'));
 
 describe('withMessage', {
 	'overrides the failure message on a comparison'() {
@@ -157,6 +156,83 @@ describe('not', {
 		expect(result2.message, equals('msg'));
 	},
 });
+
+describe('isTrue', () => [
+	[true, true],
+	[false, false],
+	[1, false],
+	[0, false],
+	[null, false],
+	[undefined, false],
+].forEach(([input, expected]) => test(`returns ${expected} for ${input}`, () => {
+	expect(matchers.isTrue()(input).success, equals(expected));
+})));
+
+describe('isFalse', () => [
+	[true, false],
+	[false, true],
+	[1, false],
+	[0, false],
+	[null, false],
+	[undefined, false],
+].forEach(([input, expected]) => test(`returns ${expected} for ${input}`, () => {
+	expect(matchers.isFalse()(input).success, equals(expected));
+})));
+
+describe('isTruthy', () => [
+	[true, true],
+	[false, false],
+	[1, true],
+	[0, false],
+	[null, false],
+	[undefined, false],
+].forEach(([input, expected]) => test(`returns ${expected} for ${input}`, () => {
+	expect(matchers.isTruthy()(input).success, equals(expected));
+})));
+
+describe('isFalsy', () => [
+	[true, false],
+	[false, true],
+	[1, false],
+	[0, true],
+	[null, true],
+	[undefined, true],
+].forEach(([input, expected]) => test(`returns ${expected} for ${input}`, () => {
+	expect(matchers.isFalsy()(input).success, equals(expected));
+})));
+
+describe('isNull', () => [
+	[true, false],
+	[false, false],
+	[1, false],
+	[0, false],
+	[null, true],
+	[undefined, false],
+].forEach(([input, expected]) => test(`returns ${expected} for ${input}`, () => {
+	expect(matchers.isNull()(input).success, equals(expected));
+})));
+
+describe('isUndefined', () => [
+	[true, false],
+	[false, false],
+	[1, false],
+	[0, false],
+	[null, false],
+	[undefined, true],
+].forEach(([input, expected]) => test(`returns ${expected} for ${input}`, () => {
+	expect(matchers.isUndefined()(input).success, equals(expected));
+})));
+
+describe('isNullish', () => [
+	[true, false],
+	[false, false],
+	[1, false],
+	[0, false],
+	[null, true],
+	[undefined, true],
+].forEach(([input, expected]) => test(`returns ${expected} for ${input}`, () => {
+	expect(matchers.isNullish()(input).success, equals(expected));
+})));
 
 describe('resolves', {
 	async 'resolves a promise'() {

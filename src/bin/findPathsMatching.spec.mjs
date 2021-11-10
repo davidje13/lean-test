@@ -15,8 +15,7 @@ describe('findPathsMatching', {
 
 	async 'does not search excluded files'() {
 		const results = await toList(findPathsMatching(cwd(), '**/findPathsMatching.*', [...COMMON_EXCLUDE, '**/bin']));
-		const relativePaths = results.map((r) => r.relative);
-		expect(relativePaths.sort(), equals([]));
+		expect(results, isEmpty());
 	},
 });
 
