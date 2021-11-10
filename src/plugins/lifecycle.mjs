@@ -40,7 +40,7 @@ export default () => (builder) => {
 		for (; i < before.length && !err; ++i) {
 			const teardowns = [];
 			for (const { name, fn } of before[i]) {
-				const success = await node.exec(`before ${name}`, async () => {
+				const success = await node.result.exec(`before ${name}`, async () => {
 					const teardown = await fn();
 					if (typeof teardown === 'function') {
 						teardowns.unshift({ name, fn: teardown });
@@ -59,10 +59,10 @@ export default () => (builder) => {
 		} finally {
 			while ((i--) > 0) {
 				for (const { name, fn } of allTeardowns[i]) {
-					await node.exec(`teardown ${name}`, fn);
+					await node.result.exec(`teardown ${name}`, fn);
 				}
 				for (const { name, fn } of after[i]) {
-					await node.exec(`after ${name}`, fn);
+					await node.result.exec(`after ${name}`, fn);
 				}
 			}
 		}

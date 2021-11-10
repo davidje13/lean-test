@@ -7,7 +7,7 @@ export class TestAssumptionError extends Error {
 }
 
 export class Runner {
-	run(): Promise<void>;
+	run(): Promise<Result>;
 }
 
 export type Plugin = (builder: RunnerBuilder) => void;
@@ -72,8 +72,17 @@ export const plugins: {
 	timeout: () => Plugin,
 };
 
+export interface Node {
+}
+
+export interface Result {
+	node: Node;
+	parent: Result | null;
+	children: Result[];
+}
+
 export interface Reporter {
-	report(context: Runner): void;
+	report(result: Result): void;
 }
 
 export const reporters: {

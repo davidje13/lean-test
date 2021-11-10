@@ -13,8 +13,12 @@ class TestAssertionError extends Error {
 }
 
 class Result {
-	constructor(isTest) {
+	constructor(node, isTest) {
+		this.node = node;
 		this.isTest = isTest;
+		this.parent = null;
+		this.children = [];
+
 		this.started = false;
 		this.startTime = null;
 		this.invoked = false;
@@ -26,9 +30,30 @@ class Result {
 		this.skipReasons = [];
 	}
 
+	addChild(child) {
+		this.children.push(child);
+	}
+
+	selfOrDescendantMatches(predicate) {
+		return predicate(this) || this.children.some((child) => child.selfOrDescendantMatches(predicate));
+	}
+
 	start() {
 		this.started = true;
 		this.startTime = Date.now();
+	}
+
+	async exec(namespace, fn) {
+		const beginTime = Date.now();
+		try {
+			await fn();
+			return true;
+		} catch (error) {
+			this.recordError(namespace, error);
+			return false;
+		} finally {
+			this.accumulateDuration(namespace, Date.now() - beginTime);
+		}
 	}
 
 	finish() {
@@ -92,11 +117,13 @@ class Result {
 		}
 		return { count: 1, pass: 1 };
 	}
+
+	getDescendantSummary() {
+		return this.children.map((child) => child.getDescendantSummary()).reduce(combineSummary, this.getSummary());
+	}
 }
 
-const HIDDEN = Symbol();
-
-function combineResult(a, b) {
+function combineSummary(a, b) {
 	const r = { ...a };
 	Object.keys(b).forEach((k) => {
 		r[k] = (r[k] || 0) + b[k];
@@ -104,10 +131,12 @@ function combineResult(a, b) {
 	return r;
 }
 
+const HIDDEN = Symbol();
+
 async function finalInterceptor(_, context, node) {
 	if (node.config.run) {
 		if (context.active) {
-			await node.exec('test', () => node.config.run(node));
+			await node.result.exec('test', () => node.config.run(node));
 		} else {
 			node.result.recordError('interceptors', new TestAssumptionError('skipped'));
 		}
@@ -143,12 +172,14 @@ class Node {
 		this.parent = null;
 		this.children = [];
 
-		this.result = new Result(Boolean(this.config.run));
+		this.result = new Result(this, Boolean(this.config.run));
 	}
 
 	addChild(node) {
 		node.parent = this;
 		this.children.push(node);
+		node.result.parent = this.result;
+		this.result.children.push(node.result);
 	}
 
 	selfOrDescendantMatches(predicate) {
@@ -162,23 +193,10 @@ class Node {
 		return this.scopes.get(key);
 	}
 
-	async exec(namespace, fn) {
-		const beginTime = Date.now();
-		try {
-			await fn();
-			return true;
-		} catch (error) {
-			this.result.recordError(namespace, error);
-			return false;
-		} finally {
-			this.result.accumulateDuration(namespace, Date.now() - beginTime);
-		}
-	}
-
 	async runDiscovery(methods, beginHook) {
 		if (this.config.discovery) {
 			beginHook(this);
-			await this.exec('discovery', () => this.config.discovery(this, { ...methods }));
+			await this.result.exec('discovery', () => this.config.discovery(this, { ...methods }));
 		}
 		for (const child of this.children) {
 			await child.runDiscovery(methods, beginHook);
@@ -194,15 +212,12 @@ class Node {
 		this.result.finish();
 	}
 
-	run(interceptors, context) {
-		return this._run({
+	async run(interceptors, context) {
+		await this._run({
 			...context,
 			[HIDDEN]: { interceptors: [...interceptors, finalInterceptor] },
 		});
-	}
-
-	getResults() {
-		return this.children.map((child) => child.getResults()).reduce(combineResult, this.result.getSummary());
+		return this.result;
 	}
 }
 
@@ -806,7 +821,7 @@ var lifecycle = () => (builder) => {
 		for (; i < before.length && !err; ++i) {
 			const teardowns = [];
 			for (const { name, fn } of before[i]) {
-				const success = await node.exec(`before ${name}`, async () => {
+				const success = await node.result.exec(`before ${name}`, async () => {
 					const teardown = await fn();
 					if (typeof teardown === 'function') {
 						teardowns.unshift({ name, fn: teardown });
@@ -825,10 +840,10 @@ var lifecycle = () => (builder) => {
 		} finally {
 			while ((i--) > 0) {
 				for (const { name, fn } of allTeardowns[i]) {
-					await node.exec(`teardown ${name}`, fn);
+					await node.result.exec(`teardown ${name}`, fn);
 				}
 				for (const { name, fn } of after[i]) {
-					await node.exec(`after ${name}`, fn);
+					await node.result.exec(`after ${name}`, fn);
 				}
 			}
 		}
@@ -881,13 +896,13 @@ var retry = () => (builder) => {
 	}, { first: true }); // ensure any lifecycle steps happen within the retry
 };
 
-const failed = (node) => node.result.hasFailed();
+const failed = (result) => result.hasFailed();
 
 var stopAtFirstFailure = () => (builder) => {
 	builder.addRunCondition((_, node) => !(
 		node.parent &&
 		node.parent.options.stopAtFirstFailure &&
-		node.parent.selfOrDescendantMatches(failed)
+		node.result.parent.selfOrDescendantMatches(failed)
 	));
 };
 
@@ -952,78 +967,78 @@ class TextReporter {
 		this.output = new Output(writer);
 	}
 
-	_print(node, indent) {
-		const results = node.getResults();
-		const duration = node.result.getDuration();
-		const display = (node.config.display !== false);
-		let result = '';
+	_print(result, indent) {
+		const results = result.getDescendantSummary();
+		const duration = result.getDuration();
+		const display = (result.node.config.display !== false);
+		let marker = '';
 		if (results.error) {
-			result = this.output.red('[ERRO]');
+			marker = this.output.red('[ERRO]');
 		} else if (results.fail) {
-			result = this.output.red('[FAIL]');
+			marker = this.output.red('[FAIL]');
 		} else if (results.run || results.pend) {
-			result = this.output.blue('[....]');
+			marker = this.output.blue('[....]');
 		} else if (results.pass) {
-			result = this.output.green('[PASS]');
+			marker = this.output.green('[PASS]');
 		} else if (results.skip) {
-			result = this.output.yellow('[SKIP]');
+			marker = this.output.yellow('[SKIP]');
 		} else {
-			result = this.output.yellow('[NONE]');
+			marker = this.output.yellow('[NONE]');
 		}
 		const resultSpace = '      ';
 
 		if (display) {
 			this.output.write(
-				`${node.config.display}: ${node.options.name} [${duration}ms]`,
-				`${result} ${indent}`,
+				`${result.node.config.display}: ${result.node.options.name} [${duration}ms]`,
+				`${marker} ${indent}`,
 				`${resultSpace} ${indent}`,
 			);
 		}
-		node.result.errors.forEach((err) => {
+		result.errors.forEach((err) => {
 			this.output.write(
 				this.output.red(String(err)),
 				`${resultSpace} ${indent}  `,
 			);
 		});
-		node.result.failures.forEach((message) => {
+		result.failures.forEach((message) => {
 			this.output.write(
 				this.output.red(message),
 				`${resultSpace} ${indent}  `,
 			);
 		});
 		const nextIndent = indent + (display ? '  ' : '');
-		node.children.forEach((child) => this._print(child, nextIndent));
+		result.children.forEach((child) => this._print(child, nextIndent));
 	}
 
-	report(ctx) {
-		const finalResult = ctx.baseNode.getResults();
-		const duration = ctx.baseNode.result.getDuration();
+	report(result) {
+		const summary = result.getDescendantSummary();
+		const duration = result.getDuration();
 
-		this._print(ctx.baseNode, '');
+		this._print(result, '');
 
-		if (!finalResult.count) {
+		if (!summary.count) {
 			this.output.write(this.output.yellow('NO TESTS FOUND'));
 			process.exit(1);
 		}
 
 		this.output.write('');
-		this.output.write(`Total:    ${finalResult.count || 0}`);
-		this.output.write(`Pass:     ${finalResult.pass || 0}`);
-		this.output.write(`Errors:   ${finalResult.error || 0}`);
-		this.output.write(`Failures: ${finalResult.fail || 0}`);
-		this.output.write(`Skipped:  ${finalResult.skip || 0}`);
+		this.output.write(`Total:    ${summary.count || 0}`);
+		this.output.write(`Pass:     ${summary.pass || 0}`);
+		this.output.write(`Errors:   ${summary.error || 0}`);
+		this.output.write(`Failures: ${summary.fail || 0}`);
+		this.output.write(`Skipped:  ${summary.skip || 0}`);
 		this.output.write(`Duration: ${duration}ms`);
 		this.output.write('');
 
 		// TODO: warn or error if any node contains 0 tests
 
-		if (finalResult.error) {
+		if (summary.error) {
 			this.output.write(this.output.red('ERROR'));
 			process.exit(1);
-		} else if (finalResult.fail) {
+		} else if (summary.fail) {
 			this.output.write(this.output.red('FAIL'));
 			process.exit(1);
-		} else if (finalResult.pass) {
+		} else if (summary.pass) {
 			this.output.write(this.output.green('PASS'));
 		} else {
 			this.output.write(this.output.yellow('NO TESTS RUN'));

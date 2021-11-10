@@ -51,5 +51,5 @@ for await (const { path, relative } of findPathsMatching(scanDirs, '**/*.{spec|t
 
 const runner = await builder.build();
 
-await runner.run();
-out.report(runner);
+const result = await runner.run();
+out.report(result);

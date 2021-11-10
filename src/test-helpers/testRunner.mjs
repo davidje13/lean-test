@@ -9,10 +9,10 @@ export default async function testRunner(plugins, expectedResult, block) {
 	const runner = await builder.build();
 	await runner.run();
 
-	const match = equals(expectedResult)(runner.baseNode.getResults());
+	const match = equals(expectedResult)(runner.baseNode.result.getDescendantSummary());
 	if (!match.success) {
 		console.error(runner.baseNode.children[0].result); // TODO: log out all errors for debugging
 		fail(match.message);
 	}
-	return runner.baseNode;
+	return runner.baseNode.result;
 }

@@ -2,8 +2,12 @@ import TestAssertionError from './TestAssertionError.mjs';
 import TestAssumptionError from './TestAssumptionError.mjs';
 
 export default class Result {
-	constructor(isTest) {
+	constructor(node, isTest) {
+		this.node = node;
 		this.isTest = isTest;
+		this.parent = null;
+		this.children = [];
+
 		this.started = false;
 		this.startTime = null;
 		this.invoked = false;
@@ -15,9 +19,30 @@ export default class Result {
 		this.skipReasons = [];
 	}
 
+	addChild(child) {
+		this.children.push(child);
+	}
+
+	selfOrDescendantMatches(predicate) {
+		return predicate(this) || this.children.some((child) => child.selfOrDescendantMatches(predicate));
+	}
+
 	start() {
 		this.started = true;
 		this.startTime = Date.now();
+	}
+
+	async exec(namespace, fn) {
+		const beginTime = Date.now();
+		try {
+			await fn();
+			return true;
+		} catch (error) {
+			this.recordError(namespace, error);
+			return false;
+		} finally {
+			this.accumulateDuration(namespace, Date.now() - beginTime);
+		}
 	}
 
 	finish() {
@@ -81,4 +106,16 @@ export default class Result {
 		}
 		return { count: 1, pass: 1 };
 	}
+
+	getDescendantSummary() {
+		return this.children.map((child) => child.getDescendantSummary()).reduce(combineSummary, this.getSummary());
+	}
+}
+
+function combineSummary(a, b) {
+	const r = { ...a };
+	Object.keys(b).forEach((k) => {
+		r[k] = (r[k] || 0) + b[k];
+	});
+	return r;
 }

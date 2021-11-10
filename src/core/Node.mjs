@@ -3,18 +3,10 @@ import Result from './Result.mjs';
 
 const HIDDEN = Symbol();
 
-function combineResult(a, b) {
-	const r = { ...a };
-	Object.keys(b).forEach((k) => {
-		r[k] = (r[k] || 0) + b[k];
-	});
-	return r;
-}
-
 async function finalInterceptor(_, context, node) {
 	if (node.config.run) {
 		if (context.active) {
-			await node.exec('test', () => node.config.run(node));
+			await node.result.exec('test', () => node.config.run(node));
 		} else {
 			node.result.recordError('interceptors', new TestAssumptionError('skipped'));
 		}
@@ -50,12 +42,14 @@ export default class Node {
 		this.parent = null;
 		this.children = [];
 
-		this.result = new Result(Boolean(this.config.run));
+		this.result = new Result(this, Boolean(this.config.run));
 	}
 
 	addChild(node) {
 		node.parent = this;
 		this.children.push(node);
+		node.result.parent = this.result;
+		this.result.children.push(node.result);
 	}
 
 	selfOrDescendantMatches(predicate) {
@@ -69,23 +63,10 @@ export default class Node {
 		return this.scopes.get(key);
 	}
 
-	async exec(namespace, fn) {
-		const beginTime = Date.now();
-		try {
-			await fn();
-			return true;
-		} catch (error) {
-			this.result.recordError(namespace, error);
-			return false;
-		} finally {
-			this.result.accumulateDuration(namespace, Date.now() - beginTime);
-		}
-	}
-
 	async runDiscovery(methods, beginHook) {
 		if (this.config.discovery) {
 			beginHook(this);
-			await this.exec('discovery', () => this.config.discovery(this, { ...methods }));
+			await this.result.exec('discovery', () => this.config.discovery(this, { ...methods }));
 		}
 		for (const child of this.children) {
 			await child.runDiscovery(methods, beginHook);
@@ -101,14 +82,11 @@ export default class Node {
 		this.result.finish();
 	}
 
-	run(interceptors, context) {
-		return this._run({
+	async run(interceptors, context) {
+		await this._run({
 			...context,
 			[HIDDEN]: { interceptors: [...interceptors, finalInterceptor] },
 		});
-	}
-
-	getResults() {
-		return this.children.map((child) => child.getResults()).reduce(combineResult, this.result.getSummary());
+		return this.result;
 	}
 }
