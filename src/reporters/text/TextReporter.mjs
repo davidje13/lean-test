@@ -7,7 +7,7 @@ export default class TextReporter {
 
 	_print(node, indent) {
 		const results = node.getResults();
-		const duration = node.getDuration();
+		const duration = node.result.getDuration();
 		const display = (node.config.display !== false);
 		let result = '';
 		if (results.error) {
@@ -45,12 +45,12 @@ export default class TextReporter {
 			);
 		});
 		const nextIndent = indent + (display ? '  ' : '');
-		node.sub.forEach((subNode) => this._print(subNode, nextIndent));
+		node.children.forEach((child) => this._print(child, nextIndent));
 	}
 
 	report(ctx) {
 		const finalResult = ctx.baseNode.getResults();
-		const duration = ctx.baseNode.getDuration();
+		const duration = ctx.baseNode.result.getDuration();
 
 		this._print(ctx.baseNode, '');
 

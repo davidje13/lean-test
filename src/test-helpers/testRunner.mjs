@@ -11,7 +11,7 @@ export default async function testRunner(plugins, expectedResult, block) {
 
 	const match = equals(expectedResult)(runner.baseNode.getResults());
 	if (!match.success) {
-		console.error(runner.baseNode.sub[0].result); // TODO: log out all errors for debugging
+		console.error(runner.baseNode.children[0].result); // TODO: log out all errors for debugging
 		fail(match.message);
 	}
 	return runner.baseNode;

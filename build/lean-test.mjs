@@ -1,14 +1,96 @@
 import assert from 'assert/strict';
 
+class TestAssumptionError extends Error {
+	constructor(message) {
+		super(message);
+	}
+}
+
 class TestAssertionError extends Error {
 	constructor(message) {
 		super(message);
 	}
 }
 
-class TestAssumptionError extends Error {
-	constructor(message) {
-		super(message);
+class Result {
+	constructor(isTest) {
+		this.isTest = isTest;
+		this.started = false;
+		this.startTime = null;
+		this.invoked = false;
+		this.durations = new Map();
+		this.totalRunDuration = 0;
+		this.complete = false;
+		this.failures = [];
+		this.errors = [];
+		this.skipReasons = [];
+	}
+
+	start() {
+		this.started = true;
+		this.startTime = Date.now();
+	}
+
+	finish() {
+		this.totalRunDuration = Date.now() - this.startTime;
+		this.complete = true;
+	}
+
+	recordError(namespace, error) {
+		if (error instanceof TestAssertionError) {
+			this.failures.push(`Failure in ${namespace}:\n${error.message}`);
+		} else if (error instanceof TestAssumptionError) {
+			this.skipReasons.push(`Assumption not met in ${namespace}:\n${error.message}`);
+		} else {
+			this.errors.push(error);
+		}
+	}
+
+	accumulateDuration(namespace, millis) {
+		this.durations.set(namespace, (this.durations.get(namespace) || 0) + millis);
+	}
+
+	getDuration() {
+		if (!this.started) {
+			return null;
+		}
+		return (
+			(this.complete ? this.totalRunDuration : (Date.now() - this.startTime)) +
+			(this.durations.get('discovery') || 0)
+		);
+	}
+
+	hasFailed() {
+		return this.errors.length > 0 || this.failures.length > 0;
+	}
+
+	getSummary() {
+		if (!this.isTest) {
+			if (this.errors.length) {
+				return { error: 1 };
+			}
+			if (this.failures.length) {
+				return { fail: 1 };
+			}
+			return {};
+		}
+
+		if (!this.started) {
+			return { count: 1, pend: 1 };
+		}
+		if (!this.complete) {
+			return { count: 1, run: 1 };
+		}
+		if (this.errors.length) {
+			return { count: 1, error: 1 };
+		}
+		if (this.failures.length) {
+			return { count: 1, fail: 1 };
+		}
+		if (this.skipReasons.length || !this.invoked) {
+			return { count: 1, skip: 1 };
+		}
+		return { count: 1, pass: 1 };
 	}
 }
 
@@ -27,14 +109,14 @@ async function finalInterceptor(_, context, node) {
 		if (context.active) {
 			await node.exec('test', () => node.config.run(node));
 		} else {
-			node.result.skipReasons.push(new TestAssumptionError('skipped'));
+			node.result.recordError('interceptors', new TestAssumptionError('skipped'));
 		}
 		node.result.invoked = true;
 	} else if (node.options.parallel) {
-		await Promise.all(node.sub.map((subNode) => subNode._run(context)));
+		await Promise.all(node.children.map((child) => child._run(context)));
 	} else {
-		for (const subNode of node.sub) {
-			await subNode._run(context);
+		for (const child of node.children) {
+			await child._run(context);
 		}
 	}
 }
@@ -59,25 +141,18 @@ class Node {
 		this.options = Object.freeze(options);
 		this.scopes = Object.freeze(new Map(scopes.map(({ scope, value }) => [scope, value()])));
 		this.parent = null;
-		this.sub = [];
+		this.children = [];
 
-		this.result = {
-			started: false,
-			startTime: null,
-			invoked: false,
-			durations: new Map(),
-			totalRunDuration: 0,
-			complete: false,
-
-			failures: [],
-			errors: [],
-			skipReasons: []
-		};
+		this.result = new Result(Boolean(this.config.run));
 	}
 
 	addChild(node) {
 		node.parent = this;
-		this.sub.push(node);
+		this.children.push(node);
+	}
+
+	selfOrDescendantMatches(predicate) {
+		return predicate(this) || this.children.some((child) => child.selfOrDescendantMatches(predicate));
 	}
 
 	getScope(key) {
@@ -87,31 +162,16 @@ class Node {
 		return this.scopes.get(key);
 	}
 
-	captureError(namespace, error) {
-		if (error instanceof TestAssertionError) {
-			this.result.failures.push(`Failure in ${namespace}:\n${error.message}`);
-		} else if (error instanceof TestAssumptionError) {
-			this.result.skipReasons.push(`Assumption not met in ${namespace}:\n${error.message}`);
-		} else {
-			this.result.errors.push(error);
-		}
-	}
-
-	hasFailed() {
-		return this.result.errors.length > 0 || this.result.failures.length > 0;
-	}
-
 	async exec(namespace, fn) {
 		const beginTime = Date.now();
 		try {
 			await fn();
 			return true;
 		} catch (error) {
-			this.captureError(namespace, error);
+			this.result.recordError(namespace, error);
 			return false;
 		} finally {
-			const duration = Date.now() - beginTime;
-			this.result.durations.set(namespace, (this.result.durations.get(namespace) || 0) + duration);
+			this.result.accumulateDuration(namespace, Date.now() - beginTime);
 		}
 	}
 
@@ -120,22 +180,18 @@ class Node {
 			beginHook(this);
 			await this.exec('discovery', () => this.config.discovery(this, { ...methods }));
 		}
-		for (const subNode of this.sub) {
-			await subNode.runDiscovery(methods, beginHook);
+		for (const child of this.children) {
+			await child.runDiscovery(methods, beginHook);
 		}
 		this.scopes.forEach(Object.freeze);
-		Object.freeze(this.sub);
+		Object.freeze(this.children);
 		Object.freeze(this);
 	}
 
 	async _run(context) {
-		this.result.started = true;
-		this.result.startTime = Date.now();
-
+		this.result.start();
 		await runChain(context[HIDDEN].interceptors, [context, this]);
-
-		this.result.totalRunDuration = Date.now() - this.result.startTime;
-		this.result.complete = true;
+		this.result.finish();
 	}
 
 	run(interceptors, context) {
@@ -145,47 +201,8 @@ class Node {
 		});
 	}
 
-	getOwnResult() {
-		if (!this.config.run) {
-			if (this.result.errors.length) {
-				return { error: 1 };
-			}
-			if (this.result.failures.length) {
-				return { fail: 1 };
-			}
-			return {};
-		}
-
-		if (!this.result.started) {
-			return { count: 1, pend: 1 };
-		}
-		if (!this.result.complete) {
-			return { count: 1, run: 1 };
-		}
-		if (this.result.errors.length) {
-			return { count: 1, error: 1 };
-		}
-		if (this.result.failures.length) {
-			return { count: 1, fail: 1 };
-		}
-		if (this.result.skipReasons.length || !this.result.invoked) {
-			return { count: 1, skip: 1 };
-		}
-		return { count: 1, pass: 1 };
-	}
-
 	getResults() {
-		return this.sub.map((s) => s.getResults()).reduce(combineResult, this.getOwnResult());
-	}
-
-	getDuration() {
-		if (!this.result.started) {
-			return null;
-		}
-		return (
-			(this.result.complete ? this.result.totalRunDuration : (Date.now() - this.result.startTime)) +
-			(this.result.durations.get('discovery') || 0)
-		);
+		return this.children.map((child) => child.getResults()).reduce(combineResult, this.result.getSummary());
 	}
 }
 
@@ -716,7 +733,7 @@ var fail = () => (builder) => {
 	});
 };
 
-const containsFocus = (node) => (node.options.focus || node.sub.some(containsFocus));
+const focused = (node) => node.options.focus;
 
 var focus = () => (builder) => {
 	builder.addNodeOption('focus', { focus: true });
@@ -729,12 +746,12 @@ var focus = () => (builder) => {
 	});
 
 	builder.addRunInterceptor((next, context, node) => {
-		const withinFocus = node.options.focus || context[scope].withinFocus;
+		const withinFocus = focused(node) || context[scope].withinFocus;
 		let anyFocus = context[scope].anyFocus;
 		if (anyFocus === null) { // must be root object
-			anyFocus = withinFocus || containsFocus(node);
+			anyFocus = withinFocus || node.selfOrDescendantMatches(focused);
 		}
-		if (!anyFocus || withinFocus || containsFocus(node)) {
+		if (!anyFocus || withinFocus || node.selfOrDescendantMatches(focused)) {
 			return next({ ...context, [scope]: { withinFocus, anyFocus } });
 		} else {
 			return next({ ...context, [scope]: { withinFocus, anyFocus }, active: false });
@@ -855,7 +872,7 @@ var retry = () => (builder) => {
 		}
 		const maxAttempts = node.options.retry || 0;
 		const attempts = []; // TODO: make available to reporting (also durations, etc.)
-		while (node.hasFailed() && attempts.length < maxAttempts - 1) {
+		while (node.result.hasFailed() && attempts.length < maxAttempts - 1) {
 			attempts.push({ errors: [...node.result.errors], failures: [...node.result.failures] });
 			node.result.errors.length = 0;
 			node.result.failures.length = 0;
@@ -864,13 +881,13 @@ var retry = () => (builder) => {
 	}, { first: true }); // ensure any lifecycle steps happen within the retry
 };
 
-const containsFailure = (node) => (node.hasFailed() || node.sub.some(containsFailure));
+const failed = (node) => node.result.hasFailed();
 
 var stopAtFirstFailure = () => (builder) => {
 	builder.addRunCondition((_, node) => !(
 		node.parent &&
 		node.parent.options.stopAtFirstFailure &&
-		containsFailure(node.parent)
+		node.parent.selfOrDescendantMatches(failed)
 	));
 };
 
@@ -937,7 +954,7 @@ class TextReporter {
 
 	_print(node, indent) {
 		const results = node.getResults();
-		const duration = node.getDuration();
+		const duration = node.result.getDuration();
 		const display = (node.config.display !== false);
 		let result = '';
 		if (results.error) {
@@ -975,12 +992,12 @@ class TextReporter {
 			);
 		});
 		const nextIndent = indent + (display ? '  ' : '');
-		node.sub.forEach((subNode) => this._print(subNode, nextIndent));
+		node.children.forEach((child) => this._print(child, nextIndent));
 	}
 
 	report(ctx) {
 		const finalResult = ctx.baseNode.getResults();
-		const duration = ctx.baseNode.getDuration();
+		const duration = ctx.baseNode.result.getDuration();
 
 		this._print(ctx.baseNode, '');
 
