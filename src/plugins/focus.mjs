@@ -21,5 +21,5 @@ export default () => (builder) => {
 		} else {
 			return next({ ...context, [scope]: { withinFocus, anyFocus }, active: false });
 		}
-	}, { first: true });
+	}, { order: Number.NEGATIVE_INFINITY });
 };

@@ -374,12 +374,8 @@ Runner.Builder = class RunnerBuilder {
 		return this;
 	}
 
-	addRunInterceptor(fn, { first = false } = {}) {
-		if (first) {
-			this.runInterceptors.unshift(fn);
-		} else {
-			this.runInterceptors.push(fn);
-		}
+	addRunInterceptor(fn, { order = 0 } = {}) {
+		this.runInterceptors.push({ order, fn });
 		return this;
 	}
 
@@ -387,7 +383,7 @@ Runner.Builder = class RunnerBuilder {
 		return this.addRunInterceptor(async (next, context, ...rest) => {
 			const run = await fn(context, ...rest);
 			return await next(run ? context : { ...context, active: false });
-		}, { first: true });
+		}, { order: Number.NEGATIVE_INFINITY });
 	}
 
 	addSuite(name, content, options = {}) {
@@ -471,11 +467,12 @@ Runner.Builder = class RunnerBuilder {
 
 		const baseContext = { active: true };
 		exts.get(CONTEXT_INIT).forEach(({ scope, value }) => { baseContext[scope] = Object.freeze(value()); });
+		this.runInterceptors.sort((a, b) => (a.order - b.order));
 
 		return new Runner(
 			baseNode,
 			Object.freeze(baseContext),
-			Object.freeze([...this.runInterceptors]),
+			Object.freeze(this.runInterceptors.map((i) => i.fn)),
 		);
 	}
 };
@@ -810,7 +807,7 @@ var focus = () => (builder) => {
 		} else {
 			return next({ ...context, [scope]: { withinFocus, anyFocus }, active: false });
 		}
-	}, { first: true });
+	}, { order: Number.NEGATIVE_INFINITY });
 };
 
 var ignore = () => (builder) => {
@@ -818,7 +815,7 @@ var ignore = () => (builder) => {
 	builder.addRunCondition((_, _result, node) => (!node.options.ignore));
 };
 
-var lifecycle = () => (builder) => {
+var lifecycle = ({ order = 0 } = {}) => (builder) => {
 	const scope = builder.addScope({
 		node: () => ({
 			beforeAll: [],
@@ -851,7 +848,7 @@ var lifecycle = () => (builder) => {
 				active: !skip,
 			}));
 		}
-	});
+	}, { order });
 
 	async function withWrappers(result, before, after, next) {
 		let skip = false;
@@ -918,7 +915,7 @@ var lifecycle = () => (builder) => {
 	});
 };
 
-var repeat = () => (builder) => {
+var repeat = ({ order = -1 } = {}) => (builder) => {
 	builder.addRunInterceptor(async (next, context, result, node) => {
 		let { repeat = {} } = node.options;
 		if (typeof repeat !== 'object') {
@@ -959,10 +956,10 @@ var repeat = () => (builder) => {
 				break;
 			}
 		}
-	}, { first: true }); // ensure any lifecycle steps happen within the repeat
+	}, { order });
 };
 
-var retry = () => (builder) => {
+var retry = ({ order = -1 } = {}) => (builder) => {
 	builder.addRunInterceptor(async (next, context, result, node) => {
 		const maxAttempts = node.options.retry || 0;
 		if (!context.active || maxAttempts <= 1) {
@@ -980,7 +977,7 @@ var retry = () => (builder) => {
 				break;
 			}
 		}
-	}, { first: true }); // ensure any lifecycle steps happen within the retry
+	}, { order });
 };
 
 var stopAtFirstFailure = () => (builder) => {

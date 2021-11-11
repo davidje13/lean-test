@@ -42,12 +42,8 @@ Runner.Builder = class RunnerBuilder {
 		return this;
 	}
 
-	addRunInterceptor(fn, { first = false } = {}) {
-		if (first) {
-			this.runInterceptors.unshift(fn);
-		} else {
-			this.runInterceptors.push(fn);
-		}
+	addRunInterceptor(fn, { order = 0 } = {}) {
+		this.runInterceptors.push({ order, fn });
 		return this;
 	}
 
@@ -55,7 +51,7 @@ Runner.Builder = class RunnerBuilder {
 		return this.addRunInterceptor(async (next, context, ...rest) => {
 			const run = await fn(context, ...rest);
 			return await next(run ? context : { ...context, active: false });
-		}, { first: true });
+		}, { order: Number.NEGATIVE_INFINITY });
 	}
 
 	addSuite(name, content, options = {}) {
@@ -139,11 +135,12 @@ Runner.Builder = class RunnerBuilder {
 
 		const baseContext = { active: true };
 		exts.get(CONTEXT_INIT).forEach(({ scope, value }) => { baseContext[scope] = Object.freeze(value()); });
+		this.runInterceptors.sort((a, b) => (a.order - b.order));
 
 		return new Runner(
 			baseNode,
 			Object.freeze(baseContext),
-			Object.freeze([...this.runInterceptors]),
+			Object.freeze(this.runInterceptors.map((i) => i.fn)),
 		);
 	}
 }

@@ -1,4 +1,4 @@
-export default () => (builder) => {
+export default ({ order = -1 } = {}) => (builder) => {
 	builder.addRunInterceptor(async (next, context, result, node) => {
 		const maxAttempts = node.options.retry || 0;
 		if (!context.active || maxAttempts <= 1) {
@@ -16,5 +16,5 @@ export default () => (builder) => {
 				break;
 			}
 		}
-	}, { first: true }); // ensure any lifecycle steps happen within the retry
+	}, { order });
 };

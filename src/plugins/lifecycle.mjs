@@ -1,4 +1,4 @@
-export default () => (builder) => {
+export default ({ order = 0 } = {}) => (builder) => {
 	const scope = builder.addScope({
 		node: () => ({
 			beforeAll: [],
@@ -31,7 +31,7 @@ export default () => (builder) => {
 				active: !skip,
 			}));
 		}
-	});
+	}, { order });
 
 	async function withWrappers(result, before, after, next) {
 		let skip = false;

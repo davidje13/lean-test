@@ -22,7 +22,7 @@ Runner.Builder = class RunnerBuilder {
 	constructor();
 	addPlugin(...plugins: Plugin): RunnerBuilder;
 	extend(key: string | Symbol, ...values: unknown): RunnerBuilder;
-	addRunInterceptor(fn: RunInterceptor, options?: { first?: boolean }): RunnerBuilder;
+	addRunInterceptor(fn: RunInterceptor, options?: { order?: number }): RunnerBuilder;
 	addRunCondition(fn: RunCondition): RunnerBuilder;
 	addSuite(name: string, content: (globals: DiscoveryGlobals) => (Promise<void> | void), options?: Record<string, unknown>): RunnerBuilder;
 	addSuite(suites: Record<string, (globals: DiscoveryGlobals) => (Promise<void> | void)>): RunnerBuilder;
