@@ -16,7 +16,7 @@ const PLUGINS = [
 
 describe('lifecycle', {
 	async 'passing tests run all lifecycle methods'() {
-		const invoked = await invoke({ count: 2, pass: 2 }, (g, tag) => {
+		const invoked = await invoke({ pass: 2 }, (g, tag) => {
 			g.test('test 1', () => tag('test 1'));
 			g.test('test 2', () => tag('test 2'));
 		});
@@ -30,7 +30,7 @@ describe('lifecycle', {
 	},
 
 	async 'nested methods are called outer-most to inner-most'() {
-		const invoked = await invoke({ count: 3, pass: 3 }, (g, tag) => {
+		const invoked = await invoke({ pass: 3 }, (g, tag) => {
 			g.describe('inner', () => {
 				g.beforeAll(() => { tag('ba3'); return () => tag('end-ba3'); });
 				g.beforeEach(() => { tag('be3'); return () => tag('end-be3'); });
@@ -120,7 +120,7 @@ describe('lifecycle', {
 	},
 
 	async 'beforeAll error stops execution but still runs teardown'() {
-		const invoked = await invoke({ count: 2, error: 1, skip: 2 }, (g, tag) => {
+		const invoked = await invoke({ count: 2, error: 1, skip: 2, pass: 0 }, (g, tag) => {
 			g.beforeAll(() => { throw new Error(); });
 			g.beforeAll(() => { tag('ba3'); return () => tag('end-ba3'); });
 
@@ -135,7 +135,7 @@ describe('lifecycle', {
 	},
 
 	async 'beforeAll assumption failure stops execution but still runs teardown'() {
-		const invoked = await invoke({ count: 2, skip: 2 }, (g, tag) => {
+		const invoked = await invoke({ count: 2, skip: 2, pass: 0 }, (g, tag) => {
 			g.beforeAll(() => { throw new TestAssumptionError(); });
 			g.beforeAll(() => { tag('ba3'); return () => tag('end-ba3'); });
 
@@ -150,7 +150,7 @@ describe('lifecycle', {
 	},
 
 	async 'beforeEach error stops execution but still runs teardown'() {
-		const invoked = await invoke({ count: 2, error: 2 }, (g, tag) => {
+		const invoked = await invoke({ count: 2, error: 2, pass: 0 }, (g, tag) => {
 			g.beforeEach(() => { throw new Error(); });
 			g.beforeEach(() => { tag('be3'); return () => tag('end-be3'); });
 
@@ -167,7 +167,7 @@ describe('lifecycle', {
 	},
 
 	async 'beforeEach assumption failure stops execution but still runs teardown'() {
-		const invoked = await invoke({ count: 2, skip: 2 }, (g, tag) => {
+		const invoked = await invoke({ count: 2, skip: 2, pass: 0 }, (g, tag) => {
 			g.beforeEach(() => { throw new TestAssumptionError(); });
 			g.beforeEach(() => { tag('be3'); return () => tag('end-be3'); });
 
@@ -184,7 +184,7 @@ describe('lifecycle', {
 	},
 
 	async 'afterEach error runs full teardown'() {
-		const invoked = await invoke({ count: 2, error: 2 }, (g, tag) => {
+		const invoked = await invoke({ count: 2, error: 2, pass: 0 }, (g, tag) => {
 			g.afterEach(() => { throw new Error(); });
 			g.afterEach(() => tag('ae3'));
 
@@ -201,8 +201,7 @@ describe('lifecycle', {
 	},
 
 	async 'afterEach assumption failure is ignored'() {
-		skip('TODO: currently assumption failures in afterEach marks the test as skipped');
-		const invoked = await invoke({ count: 2, pass: 2 }, (g, tag) => {
+		const invoked = await invoke({ count: 2, pass: 2, skip: 0 }, (g, tag) => {
 			g.afterEach(() => { throw new TestAssumptionError(); });
 			g.afterEach(() => tag('ae3'));
 
@@ -236,7 +235,7 @@ describe('lifecycle', {
 	},
 
 	async 'afterAll assumption failure is ignored'() {
-		const invoked = await invoke({ count: 2, pass: 2 }, (g, tag) => {
+		const invoked = await invoke({ count: 2, pass: 2, skip: 0 }, (g, tag) => {
 			g.afterAll(() => { throw new TestAssumptionError(); });
 			g.afterAll(() => tag('aa3'));
 

@@ -1,16 +1,17 @@
 import TestAssumptionError from './TestAssumptionError.mjs';
+import ResultStage from './ResultStage.mjs';
 import Result from './Result.mjs';
 
 const HIDDEN = Symbol();
 
 async function finalInterceptor(_, context, result, node) {
 	if (node.config.run) {
-		if (context.active) {
-			await result.exec('test', () => node.config.run(node));
-		} else {
-			result.recordError('interceptors', new TestAssumptionError('skipped'));
-		}
-		result.invoked = true;
+		await result.createStage({ tangible: true }, 'test', () => {
+			if (!context.active) {
+				throw new TestAssumptionError('ignored');
+			}
+			return node.config.run(node);
+		});
 	} else if (node.options.parallel) {
 		await Promise.all(node.children.map((child) => child._run(result, context)));
 	} else {
@@ -65,10 +66,10 @@ export default class Node {
 	async runDiscovery(methods, beginHook) {
 		if (this.config.discovery) {
 			beginHook(this);
-			const discoveryResult = new Result('discovery', null, false, null);
-			await discoveryResult.exec('discovery', () => this.config.discovery(this, { ...methods }));
-			discoveryResult.finish();
-			this.discoveryResult = discoveryResult;
+			this.discoveryResult = await ResultStage.of(
+				'discovery',
+				() => this.config.discovery(this, { ...methods }),
+			);
 		}
 		for (const child of this.children) {
 			await child.runDiscovery(methods, beginHook);
@@ -78,12 +79,18 @@ export default class Node {
 		Object.freeze(this);
 	}
 
-	async _run(parentResult, context) {
+	_run(parentResult, context) {
 		const label = this.config.display ? `${this.config.display}: ${this.options.name}` : null;
-		const result = new Result(label, parentResult, Boolean(this.config.run), this.discoveryResult);
-		await runChain(context[HIDDEN].interceptors, [context, result, this]);
-		result.finish();
-		return result;
+		return Result.of(
+			label,
+			(result) => {
+				if (this.discoveryResult) {
+					result.attachStage({ fail: true, time: true }, this.discoveryResult);
+				}
+				return runChain(context[HIDDEN].interceptors, [context, result, this]);
+			},
+			{ parent: parentResult },
+		);
 	}
 
 	run(interceptors, context) {

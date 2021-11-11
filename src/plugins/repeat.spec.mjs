@@ -17,7 +17,7 @@ describe('repeat test', {
 
 	async 'does not repeat after a failing test'() {
 		let runs = 0;
-		await testRunner([repeat()], { count: 1, error: 1 }, (g) => {
+		await testRunner([repeat()], { count: 1, pass: 0, error: 1 }, (g) => {
 			g.test('test 1', () => {
 				++runs;
 				throw new Error();
@@ -29,7 +29,7 @@ describe('repeat test', {
 
 	async 'can be configured to allow some failures'() {
 		let runs = 0;
-		await testRunner([repeat()], { count: 1, error: 1 }, (g) => {
+		await testRunner([repeat()], { count: 1, pass: 0, error: 1 }, (g) => {
 			g.test('test 1', () => {
 				++runs;
 				throw new Error();
@@ -41,7 +41,7 @@ describe('repeat test', {
 
 	async 'can be configured to run all repetitions even if it cannot pass'() {
 		let runs = 0;
-		await testRunner([repeat()], { count: 1, error: 1 }, (g) => {
+		await testRunner([repeat()], { count: 1, pass: 0, error: 1 }, (g) => {
 			g.test('test 1', () => {
 				++runs;
 				throw new Error();

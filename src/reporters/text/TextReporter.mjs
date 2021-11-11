@@ -7,7 +7,6 @@ export default class TextReporter {
 
 	_print(result, indent) {
 		const summary = result.getSummary();
-		const duration = result.getDuration();
 		const display = (result.label !== null);
 		let marker = '';
 		if (summary.error) {
@@ -27,18 +26,18 @@ export default class TextReporter {
 
 		if (display) {
 			this.output.write(
-				`${result.label} [${duration}ms]`,
+				`${result.label} [${summary.duration}ms]`,
 				`${marker} ${indent}`,
 				`${resultSpace} ${indent}`,
 			);
 		}
-		result.errors.forEach((err) => {
+		result.getErrors().forEach((err) => {
 			this.output.write(
 				this.output.red(String(err)),
 				`${resultSpace} ${indent}  `,
 			);
 		});
-		result.failures.forEach((message) => {
+		result.getFailures().forEach((message) => {
 			this.output.write(
 				this.output.red(message),
 				`${resultSpace} ${indent}  `,
@@ -50,7 +49,6 @@ export default class TextReporter {
 
 	report(result) {
 		const summary = result.getSummary();
-		const duration = result.getDuration();
 
 		this._print(result, '');
 
@@ -65,7 +63,7 @@ export default class TextReporter {
 		this.output.write(`Errors:   ${summary.error || 0}`);
 		this.output.write(`Failures: ${summary.fail || 0}`);
 		this.output.write(`Skipped:  ${summary.skip || 0}`);
-		this.output.write(`Duration: ${duration}ms`);
+		this.output.write(`Duration: ${summary.duration}ms`);
 		this.output.write('');
 
 		// TODO: warn or error if any node contains 0 tests

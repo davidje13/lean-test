@@ -12,135 +12,165 @@ class TestAssertionError extends Error {
 	}
 }
 
-class Result {
-	constructor(label, parent, isTest, previous) {
+class ResultStage {
+	constructor(label) {
 		this.label = label;
-		this.isTest = isTest;
-		this.parent = parent;
-		this.previous = previous;
-		this.children = [];
-		parent?.children?.push(this);
-
-		this.startTime = Date.now();
-		this.invoked = false;
-		this.durations = new Map();
-		this.totalRunDuration = 0;
-		this.complete = false;
+		this.startTime = 0;
+		this.duration = 0;
 		this.failures = [];
 		this.errors = [];
 		this.skipReasons = [];
+		this.complete = false;
 	}
 
-	async exec(namespace, fn) {
-		const beginTime = Date.now();
-		try {
-			await fn();
-			return true;
-		} catch (error) {
-			this.recordError(namespace, error);
-			return false;
-		} finally {
-			this.accumulateDuration(namespace, Date.now() - beginTime);
+	getSummary() {
+		const duration = (this.complete ? this.duration : (Date.now() - this.startTime));
+
+		if (!this.complete) {
+			return { count: 1, run: 1, duration };
 		}
+		if (this.errors.length) {
+			return { count: 1, error: 1, duration };
+		}
+		if (this.failures.length) {
+			return { count: 1, fail: 1, duration };
+		}
+		if (this.skipReasons.length) {
+			return { count: 1, skip: 1, duration };
+		}
+		return { count: 1, pass: 1, duration };
 	}
 
-	finish() {
-		this.totalRunDuration = Date.now() - this.startTime;
-		this.complete = true;
-		Object.freeze(this);
+	hasFailed() {
+		return (this.errors.length > 0 || this.failures.length > 0);
 	}
 
-	createChild(label) {
-		return new Result(label, this, this.isTest, null);
+	hasSkipped() {
+		return this.skipReasons.length > 0;
 	}
+}
 
-	recordError(namespace, error) {
+ResultStage.of = async (label, fn, fnArg) => {
+	const stage = new ResultStage(label);
+	stage.startTime = Date.now();
+	try {
+		await fn(fnArg);
+	} catch (error) {
 		if (error instanceof TestAssertionError) {
-			this.failures.push(`Failure in ${namespace}:\n${error.message}`);
+			stage.failures.push(error);
 		} else if (error instanceof TestAssumptionError) {
-			this.skipReasons.push(`Assumption not met in ${namespace}:\n${error.message}`);
+			stage.skipReasons.push(error);
 		} else {
-			this.errors.push(error);
+			stage.errors.push(error);
 		}
+	} finally {
+		stage.duration = Date.now() - stage.startTime;
+		stage.complete = true;
+		Object.freeze(stage);
+	}
+	return stage;
+};
+
+const filterSummary = ({ tangible, time, fail }, summary) => ({
+	count: tangible ? summary.count : 0,
+	run: tangible ? summary.run : 0,
+	error: (tangible || fail) ? summary.error : 0,
+	fail: (tangible || fail) ? summary.fail : 0,
+	skip: tangible ? summary.skip : 0,
+	pass: tangible ? summary.pass : 0,
+	duration: time ? summary.duration : 0,
+});
+
+class Result {
+	constructor(label, parent) {
+		this.label = label;
+		this.parent = parent;
+		this.children = [];
+		this.stages = [];
+		this.forcedChildSummary = null;
+		parent?.children?.push(this);
 	}
 
-	accumulateDuration(namespace, millis) {
-		this.durations.set(namespace, (this.durations.get(namespace) || 0) + millis);
+	createChild(label, fn) {
+		return Result.of(label, fn, { parent: this });
 	}
 
-	getOwnDuration() {
-		return (this.complete ? this.totalRunDuration : (Date.now() - this.startTime));
+	async createStage(config, label, fn) {
+		const stage = await ResultStage.of(label, fn, this);
+		this.stages.push({ config, stage });
+		return stage;
+	}
+
+	attachStage(config, stage) {
+		this.stages.push({ config, stage });
+	}
+
+	overrideChildSummary(s) {
+		this.forcedChildSummary = s;
+	}
+
+	getErrors() {
+		const all = [];
+		this.stages.forEach(({ stage }) => all.push(...stage.errors));
+		return all;
+	}
+
+	getFailures() {
+		const all = [];
+		this.stages.forEach(({ stage }) => all.push(...stage.failures));
+		return all;
+	}
+
+	getSummary() {
+		const stagesSummary = this.stages
+			.map(({ config, stage }) => filterSummary(config, stage.getSummary()))
+			.reduce(combineSummary, {});
+
+		if (stagesSummary.error || stagesSummary.fail || stagesSummary.skip) {
+			stagesSummary.pass = 0;
+		}
+
+		const childSummary = this.forcedChildSummary || this.children
+			.map((child) => child.getSummary())
+			.reduce(combineSummary, {});
+
+		return combineSummary(
+			stagesSummary,
+			filterSummary({ tangible: true, time: false }, childSummary),
+		);
 	}
 
 	hasFailed() {
 		const summary = this.getSummary();
 		return Boolean(summary.error || summary.fail);
 	}
-
-	getDuration() {
-		const duration = this.getOwnDuration();
-		if (this.previous) {
-			return duration + this.previous.getOwnDuration();
-		} else {
-			return duration;
-		}
-	}
-
-	getSummary() {
-		let summary = makeSelfSummary(this);
-		if (this.previous) {
-			summary = combineSummary(summary, makeSelfSummary(this.previous));
-		}
-		return this.children
-			.map((child) => child.getSummary())
-			.reduce(combineSummary, summary);
-	}
 }
+
+Result.of = async (label, fn, { parent = null } = {}) => {
+	const result = new Result(label, parent);
+	await result.createStage({ fail: true, time: true }, 'core', fn);
+	Object.freeze(result);
+	return result;
+};
 
 function combineSummary(a, b) {
 	const r = { ...a };
 	Object.keys(b).forEach((k) => {
-		r[k] = (r[k] || 0) + b[k];
+		r[k] = (r[k] || 0) + (b[k] || 0);
 	});
 	return r;
-}
-
-function makeSelfSummary(result) {
-	if (result.children.length || !result.isTest) {
-		if (result.errors.length) {
-			return { error: 1 };
-		}
-		if (result.failures.length) {
-			return { fail: 1 };
-		}
-		return {};
-	}
-
-	if (!result.complete) {
-		return { count: 1, run: 1 };
-	}
-	if (result.errors.length) {
-		return { count: 1, error: 1 };
-	}
-	if (result.failures.length) {
-		return { count: 1, fail: 1 };
-	}
-	if (result.skipReasons.length || !result.invoked) {
-		return { count: 1, skip: 1 };
-	}
-	return { count: 1, pass: 1 };
 }
 
 const HIDDEN = Symbol();
 
 async function finalInterceptor(_, context, result, node) {
 	if (node.config.run) {
-		if (context.active) {
-			await result.exec('test', () => node.config.run(node));
-		} else {
-			result.recordError('interceptors', new TestAssumptionError('skipped'));
-		}
-		result.invoked = true;
+		await result.createStage({ tangible: true }, 'test', () => {
+			if (!context.active) {
+				throw new TestAssumptionError('ignored');
+			}
+			return node.config.run(node);
+		});
 	} else if (node.options.parallel) {
 		await Promise.all(node.children.map((child) => child._run(result, context)));
 	} else {
@@ -195,10 +225,10 @@ class Node {
 	async runDiscovery(methods, beginHook) {
 		if (this.config.discovery) {
 			beginHook(this);
-			const discoveryResult = new Result('discovery', null, false, null);
-			await discoveryResult.exec('discovery', () => this.config.discovery(this, { ...methods }));
-			discoveryResult.finish();
-			this.discoveryResult = discoveryResult;
+			this.discoveryResult = await ResultStage.of(
+				'discovery',
+				() => this.config.discovery(this, { ...methods }),
+			);
 		}
 		for (const child of this.children) {
 			await child.runDiscovery(methods, beginHook);
@@ -208,12 +238,18 @@ class Node {
 		Object.freeze(this);
 	}
 
-	async _run(parentResult, context) {
+	_run(parentResult, context) {
 		const label = this.config.display ? `${this.config.display}: ${this.options.name}` : null;
-		const result = new Result(label, parentResult, Boolean(this.config.run), this.discoveryResult);
-		await runChain(context[HIDDEN].interceptors, [context, result, this]);
-		result.finish();
-		return result;
+		return Result.of(
+			label,
+			(result) => {
+				if (this.discoveryResult) {
+					result.attachStage({ fail: true, time: true }, this.discoveryResult);
+				}
+				return runChain(context[HIDDEN].interceptors, [context, result, this]);
+			},
+			{ parent: parentResult },
+		);
 	}
 
 	run(interceptors, context) {
@@ -800,38 +836,42 @@ var lifecycle = () => (builder) => {
 		if (!context.active) {
 			return next(context);
 		} else if (node.config.run) {
-			return withWrappers(result, context[scope].beforeEach, context[scope].afterEach, (err) => next({
+			return withWrappers(result, context[scope].beforeEach, context[scope].afterEach, (skip) => next({
 				...context,
-				active: !err,
+				active: !skip,
 			}));
 		} else {
 			const nodeScope = node.getScope(scope);
-			return withWrappers(result, [nodeScope.beforeAll], [nodeScope.afterAll], (err) => next({
+			return withWrappers(result, [nodeScope.beforeAll], [nodeScope.afterAll], (skip) => next({
 				...context,
 				[scope]: {
 					beforeEach: [...context[scope].beforeEach, nodeScope.beforeEach],
 					afterEach: [...context[scope].afterEach, nodeScope.afterEach],
 				},
-				active: !err,
+				active: !skip,
 			}));
 		}
 	});
 
 	async function withWrappers(result, before, after, next) {
-		let err = false;
+		let skip = false;
 		const allTeardowns = [];
 		let i = 0;
-		for (; i < before.length && !err; ++i) {
+		for (; i < before.length && !skip; ++i) {
 			const teardowns = [];
 			for (const { name, fn } of before[i]) {
-				const success = await result.exec(`before ${name}`, async () => {
-					const teardown = await fn();
-					if (typeof teardown === 'function') {
-						teardowns.unshift({ name, fn: teardown });
-					}
-				});
-				if (!success) {
-					err = true;
+				const stage = await result.createStage(
+					{ fail: true },
+					`before ${name}`,
+					async () => {
+						const teardown = await fn();
+						if (typeof teardown === 'function') {
+							teardowns.unshift({ name, fn: teardown });
+						}
+					},
+				);
+				if (stage.hasFailed() || stage.hasSkipped()) {
+					skip = true;
 					break;
 				}
 			}
@@ -839,14 +879,14 @@ var lifecycle = () => (builder) => {
 		}
 
 		try {
-			return await next(err);
+			return await next(skip);
 		} finally {
 			while ((i--) > 0) {
 				for (const { name, fn } of allTeardowns[i]) {
-					await result.exec(`teardown ${name}`, fn);
+					await result.createStage({ fail: true }, `teardown ${name}`, fn);
 				}
 				for (const { name, fn } of after[i]) {
-					await result.exec(`after ${name}`, fn);
+					await result.createStage({ fail: true }, `after ${name}`, fn);
 				}
 			}
 		}
@@ -891,28 +931,31 @@ var repeat = () => (builder) => {
 		}
 
 		let failureCount = 0;
+		let bestPassSummary = null;
 		let bestFailSummary = null;
-		let bestSummary = null;
-		result.getSummary = () => (failureCount > maxFailures) ? bestFailSummary : bestSummary ?? { count: 1, run: 1 };
 
+		result.overrideChildSummary({ count: 1, run: 1 });
 		for (let repetition = 0; repetition < total; ++repetition) {
-			const subResult = result.createChild(`repetition ${repetition + 1} of ${total}`);
-			await next(context, subResult);
-			subResult.finish();
+			const subResult = await result.createChild(
+				`repetition ${repetition + 1} of ${total}`,
+				(subResult) => next(context, subResult),
+			);
 			const subSummary = subResult.getSummary();
 			if (subSummary.error || subSummary.fail || !subSummary.pass) {
-				if (
-					!bestFailSummary ||
-					subSummary.error < bestFailSummary.error ||
-					(subSummary.error === bestFailSummary.error && subSummary.fail < bestFailSummary.fail)
-				) {
+				failureCount++;
+				if (!bestFailSummary || subSummary.pass > bestFailSummary.pass) {
 					bestFailSummary = subSummary;
 				}
-				failureCount++;
-			} else if (!bestSummary || subSummary.pass > bestSummary.pass) {
-				bestSummary = subSummary;
+				if (failureCount > maxFailures) {
+					result.overrideChildSummary(bestFailSummary);
+				}
+			} else if (failureCount <= maxFailures) {
+				if (!bestPassSummary || subSummary.pass > bestPassSummary.pass) {
+					bestPassSummary = subSummary;
+				}
+				result.overrideChildSummary(bestPassSummary);
 			}
-			if (failFast && result.hasFailed()) {
+			if (failFast && failureCount > maxFailures) {
 				break;
 			}
 		}
@@ -927,14 +970,13 @@ var retry = () => (builder) => {
 		}
 
 		for (let attempt = 0; attempt < maxAttempts; ++attempt) {
-			const subResult = result.createChild(`attempt ${attempt + 1} of ${maxAttempts}`);
-			// TODO: make this not be hacky
-			subResult.previous = result.previous;
-			result.getSummary = () => subResult.getSummary();
-
-			await next(context, subResult);
-			subResult.finish();
-			if (!subResult.hasFailed()) {
+			const subResult = await result.createChild(
+				`attempt ${attempt + 1} of ${maxAttempts}`,
+				(subResult) => next(context, subResult),
+			);
+			const subSummary = subResult.getSummary();
+			result.overrideChildSummary(subSummary);
+			if (!subSummary.error && !subSummary.fail) {
 				break;
 			}
 		}
@@ -1012,7 +1054,6 @@ class TextReporter {
 
 	_print(result, indent) {
 		const summary = result.getSummary();
-		const duration = result.getDuration();
 		const display = (result.label !== null);
 		let marker = '';
 		if (summary.error) {
@@ -1032,18 +1073,18 @@ class TextReporter {
 
 		if (display) {
 			this.output.write(
-				`${result.label} [${duration}ms]`,
+				`${result.label} [${summary.duration}ms]`,
 				`${marker} ${indent}`,
 				`${resultSpace} ${indent}`,
 			);
 		}
-		result.errors.forEach((err) => {
+		result.getErrors().forEach((err) => {
 			this.output.write(
 				this.output.red(String(err)),
 				`${resultSpace} ${indent}  `,
 			);
 		});
-		result.failures.forEach((message) => {
+		result.getFailures().forEach((message) => {
 			this.output.write(
 				this.output.red(message),
 				`${resultSpace} ${indent}  `,
@@ -1055,7 +1096,6 @@ class TextReporter {
 
 	report(result) {
 		const summary = result.getSummary();
-		const duration = result.getDuration();
 
 		this._print(result, '');
 
@@ -1070,7 +1110,7 @@ class TextReporter {
 		this.output.write(`Errors:   ${summary.error || 0}`);
 		this.output.write(`Failures: ${summary.fail || 0}`);
 		this.output.write(`Skipped:  ${summary.skip || 0}`);
-		this.output.write(`Duration: ${duration}ms`);
+		this.output.write(`Duration: ${summary.duration}ms`);
 		this.output.write('');
 
 		// TODO: warn or error if any node contains 0 tests

@@ -16,38 +16,42 @@ export default () => (builder) => {
 		if (!context.active) {
 			return next(context);
 		} else if (node.config.run) {
-			return withWrappers(result, context[scope].beforeEach, context[scope].afterEach, (err) => next({
+			return withWrappers(result, context[scope].beforeEach, context[scope].afterEach, (skip) => next({
 				...context,
-				active: !err,
+				active: !skip,
 			}));
 		} else {
 			const nodeScope = node.getScope(scope);
-			return withWrappers(result, [nodeScope.beforeAll], [nodeScope.afterAll], (err) => next({
+			return withWrappers(result, [nodeScope.beforeAll], [nodeScope.afterAll], (skip) => next({
 				...context,
 				[scope]: {
 					beforeEach: [...context[scope].beforeEach, nodeScope.beforeEach],
 					afterEach: [...context[scope].afterEach, nodeScope.afterEach],
 				},
-				active: !err,
+				active: !skip,
 			}));
 		}
 	});
 
 	async function withWrappers(result, before, after, next) {
-		let err = false;
+		let skip = false;
 		const allTeardowns = [];
 		let i = 0;
-		for (; i < before.length && !err; ++i) {
+		for (; i < before.length && !skip; ++i) {
 			const teardowns = [];
 			for (const { name, fn } of before[i]) {
-				const success = await result.exec(`before ${name}`, async () => {
-					const teardown = await fn();
-					if (typeof teardown === 'function') {
-						teardowns.unshift({ name, fn: teardown });
-					}
-				});
-				if (!success) {
-					err = true;
+				const stage = await result.createStage(
+					{ fail: true },
+					`before ${name}`,
+					async () => {
+						const teardown = await fn();
+						if (typeof teardown === 'function') {
+							teardowns.unshift({ name, fn: teardown });
+						}
+					},
+				);
+				if (stage.hasFailed() || stage.hasSkipped()) {
+					skip = true;
 					break;
 				}
 			}
@@ -55,14 +59,14 @@ export default () => (builder) => {
 		}
 
 		try {
-			return await next(err);
+			return await next(skip);
 		} finally {
 			while ((i--) > 0) {
 				for (const { name, fn } of allTeardowns[i]) {
-					await result.exec(`teardown ${name}`, fn);
+					await result.createStage({ fail: true }, `teardown ${name}`, fn);
 				}
 				for (const { name, fn } of after[i]) {
-					await result.exec(`after ${name}`, fn);
+					await result.createStage({ fail: true }, `after ${name}`, fn);
 				}
 			}
 		}

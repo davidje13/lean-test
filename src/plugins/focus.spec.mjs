@@ -5,7 +5,7 @@ import focus from './focus.mjs';
 
 describe('focus', {
 	async 'runs all tests if no focus is set'() {
-		await testRunner([focus()], { count: 3, pass: 3 }, (g) => {
+		await testRunner([focus()], { count: 3, pass: 3, skip: 0 }, (g) => {
 			g.test('test 1', () => {});
 			g.test('test 2', () => {});
 			g.test('test 3', () => {});
@@ -48,7 +48,7 @@ describe('focus', {
 	},
 
 	async 'runs no tests if the only focused tests are also ignored'() {
-		await testRunner([describePlugin(), ignorePlugin(), focus()], { count: 5, skip: 5 }, (g) => {
+		await testRunner([describePlugin(), ignorePlugin(), focus()], { count: 5, pass: 0, skip: 5 }, (g) => {
 			g.test('test 1', () => {});
 			g.describe.ignore('block', () => {
 				g.test('test 2a', () => {});

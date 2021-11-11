@@ -6,14 +6,13 @@ export default () => (builder) => {
 		}
 
 		for (let attempt = 0; attempt < maxAttempts; ++attempt) {
-			const subResult = result.createChild(`attempt ${attempt + 1} of ${maxAttempts}`);
-			// TODO: make this not be hacky
-			subResult.previous = result.previous;
-			result.getSummary = () => subResult.getSummary();
-
-			await next(context, subResult);
-			subResult.finish();
-			if (!subResult.hasFailed()) {
+			const subResult = await result.createChild(
+				`attempt ${attempt + 1} of ${maxAttempts}`,
+				(subResult) => next(context, subResult),
+			);
+			const subSummary = subResult.getSummary();
+			result.overrideChildSummary(subSummary);
+			if (!subSummary.error && !subSummary.fail) {
 				break;
 			}
 		}

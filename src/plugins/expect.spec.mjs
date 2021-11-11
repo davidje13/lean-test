@@ -13,7 +13,7 @@ const MY_CUSTOM_SAME_MATCHER = (expected) => (actual) => {
 
 describe('expect', {
 	async 'allows tests to pass if expectation is met'() {
-		await testRunner([expect(), expect.matchers(core)], { count: 1, pass: 1 }, (g) => {
+		await testRunner([expect(), expect.matchers(core)], { pass: 1 }, (g) => {
 			g.test('test', () => {
 				g.expect(1, g.equals(1));
 			});
@@ -21,7 +21,7 @@ describe('expect', {
 	},
 
 	async 'marks test as failed if expectation is not met'() {
-		await testRunner([expect(), expect.matchers(core)], { count: 1, fail: 1 }, (g) => {
+		await testRunner([expect(), expect.matchers(core)], { fail: 1 }, (g) => {
 			g.test('test', () => {
 				g.expect(1, g.equals(2));
 			});
@@ -29,7 +29,7 @@ describe('expect', {
 	},
 
 	async 'supports fluent syntax'() {
-		await testRunner([expect(), expect.matchers(core)], { count: 1, fail: 1 }, (g) => {
+		await testRunner([expect(), expect.matchers(core)], { fail: 1 }, (g) => {
 			g.test('test', () => {
 				g.expect(1).equals(2);
 			});
@@ -37,7 +37,7 @@ describe('expect', {
 	},
 
 	async 'runs asynchronously if matcher is asynchronous'() {
-		await testRunner([expect(), expect.matchers(core)], { count: 1, pass: 1 }, (g) => {
+		await testRunner([expect(), expect.matchers(core)], { pass: 1 }, (g) => {
 			g.test('test', async () => {
 				await g.expect(() => sleep(5, 'result'), g.resolves(g.equals('result')));
 			});
@@ -55,13 +55,13 @@ describe('expect', {
 	},
 
 	async 'custom matchers can be used'() {
-		await testRunner([expect(), expect.matchers(core)], { count: 1, pass: 1 }, (g) => {
+		await testRunner([expect(), expect.matchers(core)], { pass: 1 }, (g) => {
 			g.test('test', () => {
 				g.expect(1, MY_CUSTOM_SAME_MATCHER(1));
 			});
 		});
 
-		await testRunner([expect(), expect.matchers(core)], { count: 1, fail: 1 }, (g) => {
+		await testRunner([expect(), expect.matchers(core)], { fail: 1 }, (g) => {
 			g.test('test', () => {
 				g.expect(2, MY_CUSTOM_SAME_MATCHER(1));
 			});
@@ -69,7 +69,7 @@ describe('expect', {
 	},
 
 	async 'custom fluent matchers can be registered and used'() {
-		await testRunner([expect(), expect.matchers(core)], { count: 1, pass: 1 }, (g) => {
+		await testRunner([expect(), expect.matchers(core)], { pass: 1 }, (g) => {
 			g.extendExpect({
 				myMatcherName: MY_CUSTOM_SAME_MATCHER,
 			});
@@ -79,7 +79,7 @@ describe('expect', {
 			});
 		});
 
-		await testRunner([expect(), expect.matchers(core)], { count: 1, fail: 1 }, (g) => {
+		await testRunner([expect(), expect.matchers(core)], { fail: 1 }, (g) => {
 			g.extendExpect({
 				myMatcherName: MY_CUSTOM_SAME_MATCHER,
 			});
@@ -93,7 +93,7 @@ describe('expect', {
 
 describe('assume', {
 	async 'allows tests to pass if assumption is met'() {
-		await testRunner([expect(), expect.matchers(core)], { count: 1, pass: 1 }, (g) => {
+		await testRunner([expect(), expect.matchers(core)], { pass: 1 }, (g) => {
 			g.test('test', () => {
 				g.assume(1, g.equals(1));
 			});
@@ -101,7 +101,7 @@ describe('assume', {
 	},
 
 	async 'marks test as skipped if assumption is not met'() {
-		await testRunner([expect(), expect.matchers(core)], { count: 1, skip: 1 }, (g) => {
+		await testRunner([expect(), expect.matchers(core)], { skip: 1 }, (g) => {
 			g.test('test', () => {
 				g.assume(1, g.equals(2));
 			});
@@ -109,7 +109,7 @@ describe('assume', {
 	},
 
 	async 'supports fluent syntax'() {
-		await testRunner([expect(), expect.matchers(core)], { count: 1, skip: 1 }, (g) => {
+		await testRunner([expect(), expect.matchers(core)], { skip: 1 }, (g) => {
 			g.test('test', () => {
 				g.assume(1).equals(2);
 			});

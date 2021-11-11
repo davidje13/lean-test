@@ -9,30 +9,24 @@
 [FAIL] suite: basics.spec.mjs [xx]
 [PASS]   test: runs tests and records success [xx]
 [FAIL]   test: records failures [xx]
-           Failure in test:
-           expected failure
+           Error: expected failure
 [FAIL] suite: repeat.spec.mjs [xx]
 [FAIL]   test: reports individual runs [xx]
 [FAIL]     repetition 1 of 3 [xx]
-             Failure in test:
-             expected failure
+             Error: expected failure
 [PASS]     repetition 2 of 3 [xx]
 [PASS]     repetition 3 of 3 [xx]
 [FAIL] suite: retry.spec.mjs [xx]
 [FAIL]   test: reports individual runs [xx]
 [FAIL]     attempt 1 of 3 [xx]
-             Failure in test:
-             expected failure
+             Error: expected failure
 [FAIL]     attempt 2 of 3 [xx]
-             Failure in test:
-             expected failure
+             Error: expected failure
 [FAIL]     attempt 3 of 3 [xx]
-             Failure in test:
-             expected failure
+             Error: expected failure
 [PASS]   test: aggregates on the final run [xx]
 [FAIL]     attempt 1 of 3 [xx]
-             Failure in test:
-             expected failure
+             Error: expected failure
 [PASS]     attempt 2 of 3 [xx]
 
 Total:    9

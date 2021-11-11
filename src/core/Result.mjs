@@ -1,121 +1,91 @@
-import TestAssertionError from './TestAssertionError.mjs';
-import TestAssumptionError from './TestAssumptionError.mjs';
+import ResultStage from './ResultStage.mjs';
+
+const filterSummary = ({ tangible, time, fail }, summary) => ({
+	count: tangible ? summary.count : 0,
+	run: tangible ? summary.run : 0,
+	error: (tangible || fail) ? summary.error : 0,
+	fail: (tangible || fail) ? summary.fail : 0,
+	skip: tangible ? summary.skip : 0,
+	pass: tangible ? summary.pass : 0,
+	duration: time ? summary.duration : 0,
+});
 
 export default class Result {
-	constructor(label, parent, isTest, previous) {
+	constructor(label, parent) {
 		this.label = label;
-		this.isTest = isTest;
 		this.parent = parent;
-		this.previous = previous;
 		this.children = [];
+		this.stages = [];
+		this.forcedChildSummary = null;
 		parent?.children?.push(this);
-
-		this.startTime = Date.now();
-		this.invoked = false;
-		this.durations = new Map();
-		this.totalRunDuration = 0;
-		this.complete = false;
-		this.failures = [];
-		this.errors = [];
-		this.skipReasons = [];
 	}
 
-	async exec(namespace, fn) {
-		const beginTime = Date.now();
-		try {
-			await fn();
-			return true;
-		} catch (error) {
-			this.recordError(namespace, error);
-			return false;
-		} finally {
-			this.accumulateDuration(namespace, Date.now() - beginTime);
+	createChild(label, fn) {
+		return Result.of(label, fn, { parent: this });
+	}
+
+	async createStage(config, label, fn) {
+		const stage = await ResultStage.of(label, fn, this);
+		this.stages.push({ config, stage });
+		return stage;
+	}
+
+	attachStage(config, stage) {
+		this.stages.push({ config, stage });
+	}
+
+	overrideChildSummary(s) {
+		this.forcedChildSummary = s;
+	}
+
+	getErrors() {
+		const all = [];
+		this.stages.forEach(({ stage }) => all.push(...stage.errors));
+		return all;
+	}
+
+	getFailures() {
+		const all = [];
+		this.stages.forEach(({ stage }) => all.push(...stage.failures));
+		return all;
+	}
+
+	getSummary() {
+		const stagesSummary = this.stages
+			.map(({ config, stage }) => filterSummary(config, stage.getSummary()))
+			.reduce(combineSummary, {});
+
+		if (stagesSummary.error || stagesSummary.fail || stagesSummary.skip) {
+			stagesSummary.pass = 0;
 		}
-	}
 
-	finish() {
-		this.totalRunDuration = Date.now() - this.startTime;
-		this.complete = true;
-		Object.freeze(this);
-	}
+		const childSummary = this.forcedChildSummary || this.children
+			.map((child) => child.getSummary())
+			.reduce(combineSummary, {});
 
-	createChild(label) {
-		return new Result(label, this, this.isTest, null);
-	}
-
-	recordError(namespace, error) {
-		if (error instanceof TestAssertionError) {
-			this.failures.push(`Failure in ${namespace}:\n${error.message}`);
-		} else if (error instanceof TestAssumptionError) {
-			this.skipReasons.push(`Assumption not met in ${namespace}:\n${error.message}`);
-		} else {
-			this.errors.push(error);
-		}
-	}
-
-	accumulateDuration(namespace, millis) {
-		this.durations.set(namespace, (this.durations.get(namespace) || 0) + millis);
-	}
-
-	getOwnDuration() {
-		return (this.complete ? this.totalRunDuration : (Date.now() - this.startTime));
+		return combineSummary(
+			stagesSummary,
+			filterSummary({ tangible: true, time: false }, childSummary),
+		);
 	}
 
 	hasFailed() {
 		const summary = this.getSummary();
 		return Boolean(summary.error || summary.fail);
 	}
-
-	getDuration() {
-		const duration = this.getOwnDuration();
-		if (this.previous) {
-			return duration + this.previous.getOwnDuration();
-		} else {
-			return duration;
-		}
-	}
-
-	getSummary() {
-		let summary = makeSelfSummary(this);
-		if (this.previous) {
-			summary = combineSummary(summary, makeSelfSummary(this.previous));
-		}
-		return this.children
-			.map((child) => child.getSummary())
-			.reduce(combineSummary, summary);
-	}
 }
+
+Result.of = async (label, fn, { parent = null } = {}) => {
+	const result = new Result(label, parent);
+	await result.createStage({ fail: true, time: true }, 'core', fn);
+	Object.freeze(result);
+	return result;
+};
 
 function combineSummary(a, b) {
 	const r = { ...a };
 	Object.keys(b).forEach((k) => {
-		r[k] = (r[k] || 0) + b[k];
+		r[k] = (r[k] || 0) + (b[k] || 0);
 	});
 	return r;
-}
-
-function makeSelfSummary(result) {
-	if (result.children.length || !result.isTest) {
-		if (result.errors.length) {
-			return { error: 1 };
-		}
-		if (result.failures.length) {
-			return { fail: 1 };
-		}
-		return {};
-	}
-
-	if (!result.complete) {
-		return { count: 1, run: 1 };
-	}
-	if (result.errors.length) {
-		return { count: 1, error: 1 };
-	}
-	if (result.failures.length) {
-		return { count: 1, fail: 1 };
-	}
-	if (result.skipReasons.length || !result.invoked) {
-		return { count: 1, skip: 1 };
-	}
-	return { count: 1, pass: 1 };
 }

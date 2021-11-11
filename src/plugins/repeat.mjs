@@ -11,28 +11,31 @@ export default () => (builder) => {
 		}
 
 		let failureCount = 0;
+		let bestPassSummary = null;
 		let bestFailSummary = null;
-		let bestSummary = null;
-		result.getSummary = () => (failureCount > maxFailures) ? bestFailSummary : bestSummary ?? { count: 1, run: 1 };
 
+		result.overrideChildSummary({ count: 1, run: 1 });
 		for (let repetition = 0; repetition < total; ++repetition) {
-			const subResult = result.createChild(`repetition ${repetition + 1} of ${total}`);
-			await next(context, subResult);
-			subResult.finish();
+			const subResult = await result.createChild(
+				`repetition ${repetition + 1} of ${total}`,
+				(subResult) => next(context, subResult),
+			);
 			const subSummary = subResult.getSummary();
 			if (subSummary.error || subSummary.fail || !subSummary.pass) {
-				if (
-					!bestFailSummary ||
-					subSummary.error < bestFailSummary.error ||
-					(subSummary.error === bestFailSummary.error && subSummary.fail < bestFailSummary.fail)
-				) {
+				failureCount++;
+				if (!bestFailSummary || subSummary.pass > bestFailSummary.pass) {
 					bestFailSummary = subSummary;
 				}
-				failureCount++;
-			} else if (!bestSummary || subSummary.pass > bestSummary.pass) {
-				bestSummary = subSummary;
+				if (failureCount > maxFailures) {
+					result.overrideChildSummary(bestFailSummary);
+				}
+			} else if (failureCount <= maxFailures) {
+				if (!bestPassSummary || subSummary.pass > bestPassSummary.pass) {
+					bestPassSummary = subSummary;
+				}
+				result.overrideChildSummary(bestPassSummary);
 			}
-			if (failFast && result.hasFailed()) {
+			if (failFast && failureCount > maxFailures) {
 				break;
 			}
 		}
