@@ -39,13 +39,7 @@ export default class Result {
 		Object.freeze(this);
 	}
 
-	createChild(label, { asDelegate = false } = {}) {
-		if (asDelegate) {
-			// TODO: make asDelegate not be hacky
-			const child = new Result(label, this, this.isTest, this.previous);
-			this.getSummary = () => child.getSummary();
-			return child;
-		}
+	createChild(label) {
 		return new Result(label, this, this.isTest, null);
 	}
 
@@ -101,7 +95,7 @@ function combineSummary(a, b) {
 }
 
 function makeSelfSummary(result) {
-	if (!result.isTest) {
+	if (result.children.length || !result.isTest) {
 		if (result.errors.length) {
 			return { error: 1 };
 		}

@@ -11,6 +11,13 @@
 [FAIL]   test: records failures [xx]
            Failure in test:
            expected failure
+[FAIL] suite: repeat.spec.mjs [xx]
+[FAIL]   test: reports individual runs [xx]
+[FAIL]     repetition 1 of 3 [xx]
+             Failure in test:
+             expected failure
+[PASS]     repetition 2 of 3 [xx]
+[PASS]     repetition 3 of 3 [xx]
 [FAIL] suite: retry.spec.mjs [xx]
 [FAIL]   test: reports individual runs [xx]
 [FAIL]     attempt 1 of 3 [xx]
@@ -28,10 +35,10 @@
              expected failure
 [PASS]     attempt 2 of 3 [xx]
 
-Total:    8
+Total:    9
 Pass:     6
 Errors:   0
-Failures: 2
+Failures: 3
 Skipped:  0
 Duration: xx
 

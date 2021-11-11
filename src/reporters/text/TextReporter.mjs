@@ -6,19 +6,19 @@ export default class TextReporter {
 	}
 
 	_print(result, indent) {
-		const results = result.getSummary();
+		const summary = result.getSummary();
 		const duration = result.getDuration();
 		const display = (result.label !== null);
 		let marker = '';
-		if (results.error) {
+		if (summary.error) {
 			marker = this.output.red('[ERRO]');
-		} else if (results.fail) {
+		} else if (summary.fail) {
 			marker = this.output.red('[FAIL]');
-		} else if (results.run) {
+		} else if (summary.run) {
 			marker = this.output.blue('[....]');
-		} else if (results.pass) {
+		} else if (summary.pass) {
 			marker = this.output.green('[PASS]');
-		} else if (results.skip) {
+		} else if (summary.skip) {
 			marker = this.output.yellow('[SKIP]');
 		} else {
 			marker = this.output.yellow('[NONE]');

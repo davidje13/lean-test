@@ -50,13 +50,7 @@ class Result {
 		Object.freeze(this);
 	}
 
-	createChild(label, { asDelegate = false } = {}) {
-		if (asDelegate) {
-			// TODO: make asDelegate not be hacky
-			const child = new Result(label, this, this.isTest, this.previous);
-			this.getSummary = () => child.getSummary();
-			return child;
-		}
+	createChild(label) {
 		return new Result(label, this, this.isTest, null);
 	}
 
@@ -112,7 +106,7 @@ function combineSummary(a, b) {
 }
 
 function makeSelfSummary(result) {
-	if (!result.isTest) {
+	if (result.children.length || !result.isTest) {
 		if (result.errors.length) {
 			return { error: 1 };
 		}
@@ -885,7 +879,44 @@ var lifecycle = () => (builder) => {
 };
 
 var repeat = () => (builder) => {
-	// TODO
+	builder.addRunInterceptor(async (next, context, result, node) => {
+		let { repeat = {} } = node.options;
+		if (typeof repeat !== 'object') {
+			repeat = { total: repeat };
+		}
+
+		const { total = 1, failFast = true, maxFailures = 0 } = repeat;
+		if (!context.active || total <= 1 || result.hasFailed()) {
+			return next(context);
+		}
+
+		let failureCount = 0;
+		let bestFailSummary = null;
+		let bestSummary = null;
+		result.getSummary = () => (failureCount > maxFailures) ? bestFailSummary : bestSummary ?? { count: 1, run: 1 };
+
+		for (let repetition = 0; repetition < total; ++repetition) {
+			const subResult = result.createChild(`repetition ${repetition + 1} of ${total}`);
+			await next(context, subResult);
+			subResult.finish();
+			const subSummary = subResult.getSummary();
+			if (subSummary.error || subSummary.fail || !subSummary.pass) {
+				if (
+					!bestFailSummary ||
+					subSummary.error < bestFailSummary.error ||
+					(subSummary.error === bestFailSummary.error && subSummary.fail < bestFailSummary.fail)
+				) {
+					bestFailSummary = subSummary;
+				}
+				failureCount++;
+			} else if (!bestSummary || subSummary.pass > bestSummary.pass) {
+				bestSummary = subSummary;
+			}
+			if (failFast && result.hasFailed()) {
+				break;
+			}
+		}
+	}, { first: true }); // ensure any lifecycle steps happen within the repeat
 };
 
 var retry = () => (builder) => {
@@ -896,10 +927,14 @@ var retry = () => (builder) => {
 		}
 
 		for (let attempt = 0; attempt < maxAttempts; ++attempt) {
-			const attemptResult = result.createChild(`attempt ${attempt + 1} of ${maxAttempts}`, { asDelegate: true });
-			await next(context, attemptResult);
-			attemptResult.finish();
-			if (!attemptResult.hasFailed()) {
+			const subResult = result.createChild(`attempt ${attempt + 1} of ${maxAttempts}`);
+			// TODO: make this not be hacky
+			subResult.previous = result.previous;
+			result.getSummary = () => subResult.getSummary();
+
+			await next(context, subResult);
+			subResult.finish();
+			if (!subResult.hasFailed()) {
 				break;
 			}
 		}
@@ -976,19 +1011,19 @@ class TextReporter {
 	}
 
 	_print(result, indent) {
-		const results = result.getSummary();
+		const summary = result.getSummary();
 		const duration = result.getDuration();
 		const display = (result.label !== null);
 		let marker = '';
-		if (results.error) {
+		if (summary.error) {
 			marker = this.output.red('[ERRO]');
-		} else if (results.fail) {
+		} else if (summary.fail) {
 			marker = this.output.red('[FAIL]');
-		} else if (results.run) {
+		} else if (summary.run) {
 			marker = this.output.blue('[....]');
-		} else if (results.pass) {
+		} else if (summary.pass) {
 			marker = this.output.green('[PASS]');
-		} else if (results.skip) {
+		} else if (summary.skip) {
 			marker = this.output.yellow('[SKIP]');
 		} else {
 			marker = this.output.yellow('[NONE]');
