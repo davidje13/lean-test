@@ -12,7 +12,7 @@ export default () => (builder) => {
 		}),
 	});
 
-	builder.addRunInterceptor((next, context, node, result) => {
+	builder.addRunInterceptor((next, context, result, node) => {
 		if (!context.active) {
 			return next(context);
 		} else if (node.config.run) {

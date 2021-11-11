@@ -9,7 +9,7 @@ export default async function testRunner(plugins, expectedResult, block) {
 	const runner = await builder.build();
 	const result = await runner.run();
 
-	const match = equals(expectedResult)(result.getDescendantSummary());
+	const match = equals(expectedResult)(result.getSummary());
 	if (!match.success) {
 		console.error(result.children[0]); // TODO: log out all errors for debugging
 		fail(match.message);

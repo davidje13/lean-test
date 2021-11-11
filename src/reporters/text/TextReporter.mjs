@@ -6,9 +6,9 @@ export default class TextReporter {
 	}
 
 	_print(result, indent) {
-		const results = result.getDescendantSummary();
+		const results = result.getSummary();
 		const duration = result.getDuration();
-		const display = (result.node.config.display !== false);
+		const display = (result.label !== null);
 		let marker = '';
 		if (results.error) {
 			marker = this.output.red('[ERRO]');
@@ -27,7 +27,7 @@ export default class TextReporter {
 
 		if (display) {
 			this.output.write(
-				`${result.node.config.display}: ${result.node.options.name} [${duration}ms]`,
+				`${result.label} [${duration}ms]`,
 				`${marker} ${indent}`,
 				`${resultSpace} ${indent}`,
 			);
@@ -49,7 +49,7 @@ export default class TextReporter {
 	}
 
 	report(result) {
-		const summary = result.getDescendantSummary();
+		const summary = result.getSummary();
 		const duration = result.getDuration();
 
 		this._print(result, '');

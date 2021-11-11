@@ -13,8 +13,8 @@ class TestAssertionError extends Error {
 }
 
 class Result {
-	constructor(node, parent, isTest, previous) {
-		this.node = node;
+	constructor(label, parent, isTest, previous) {
+		this.label = label;
 		this.isTest = isTest;
 		this.parent = parent;
 		this.previous = previous;
@@ -29,10 +29,6 @@ class Result {
 		this.failures = [];
 		this.errors = [];
 		this.skipReasons = [];
-	}
-
-	selfOrDescendantMatches(predicate) {
-		return predicate(this) || this.children.some((child) => child.selfOrDescendantMatches(predicate));
 	}
 
 	async exec(namespace, fn) {
@@ -54,6 +50,16 @@ class Result {
 		Object.freeze(this);
 	}
 
+	createChild(label, { asDelegate = false } = {}) {
+		if (asDelegate) {
+			// TODO: make asDelegate not be hacky
+			const child = new Result(label, this, this.isTest, this.previous);
+			this.getSummary = () => child.getSummary();
+			return child;
+		}
+		return new Result(label, this, this.isTest, null);
+	}
+
 	recordError(namespace, error) {
 		if (error instanceof TestAssertionError) {
 			this.failures.push(`Failure in ${namespace}:\n${error.message}`);
@@ -73,33 +79,8 @@ class Result {
 	}
 
 	hasFailed() {
-		return this.errors.length > 0 || this.failures.length > 0;
-	}
-
-	getSummary() {
-		if (!this.isTest) {
-			if (this.errors.length) {
-				return { error: 1 };
-			}
-			if (this.failures.length) {
-				return { fail: 1 };
-			}
-			return {};
-		}
-
-		if (!this.complete) {
-			return { count: 1, run: 1 };
-		}
-		if (this.errors.length) {
-			return { count: 1, error: 1 };
-		}
-		if (this.failures.length) {
-			return { count: 1, fail: 1 };
-		}
-		if (this.skipReasons.length || !this.invoked) {
-			return { count: 1, skip: 1 };
-		}
-		return { count: 1, pass: 1 };
+		const summary = this.getSummary();
+		return Boolean(summary.error || summary.fail);
 	}
 
 	getDuration() {
@@ -111,13 +92,13 @@ class Result {
 		}
 	}
 
-	getDescendantSummary() {
-		let summary = this.getSummary();
+	getSummary() {
+		let summary = makeSelfSummary(this);
 		if (this.previous) {
-			summary = combineSummary(summary, this.previous.getSummary());
+			summary = combineSummary(summary, makeSelfSummary(this.previous));
 		}
 		return this.children
-			.map((child) => child.getDescendantSummary())
+			.map((child) => child.getSummary())
 			.reduce(combineSummary, summary);
 	}
 }
@@ -130,9 +111,35 @@ function combineSummary(a, b) {
 	return r;
 }
 
+function makeSelfSummary(result) {
+	if (!result.isTest) {
+		if (result.errors.length) {
+			return { error: 1 };
+		}
+		if (result.failures.length) {
+			return { fail: 1 };
+		}
+		return {};
+	}
+
+	if (!result.complete) {
+		return { count: 1, run: 1 };
+	}
+	if (result.errors.length) {
+		return { count: 1, error: 1 };
+	}
+	if (result.failures.length) {
+		return { count: 1, fail: 1 };
+	}
+	if (result.skipReasons.length || !result.invoked) {
+		return { count: 1, skip: 1 };
+	}
+	return { count: 1, pass: 1 };
+}
+
 const HIDDEN = Symbol();
 
-async function finalInterceptor(_, context, node, result) {
+async function finalInterceptor(_, context, result, node) {
 	if (node.config.run) {
 		if (context.active) {
 			await result.exec('test', () => node.config.run(node));
@@ -149,15 +156,21 @@ async function finalInterceptor(_, context, node, result) {
 	}
 }
 
+function updateArgs(oldArgs, newArgs) {
+	if (!newArgs?.length) {
+		return oldArgs;
+	}
+	const updated = [...newArgs, ...oldArgs.slice(newArgs.length)];
+	Object.freeze(updated[0]); // always freeze new context
+	if (updated[2] !== oldArgs[2]) {
+		throw new Error('Cannot change node');
+	}
+	return updated;
+}
+
 function runChain(chain, args) {
-	const runStep = (index, args) => chain[index](
-		(newArg1) => {
-			const newArgs = [...args];
-			if (newArg1) {
-				newArgs[0] = Object.freeze(newArg1);
-			}
-			return runStep(index + 1, newArgs);
-		},
+	const runStep = async (index, args) => await chain[index](
+		(...newArgs) => runStep(index + 1, updateArgs(args, newArgs)),
 		...args
 	);
 	return runStep(0, args);
@@ -188,7 +201,7 @@ class Node {
 	async runDiscovery(methods, beginHook) {
 		if (this.config.discovery) {
 			beginHook(this);
-			const discoveryResult = new Result(this, null, false, null);
+			const discoveryResult = new Result('discovery', null, false, null);
 			await discoveryResult.exec('discovery', () => this.config.discovery(this, { ...methods }));
 			discoveryResult.finish();
 			this.discoveryResult = discoveryResult;
@@ -202,8 +215,9 @@ class Node {
 	}
 
 	async _run(parentResult, context) {
-		const result = new Result(this, parentResult, Boolean(this.config.run), this.discoveryResult);
-		await runChain(context[HIDDEN].interceptors, [context, this, result]);
+		const label = this.config.display ? `${this.config.display}: ${this.options.name}` : null;
+		const result = new Result(label, parentResult, Boolean(this.config.run), this.discoveryResult);
+		await runChain(context[HIDDEN].interceptors, [context, result, this]);
 		result.finish();
 		return result;
 	}
@@ -755,7 +769,7 @@ var focus = () => (builder) => {
 		}),
 	});
 
-	builder.addRunInterceptor((next, context, node) => {
+	builder.addRunInterceptor((next, context, _, node) => {
 		const withinFocus = focused(node) || context[scope].withinFocus;
 		let anyFocus = context[scope].anyFocus;
 		if (anyFocus === null) { // must be root object
@@ -771,7 +785,7 @@ var focus = () => (builder) => {
 
 var ignore = () => (builder) => {
 	builder.addNodeOption('ignore', { ignore: true });
-	builder.addRunCondition((_, node) => (!node.options.ignore));
+	builder.addRunCondition((_, _result, node) => (!node.options.ignore));
 };
 
 var lifecycle = () => (builder) => {
@@ -788,7 +802,7 @@ var lifecycle = () => (builder) => {
 		}),
 	});
 
-	builder.addRunInterceptor((next, context, node, result) => {
+	builder.addRunInterceptor((next, context, result, node) => {
 		if (!context.active) {
 			return next(context);
 		} else if (node.config.run) {
@@ -875,29 +889,28 @@ var repeat = () => (builder) => {
 };
 
 var retry = () => (builder) => {
-	builder.addRunInterceptor(async (next, context, node, result) => {
-		await next(context);
-		if (!context.active) {
-			return;
-		}
+	builder.addRunInterceptor(async (next, context, result, node) => {
 		const maxAttempts = node.options.retry || 0;
-		const attempts = []; // TODO: make available to reporting (also durations, etc.)
-		while (result.hasFailed() && attempts.length < maxAttempts - 1) {
-			attempts.push({ errors: [...result.errors], failures: [...result.failures] });
-			result.errors.length = 0;
-			result.failures.length = 0;
-			await next(context);
+		if (!context.active || maxAttempts <= 1) {
+			return next(context);
+		}
+
+		for (let attempt = 0; attempt < maxAttempts; ++attempt) {
+			const attemptResult = result.createChild(`attempt ${attempt + 1} of ${maxAttempts}`, { asDelegate: true });
+			await next(context, attemptResult);
+			attemptResult.finish();
+			if (!attemptResult.hasFailed()) {
+				break;
+			}
 		}
 	}, { first: true }); // ensure any lifecycle steps happen within the retry
 };
 
-const failed = (result) => result.hasFailed();
-
 var stopAtFirstFailure = () => (builder) => {
-	builder.addRunCondition((_, node, result) => !(
+	builder.addRunCondition((_, result, node) => !(
 		node.parent &&
 		node.parent.options.stopAtFirstFailure &&
-		result.parent.selfOrDescendantMatches(failed)
+		result.parent.hasFailed()
 	));
 };
 
@@ -963,9 +976,9 @@ class TextReporter {
 	}
 
 	_print(result, indent) {
-		const results = result.getDescendantSummary();
+		const results = result.getSummary();
 		const duration = result.getDuration();
-		const display = (result.node.config.display !== false);
+		const display = (result.label !== null);
 		let marker = '';
 		if (results.error) {
 			marker = this.output.red('[ERRO]');
@@ -984,7 +997,7 @@ class TextReporter {
 
 		if (display) {
 			this.output.write(
-				`${result.node.config.display}: ${result.node.options.name} [${duration}ms]`,
+				`${result.label} [${duration}ms]`,
 				`${marker} ${indent}`,
 				`${resultSpace} ${indent}`,
 			);
@@ -1006,7 +1019,7 @@ class TextReporter {
 	}
 
 	report(result) {
-		const summary = result.getDescendantSummary();
+		const summary = result.getSummary();
 		const duration = result.getDuration();
 
 		this._print(result, '');

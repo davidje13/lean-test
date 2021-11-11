@@ -2,8 +2,8 @@ import TestAssertionError from './TestAssertionError.mjs';
 import TestAssumptionError from './TestAssumptionError.mjs';
 
 export default class Result {
-	constructor(node, parent, isTest, previous) {
-		this.node = node;
+	constructor(label, parent, isTest, previous) {
+		this.label = label;
 		this.isTest = isTest;
 		this.parent = parent;
 		this.previous = previous;
@@ -18,10 +18,6 @@ export default class Result {
 		this.failures = [];
 		this.errors = [];
 		this.skipReasons = [];
-	}
-
-	selfOrDescendantMatches(predicate) {
-		return predicate(this) || this.children.some((child) => child.selfOrDescendantMatches(predicate));
 	}
 
 	async exec(namespace, fn) {
@@ -43,6 +39,16 @@ export default class Result {
 		Object.freeze(this);
 	}
 
+	createChild(label, { asDelegate = false } = {}) {
+		if (asDelegate) {
+			// TODO: make asDelegate not be hacky
+			const child = new Result(label, this, this.isTest, this.previous);
+			this.getSummary = () => child.getSummary();
+			return child;
+		}
+		return new Result(label, this, this.isTest, null);
+	}
+
 	recordError(namespace, error) {
 		if (error instanceof TestAssertionError) {
 			this.failures.push(`Failure in ${namespace}:\n${error.message}`);
@@ -62,33 +68,8 @@ export default class Result {
 	}
 
 	hasFailed() {
-		return this.errors.length > 0 || this.failures.length > 0;
-	}
-
-	getSummary() {
-		if (!this.isTest) {
-			if (this.errors.length) {
-				return { error: 1 };
-			}
-			if (this.failures.length) {
-				return { fail: 1 };
-			}
-			return {};
-		}
-
-		if (!this.complete) {
-			return { count: 1, run: 1 };
-		}
-		if (this.errors.length) {
-			return { count: 1, error: 1 };
-		}
-		if (this.failures.length) {
-			return { count: 1, fail: 1 };
-		}
-		if (this.skipReasons.length || !this.invoked) {
-			return { count: 1, skip: 1 };
-		}
-		return { count: 1, pass: 1 };
+		const summary = this.getSummary();
+		return Boolean(summary.error || summary.fail);
 	}
 
 	getDuration() {
@@ -100,13 +81,13 @@ export default class Result {
 		}
 	}
 
-	getDescendantSummary() {
-		let summary = this.getSummary();
+	getSummary() {
+		let summary = makeSelfSummary(this);
 		if (this.previous) {
-			summary = combineSummary(summary, this.previous.getSummary());
+			summary = combineSummary(summary, makeSelfSummary(this.previous));
 		}
 		return this.children
-			.map((child) => child.getDescendantSummary())
+			.map((child) => child.getSummary())
 			.reduce(combineSummary, summary);
 	}
 }
@@ -117,4 +98,30 @@ function combineSummary(a, b) {
 		r[k] = (r[k] || 0) + b[k];
 	});
 	return r;
+}
+
+function makeSelfSummary(result) {
+	if (!result.isTest) {
+		if (result.errors.length) {
+			return { error: 1 };
+		}
+		if (result.failures.length) {
+			return { fail: 1 };
+		}
+		return {};
+	}
+
+	if (!result.complete) {
+		return { count: 1, run: 1 };
+	}
+	if (result.errors.length) {
+		return { count: 1, error: 1 };
+	}
+	if (result.failures.length) {
+		return { count: 1, fail: 1 };
+	}
+	if (result.skipReasons.length || !result.invoked) {
+		return { count: 1, skip: 1 };
+	}
+	return { count: 1, pass: 1 };
 }

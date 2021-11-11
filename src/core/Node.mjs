@@ -3,7 +3,7 @@ import Result from './Result.mjs';
 
 const HIDDEN = Symbol();
 
-async function finalInterceptor(_, context, node, result) {
+async function finalInterceptor(_, context, result, node) {
 	if (node.config.run) {
 		if (context.active) {
 			await result.exec('test', () => node.config.run(node));
@@ -20,15 +20,21 @@ async function finalInterceptor(_, context, node, result) {
 	}
 }
 
+function updateArgs(oldArgs, newArgs) {
+	if (!newArgs?.length) {
+		return oldArgs;
+	}
+	const updated = [...newArgs, ...oldArgs.slice(newArgs.length)];
+	Object.freeze(updated[0]); // always freeze new context
+	if (updated[2] !== oldArgs[2]) {
+		throw new Error('Cannot change node');
+	}
+	return updated;
+}
+
 function runChain(chain, args) {
-	const runStep = (index, args) => chain[index](
-		(newArg1) => {
-			const newArgs = [...args];
-			if (newArg1) {
-				newArgs[0] = Object.freeze(newArg1);
-			}
-			return runStep(index + 1, newArgs);
-		},
+	const runStep = async (index, args) => await chain[index](
+		(...newArgs) => runStep(index + 1, updateArgs(args, newArgs)),
 		...args
 	);
 	return runStep(0, args);
@@ -59,7 +65,7 @@ export default class Node {
 	async runDiscovery(methods, beginHook) {
 		if (this.config.discovery) {
 			beginHook(this);
-			const discoveryResult = new Result(this, null, false, null);
+			const discoveryResult = new Result('discovery', null, false, null);
 			await discoveryResult.exec('discovery', () => this.config.discovery(this, { ...methods }));
 			discoveryResult.finish();
 			this.discoveryResult = discoveryResult;
@@ -73,8 +79,9 @@ export default class Node {
 	}
 
 	async _run(parentResult, context) {
-		const result = new Result(this, parentResult, Boolean(this.config.run), this.discoveryResult);
-		await runChain(context[HIDDEN].interceptors, [context, this, result]);
+		const label = this.config.display ? `${this.config.display}: ${this.options.name}` : null;
+		const result = new Result(label, parentResult, Boolean(this.config.run), this.discoveryResult);
+		await runChain(context[HIDDEN].interceptors, [context, result, this]);
 		result.finish();
 		return result;
 	}

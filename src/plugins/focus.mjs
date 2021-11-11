@@ -10,7 +10,7 @@ export default () => (builder) => {
 		}),
 	});
 
-	builder.addRunInterceptor((next, context, node) => {
+	builder.addRunInterceptor((next, context, _, node) => {
 		const withinFocus = focused(node) || context[scope].withinFocus;
 		let anyFocus = context[scope].anyFocus;
 		if (anyFocus === null) { // must be root object
