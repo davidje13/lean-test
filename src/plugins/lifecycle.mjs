@@ -12,17 +12,17 @@ export default () => (builder) => {
 		}),
 	});
 
-	builder.addRunInterceptor((next, context, node) => {
+	builder.addRunInterceptor((next, context, node, result) => {
 		if (!context.active) {
 			return next(context);
 		} else if (node.config.run) {
-			return withWrappers(node, context[scope].beforeEach, context[scope].afterEach, (err) => next({
+			return withWrappers(result, context[scope].beforeEach, context[scope].afterEach, (err) => next({
 				...context,
 				active: !err,
 			}));
 		} else {
 			const nodeScope = node.getScope(scope);
-			return withWrappers(node, [nodeScope.beforeAll], [nodeScope.afterAll], (err) => next({
+			return withWrappers(result, [nodeScope.beforeAll], [nodeScope.afterAll], (err) => next({
 				...context,
 				[scope]: {
 					beforeEach: [...context[scope].beforeEach, nodeScope.beforeEach],
@@ -33,14 +33,14 @@ export default () => (builder) => {
 		}
 	});
 
-	async function withWrappers(node, before, after, next) {
+	async function withWrappers(result, before, after, next) {
 		let err = false;
 		const allTeardowns = [];
 		let i = 0;
 		for (; i < before.length && !err; ++i) {
 			const teardowns = [];
 			for (const { name, fn } of before[i]) {
-				const success = await node.result.exec(`before ${name}`, async () => {
+				const success = await result.exec(`before ${name}`, async () => {
 					const teardown = await fn();
 					if (typeof teardown === 'function') {
 						teardowns.unshift({ name, fn: teardown });
@@ -59,10 +59,10 @@ export default () => (builder) => {
 		} finally {
 			while ((i--) > 0) {
 				for (const { name, fn } of allTeardowns[i]) {
-					await node.result.exec(`teardown ${name}`, fn);
+					await result.exec(`teardown ${name}`, fn);
 				}
 				for (const { name, fn } of after[i]) {
-					await node.result.exec(`after ${name}`, fn);
+					await result.exec(`after ${name}`, fn);
 				}
 			}
 		}

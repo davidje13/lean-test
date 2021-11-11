@@ -97,14 +97,14 @@ Runner.Builder = class RunnerBuilder {
 
 	async build() {
 		const exts = this.extensions.copy();
-		const baseNode = new Node({ display: false }, { parallel: true }, exts.get(NODE_INIT));
+		const baseNode = new Node(null, { display: false }, { parallel: true }, exts.get(NODE_INIT));
 
 		let curNode = baseNode;
 		const addChildNode = (config, options) => {
 			if (!curNode) {
 				throw new Error('Cannot create new tests after discovery phase');
 			}
-			curNode.addChild(new Node(config, options, exts.get(NODE_INIT)));
+			new Node(curNode, config, options, exts.get(NODE_INIT));
 		};
 
 		const methodTarget = Object.freeze({

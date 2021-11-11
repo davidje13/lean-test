@@ -2,14 +2,15 @@ import TestAssertionError from './TestAssertionError.mjs';
 import TestAssumptionError from './TestAssumptionError.mjs';
 
 export default class Result {
-	constructor(node, isTest) {
+	constructor(node, parent, isTest, previous) {
 		this.node = node;
 		this.isTest = isTest;
-		this.parent = null;
+		this.parent = parent;
+		this.previous = previous;
 		this.children = [];
+		parent?.children?.push(this);
 
-		this.started = false;
-		this.startTime = null;
+		this.startTime = Date.now();
 		this.invoked = false;
 		this.durations = new Map();
 		this.totalRunDuration = 0;
@@ -19,17 +20,8 @@ export default class Result {
 		this.skipReasons = [];
 	}
 
-	addChild(child) {
-		this.children.push(child);
-	}
-
 	selfOrDescendantMatches(predicate) {
 		return predicate(this) || this.children.some((child) => child.selfOrDescendantMatches(predicate));
-	}
-
-	start() {
-		this.started = true;
-		this.startTime = Date.now();
 	}
 
 	async exec(namespace, fn) {
@@ -48,6 +40,7 @@ export default class Result {
 	finish() {
 		this.totalRunDuration = Date.now() - this.startTime;
 		this.complete = true;
+		Object.freeze(this);
 	}
 
 	recordError(namespace, error) {
@@ -64,14 +57,8 @@ export default class Result {
 		this.durations.set(namespace, (this.durations.get(namespace) || 0) + millis);
 	}
 
-	getDuration() {
-		if (!this.started) {
-			return null;
-		}
-		return (
-			(this.complete ? this.totalRunDuration : (Date.now() - this.startTime)) +
-			(this.durations.get('discovery') || 0)
-		);
+	getOwnDuration() {
+		return (this.complete ? this.totalRunDuration : (Date.now() - this.startTime));
 	}
 
 	hasFailed() {
@@ -89,9 +76,6 @@ export default class Result {
 			return {};
 		}
 
-		if (!this.started) {
-			return { count: 1, pend: 1 };
-		}
 		if (!this.complete) {
 			return { count: 1, run: 1 };
 		}
@@ -107,8 +91,23 @@ export default class Result {
 		return { count: 1, pass: 1 };
 	}
 
+	getDuration() {
+		const duration = this.getOwnDuration();
+		if (this.previous) {
+			return duration + this.previous.getOwnDuration();
+		} else {
+			return duration;
+		}
+	}
+
 	getDescendantSummary() {
-		return this.children.map((child) => child.getDescendantSummary()).reduce(combineSummary, this.getSummary());
+		let summary = this.getSummary();
+		if (this.previous) {
+			summary = combineSummary(summary, this.previous.getSummary());
+		}
+		return this.children
+			.map((child) => child.getDescendantSummary())
+			.reduce(combineSummary, summary);
 	}
 }
 

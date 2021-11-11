@@ -3,19 +3,19 @@ import Result from './Result.mjs';
 
 const HIDDEN = Symbol();
 
-async function finalInterceptor(_, context, node) {
+async function finalInterceptor(_, context, node, result) {
 	if (node.config.run) {
 		if (context.active) {
-			await node.result.exec('test', () => node.config.run(node));
+			await result.exec('test', () => node.config.run(node));
 		} else {
-			node.result.recordError('interceptors', new TestAssumptionError('skipped'));
+			result.recordError('interceptors', new TestAssumptionError('skipped'));
 		}
-		node.result.invoked = true;
+		result.invoked = true;
 	} else if (node.options.parallel) {
-		await Promise.all(node.children.map((child) => child._run(context)));
+		await Promise.all(node.children.map((child) => child._run(result, context)));
 	} else {
 		for (const child of node.children) {
-			await child._run(context);
+			await child._run(result, context);
 		}
 	}
 }
@@ -35,21 +35,14 @@ function runChain(chain, args) {
 }
 
 export default class Node {
-	constructor(config, options, scopes) {
+	constructor(parent, config, options, scopes) {
 		this.config = Object.freeze(config);
 		this.options = Object.freeze(options);
 		this.scopes = Object.freeze(new Map(scopes.map(({ scope, value }) => [scope, value()])));
-		this.parent = null;
+		this.parent = parent;
 		this.children = [];
-
-		this.result = new Result(this, Boolean(this.config.run));
-	}
-
-	addChild(node) {
-		node.parent = this;
-		this.children.push(node);
-		node.result.parent = this.result;
-		this.result.children.push(node.result);
+		parent?.children?.push(this);
+		this.discoveryResult = null;
 	}
 
 	selfOrDescendantMatches(predicate) {
@@ -66,7 +59,10 @@ export default class Node {
 	async runDiscovery(methods, beginHook) {
 		if (this.config.discovery) {
 			beginHook(this);
-			await this.result.exec('discovery', () => this.config.discovery(this, { ...methods }));
+			const discoveryResult = new Result(this, null, false, null);
+			await discoveryResult.exec('discovery', () => this.config.discovery(this, { ...methods }));
+			discoveryResult.finish();
+			this.discoveryResult = discoveryResult;
 		}
 		for (const child of this.children) {
 			await child.runDiscovery(methods, beginHook);
@@ -76,17 +72,17 @@ export default class Node {
 		Object.freeze(this);
 	}
 
-	async _run(context) {
-		this.result.start();
-		await runChain(context[HIDDEN].interceptors, [context, this]);
-		this.result.finish();
+	async _run(parentResult, context) {
+		const result = new Result(this, parentResult, Boolean(this.config.run), this.discoveryResult);
+		await runChain(context[HIDDEN].interceptors, [context, this, result]);
+		result.finish();
+		return result;
 	}
 
-	async run(interceptors, context) {
-		await this._run({
+	run(interceptors, context) {
+		return this._run(null, {
 			...context,
 			[HIDDEN]: { interceptors: [...interceptors, finalInterceptor] },
 		});
-		return this.result;
 	}
 }

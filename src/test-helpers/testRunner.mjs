@@ -7,12 +7,12 @@ export default async function testRunner(plugins, expectedResult, block) {
 	plugins.forEach((plugin) => builder.addPlugin(plugin));
 	builder.addSuite('test', block);
 	const runner = await builder.build();
-	await runner.run();
+	const result = await runner.run();
 
-	const match = equals(expectedResult)(runner.baseNode.result.getDescendantSummary());
+	const match = equals(expectedResult)(result.getDescendantSummary());
 	if (!match.success) {
-		console.error(runner.baseNode.children[0].result); // TODO: log out all errors for debugging
+		console.error(result.children[0]); // TODO: log out all errors for debugging
 		fail(match.message);
 	}
-	return runner.baseNode.result;
+	return result;
 }

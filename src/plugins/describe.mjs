@@ -8,13 +8,13 @@ const OPTIONS_FACTORY = (name, content, opts) => {
 const DISCOVERY = async (node, methods) => {
 	const { content } = node.options;
 
-	let result = content;
-	while (typeof result === 'function') {
-		result = await result(methods);
+	let resolvedContent = content;
+	while (typeof resolvedContent === 'function') {
+		resolvedContent = await resolvedContent(methods);
 	}
 
-	if (typeof result === 'object' && result) {
-		Object.entries(result).forEach(([name, value]) => {
+	if (typeof resolvedContent === 'object' && resolvedContent) {
+		Object.entries(resolvedContent).forEach(([name, value]) => {
 			if (typeof value === 'function') {
 				methods[node.config.testFn](name, value);
 			} else if (typeof value === 'object' && value) {

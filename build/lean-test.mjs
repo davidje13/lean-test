@@ -13,14 +13,15 @@ class TestAssertionError extends Error {
 }
 
 class Result {
-	constructor(node, isTest) {
+	constructor(node, parent, isTest, previous) {
 		this.node = node;
 		this.isTest = isTest;
-		this.parent = null;
+		this.parent = parent;
+		this.previous = previous;
 		this.children = [];
+		parent?.children?.push(this);
 
-		this.started = false;
-		this.startTime = null;
+		this.startTime = Date.now();
 		this.invoked = false;
 		this.durations = new Map();
 		this.totalRunDuration = 0;
@@ -30,17 +31,8 @@ class Result {
 		this.skipReasons = [];
 	}
 
-	addChild(child) {
-		this.children.push(child);
-	}
-
 	selfOrDescendantMatches(predicate) {
 		return predicate(this) || this.children.some((child) => child.selfOrDescendantMatches(predicate));
-	}
-
-	start() {
-		this.started = true;
-		this.startTime = Date.now();
 	}
 
 	async exec(namespace, fn) {
@@ -59,6 +51,7 @@ class Result {
 	finish() {
 		this.totalRunDuration = Date.now() - this.startTime;
 		this.complete = true;
+		Object.freeze(this);
 	}
 
 	recordError(namespace, error) {
@@ -75,14 +68,8 @@ class Result {
 		this.durations.set(namespace, (this.durations.get(namespace) || 0) + millis);
 	}
 
-	getDuration() {
-		if (!this.started) {
-			return null;
-		}
-		return (
-			(this.complete ? this.totalRunDuration : (Date.now() - this.startTime)) +
-			(this.durations.get('discovery') || 0)
-		);
+	getOwnDuration() {
+		return (this.complete ? this.totalRunDuration : (Date.now() - this.startTime));
 	}
 
 	hasFailed() {
@@ -100,9 +87,6 @@ class Result {
 			return {};
 		}
 
-		if (!this.started) {
-			return { count: 1, pend: 1 };
-		}
 		if (!this.complete) {
 			return { count: 1, run: 1 };
 		}
@@ -118,8 +102,23 @@ class Result {
 		return { count: 1, pass: 1 };
 	}
 
+	getDuration() {
+		const duration = this.getOwnDuration();
+		if (this.previous) {
+			return duration + this.previous.getOwnDuration();
+		} else {
+			return duration;
+		}
+	}
+
 	getDescendantSummary() {
-		return this.children.map((child) => child.getDescendantSummary()).reduce(combineSummary, this.getSummary());
+		let summary = this.getSummary();
+		if (this.previous) {
+			summary = combineSummary(summary, this.previous.getSummary());
+		}
+		return this.children
+			.map((child) => child.getDescendantSummary())
+			.reduce(combineSummary, summary);
 	}
 }
 
@@ -133,19 +132,19 @@ function combineSummary(a, b) {
 
 const HIDDEN = Symbol();
 
-async function finalInterceptor(_, context, node) {
+async function finalInterceptor(_, context, node, result) {
 	if (node.config.run) {
 		if (context.active) {
-			await node.result.exec('test', () => node.config.run(node));
+			await result.exec('test', () => node.config.run(node));
 		} else {
-			node.result.recordError('interceptors', new TestAssumptionError('skipped'));
+			result.recordError('interceptors', new TestAssumptionError('skipped'));
 		}
-		node.result.invoked = true;
+		result.invoked = true;
 	} else if (node.options.parallel) {
-		await Promise.all(node.children.map((child) => child._run(context)));
+		await Promise.all(node.children.map((child) => child._run(result, context)));
 	} else {
 		for (const child of node.children) {
-			await child._run(context);
+			await child._run(result, context);
 		}
 	}
 }
@@ -165,21 +164,14 @@ function runChain(chain, args) {
 }
 
 class Node {
-	constructor(config, options, scopes) {
+	constructor(parent, config, options, scopes) {
 		this.config = Object.freeze(config);
 		this.options = Object.freeze(options);
 		this.scopes = Object.freeze(new Map(scopes.map(({ scope, value }) => [scope, value()])));
-		this.parent = null;
+		this.parent = parent;
 		this.children = [];
-
-		this.result = new Result(this, Boolean(this.config.run));
-	}
-
-	addChild(node) {
-		node.parent = this;
-		this.children.push(node);
-		node.result.parent = this.result;
-		this.result.children.push(node.result);
+		parent?.children?.push(this);
+		this.discoveryResult = null;
 	}
 
 	selfOrDescendantMatches(predicate) {
@@ -196,7 +188,10 @@ class Node {
 	async runDiscovery(methods, beginHook) {
 		if (this.config.discovery) {
 			beginHook(this);
-			await this.result.exec('discovery', () => this.config.discovery(this, { ...methods }));
+			const discoveryResult = new Result(this, null, false, null);
+			await discoveryResult.exec('discovery', () => this.config.discovery(this, { ...methods }));
+			discoveryResult.finish();
+			this.discoveryResult = discoveryResult;
 		}
 		for (const child of this.children) {
 			await child.runDiscovery(methods, beginHook);
@@ -206,18 +201,18 @@ class Node {
 		Object.freeze(this);
 	}
 
-	async _run(context) {
-		this.result.start();
-		await runChain(context[HIDDEN].interceptors, [context, this]);
-		this.result.finish();
+	async _run(parentResult, context) {
+		const result = new Result(this, parentResult, Boolean(this.config.run), this.discoveryResult);
+		await runChain(context[HIDDEN].interceptors, [context, this, result]);
+		result.finish();
+		return result;
 	}
 
-	async run(interceptors, context) {
-		await this._run({
+	run(interceptors, context) {
+		return this._run(null, {
 			...context,
 			[HIDDEN]: { interceptors: [...interceptors, finalInterceptor] },
 		});
-		return this.result;
 	}
 }
 
@@ -264,13 +259,13 @@ const OPTIONS_FACTORY$1 = (name, content, opts) => {
 const DISCOVERY = async (node, methods) => {
 	const { content } = node.options;
 
-	let result = content;
-	while (typeof result === 'function') {
-		result = await result(methods);
+	let resolvedContent = content;
+	while (typeof resolvedContent === 'function') {
+		resolvedContent = await resolvedContent(methods);
 	}
 
-	if (typeof result === 'object' && result) {
-		Object.entries(result).forEach(([name, value]) => {
+	if (typeof resolvedContent === 'object' && resolvedContent) {
+		Object.entries(resolvedContent).forEach(([name, value]) => {
 			if (typeof value === 'function') {
 				methods[node.config.testFn](name, value);
 			} else if (typeof value === 'object' && value) {
@@ -390,14 +385,14 @@ Runner.Builder = class RunnerBuilder {
 
 	async build() {
 		const exts = this.extensions.copy();
-		const baseNode = new Node({ display: false }, { parallel: true }, exts.get(NODE_INIT));
+		const baseNode = new Node(null, { display: false }, { parallel: true }, exts.get(NODE_INIT));
 
 		let curNode = baseNode;
 		const addChildNode = (config, options) => {
 			if (!curNode) {
 				throw new Error('Cannot create new tests after discovery phase');
 			}
-			curNode.addChild(new Node(config, options, exts.get(NODE_INIT)));
+			new Node(curNode, config, options, exts.get(NODE_INIT));
 		};
 
 		const methodTarget = Object.freeze({
@@ -793,17 +788,17 @@ var lifecycle = () => (builder) => {
 		}),
 	});
 
-	builder.addRunInterceptor((next, context, node) => {
+	builder.addRunInterceptor((next, context, node, result) => {
 		if (!context.active) {
 			return next(context);
 		} else if (node.config.run) {
-			return withWrappers(node, context[scope].beforeEach, context[scope].afterEach, (err) => next({
+			return withWrappers(result, context[scope].beforeEach, context[scope].afterEach, (err) => next({
 				...context,
 				active: !err,
 			}));
 		} else {
 			const nodeScope = node.getScope(scope);
-			return withWrappers(node, [nodeScope.beforeAll], [nodeScope.afterAll], (err) => next({
+			return withWrappers(result, [nodeScope.beforeAll], [nodeScope.afterAll], (err) => next({
 				...context,
 				[scope]: {
 					beforeEach: [...context[scope].beforeEach, nodeScope.beforeEach],
@@ -814,14 +809,14 @@ var lifecycle = () => (builder) => {
 		}
 	});
 
-	async function withWrappers(node, before, after, next) {
+	async function withWrappers(result, before, after, next) {
 		let err = false;
 		const allTeardowns = [];
 		let i = 0;
 		for (; i < before.length && !err; ++i) {
 			const teardowns = [];
 			for (const { name, fn } of before[i]) {
-				const success = await node.result.exec(`before ${name}`, async () => {
+				const success = await result.exec(`before ${name}`, async () => {
 					const teardown = await fn();
 					if (typeof teardown === 'function') {
 						teardowns.unshift({ name, fn: teardown });
@@ -840,10 +835,10 @@ var lifecycle = () => (builder) => {
 		} finally {
 			while ((i--) > 0) {
 				for (const { name, fn } of allTeardowns[i]) {
-					await node.result.exec(`teardown ${name}`, fn);
+					await result.exec(`teardown ${name}`, fn);
 				}
 				for (const { name, fn } of after[i]) {
-					await node.result.exec(`after ${name}`, fn);
+					await result.exec(`after ${name}`, fn);
 				}
 			}
 		}
@@ -880,17 +875,17 @@ var repeat = () => (builder) => {
 };
 
 var retry = () => (builder) => {
-	builder.addRunInterceptor(async (next, context, node) => {
+	builder.addRunInterceptor(async (next, context, node, result) => {
 		await next(context);
 		if (!context.active) {
 			return;
 		}
 		const maxAttempts = node.options.retry || 0;
 		const attempts = []; // TODO: make available to reporting (also durations, etc.)
-		while (node.result.hasFailed() && attempts.length < maxAttempts - 1) {
-			attempts.push({ errors: [...node.result.errors], failures: [...node.result.failures] });
-			node.result.errors.length = 0;
-			node.result.failures.length = 0;
+		while (result.hasFailed() && attempts.length < maxAttempts - 1) {
+			attempts.push({ errors: [...result.errors], failures: [...result.failures] });
+			result.errors.length = 0;
+			result.failures.length = 0;
 			await next(context);
 		}
 	}, { first: true }); // ensure any lifecycle steps happen within the retry
@@ -899,10 +894,10 @@ var retry = () => (builder) => {
 const failed = (result) => result.hasFailed();
 
 var stopAtFirstFailure = () => (builder) => {
-	builder.addRunCondition((_, node) => !(
+	builder.addRunCondition((_, node, result) => !(
 		node.parent &&
 		node.parent.options.stopAtFirstFailure &&
-		node.result.parent.selfOrDescendantMatches(failed)
+		result.parent.selfOrDescendantMatches(failed)
 	));
 };
 
@@ -976,7 +971,7 @@ class TextReporter {
 			marker = this.output.red('[ERRO]');
 		} else if (results.fail) {
 			marker = this.output.red('[FAIL]');
-		} else if (results.run || results.pend) {
+		} else if (results.run) {
 			marker = this.output.blue('[....]');
 		} else if (results.pass) {
 			marker = this.output.green('[PASS]');

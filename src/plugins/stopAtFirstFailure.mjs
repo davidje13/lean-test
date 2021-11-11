@@ -1,9 +1,9 @@
 const failed = (result) => result.hasFailed();
 
 export default () => (builder) => {
-	builder.addRunCondition((_, node) => !(
+	builder.addRunCondition((_, node, result) => !(
 		node.parent &&
 		node.parent.options.stopAtFirstFailure &&
-		node.result.parent.selfOrDescendantMatches(failed)
+		result.parent.selfOrDescendantMatches(failed)
 	));
 };

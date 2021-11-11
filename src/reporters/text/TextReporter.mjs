@@ -14,7 +14,7 @@ export default class TextReporter {
 			marker = this.output.red('[ERRO]');
 		} else if (results.fail) {
 			marker = this.output.red('[FAIL]');
-		} else if (results.run || results.pend) {
+		} else if (results.run) {
 			marker = this.output.blue('[....]');
 		} else if (results.pass) {
 			marker = this.output.green('[PASS]');
