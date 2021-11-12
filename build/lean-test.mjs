@@ -15,20 +15,33 @@ class TestAssertionError extends Error {
 class ResultStage {
 	constructor(label) {
 		this.label = label;
-		this.startTime = 0;
-		this.duration = 0;
+		this.startTime = Date.now();
+		this.endTime = null;
 		this.failures = [];
 		this.errors = [];
 		this.skipReasons = [];
-		this.complete = false;
+	}
+
+	_cancel(error) {
+		if (this.endTime === null) {
+			this.errors.push(error);
+			this._complete();
+		}
+	}
+
+	_complete() {
+		if (this.endTime === null) {
+			this.endTime = Date.now();
+			Object.freeze(this);
+		}
 	}
 
 	getSummary() {
-		const duration = (this.complete ? this.duration : (Date.now() - this.startTime));
-
-		if (!this.complete) {
-			return { count: 1, run: 1, duration };
+		if (this.endTime === null) {
+			return { count: 1, run: 1, duration: Date.now() - this.startTime };
 		}
+
+		const duration = this.endTime - this.startTime;
 		if (this.errors.length) {
 			return { count: 1, error: 1, duration };
 		}
@@ -50,23 +63,22 @@ class ResultStage {
 	}
 }
 
-ResultStage.of = async (label, fn, fnArg) => {
+ResultStage.of = async (label, fn) => {
 	const stage = new ResultStage(label);
-	stage.startTime = Date.now();
 	try {
-		await fn(fnArg);
+		await fn(stage);
 	} catch (error) {
-		if (error instanceof TestAssertionError) {
-			stage.failures.push(error);
-		} else if (error instanceof TestAssumptionError) {
-			stage.skipReasons.push(error);
-		} else {
-			stage.errors.push(error);
+		if (stage.endTime === null) {
+			if (error instanceof TestAssertionError) {
+				stage.failures.push(error);
+			} else if (error instanceof TestAssumptionError) {
+				stage.skipReasons.push(error);
+			} else {
+				stage.errors.push(error);
+			}
 		}
 	} finally {
-		stage.duration = Date.now() - stage.startTime;
-		stage.complete = true;
-		Object.freeze(stage);
+		stage._complete();
 	}
 	return stage;
 };
@@ -88,6 +100,7 @@ class Result {
 		this.children = [];
 		this.stages = [];
 		this.forcedChildSummary = null;
+		this.cancelled = Boolean(parent?.cancelled);
 		parent?.children?.push(this);
 	}
 
@@ -95,10 +108,25 @@ class Result {
 		return Result.of(label, fn, { parent: this });
 	}
 
-	async createStage(config, label, fn) {
-		const stage = await ResultStage.of(label, fn, this);
-		this.stages.push({ config, stage });
-		return stage;
+	cancel(error) {
+		this.cancelled = true;
+		this.stages[0].stage._cancel(error || new Error('cancelled')); // mark 'core' stage with error
+		this.stages.forEach(({ config, stage }) => {
+			if (!config.noCancel) {
+				stage._complete(); // halt other stages without error
+			}
+		});
+	}
+
+	createStage(config, label, fn) {
+		return ResultStage.of(label, (stage) => {
+			this.stages.push({ config, stage });
+			if (this.cancelled && !config.noCancel) {
+				stage._complete();
+			} else {
+				return fn(this);
+			}
+		});
 	}
 
 	attachStage(config, stage) {
@@ -208,7 +236,7 @@ class Node {
 		this.parent = parent;
 		this.children = [];
 		parent?.children?.push(this);
-		this.discoveryResult = null;
+		this.discoveryStage = null;
 	}
 
 	selfOrDescendantMatches(predicate) {
@@ -225,7 +253,7 @@ class Node {
 	async runDiscovery(methods, beginHook) {
 		if (this.config.discovery) {
 			beginHook(this);
-			this.discoveryResult = await ResultStage.of(
+			this.discoveryStage = await ResultStage.of(
 				'discovery',
 				() => this.config.discovery(this, { ...methods }),
 			);
@@ -243,8 +271,8 @@ class Node {
 		return Result.of(
 			label,
 			(result) => {
-				if (this.discoveryResult) {
-					result.attachStage({ fail: true, time: true }, this.discoveryResult);
+				if (this.discoveryStage) {
+					result.attachStage({ fail: true, time: true }, this.discoveryStage);
 				}
 				return runChain(context[HIDDEN].interceptors, [context, result, this]);
 			},
@@ -880,10 +908,10 @@ var lifecycle = ({ order = 0 } = {}) => (builder) => {
 		} finally {
 			while ((i--) > 0) {
 				for (const { name, fn } of allTeardowns[i]) {
-					await result.createStage({ fail: true }, `teardown ${name}`, fn);
+					await result.createStage({ fail: true, noCancel: true }, `teardown ${name}`, fn);
 				}
 				for (const { name, fn } of after[i]) {
-					await result.createStage({ fail: true }, `after ${name}`, fn);
+					await result.createStage({ fail: true, noCancel: true }, `after ${name}`, fn);
 				}
 			}
 		}
@@ -999,9 +1027,27 @@ var test = () => (builder) => {
 	builder.addNodeType('it', OPTIONS_FACTORY, CONFIG);
 };
 
-var timeout = () => (builder) => {
-	// TODO: needs ability to "lock" current scope so that later resolutions won't have any effect
-	// needs scopes (rather than global node state) so that retries can still pass
+var timeout = ({ order = 1 } = {}) => (builder) => {
+	builder.addRunInterceptor(async (next, context, result, node) => {
+		const { timeout = 0 } = node.options;
+		if (!context.active || timeout <= 0) {
+			return next(context);
+		}
+
+		let tm;
+		await result.createChild(
+			`with ${timeout}ms timeout`,
+			(subResult) => Promise.race([
+				new Promise((resolve) => {
+					tm = setTimeout(() => {
+						subResult.cancel(new Error(`timeout after ${timeout}ms`));
+						resolve();
+					}, timeout);
+				}),
+				next(context, subResult).then(() => clearTimeout(tm)),
+			]),
+		);
+	}, { order });
 };
 
 var index$1 = /*#__PURE__*/Object.freeze({
@@ -1120,6 +1166,7 @@ class TextReporter {
 			process.exit(1);
 		} else if (summary.pass) {
 			this.output.write(this.output.green('PASS'));
+			process.exit(0); // explicitly exit to avoid hanging on dangling promises
 		} else {
 			this.output.write(this.output.yellow('NO TESTS RUN'));
 			process.exit(1);

@@ -4,20 +4,33 @@ import TestAssumptionError from './TestAssumptionError.mjs';
 export default class ResultStage {
 	constructor(label) {
 		this.label = label;
-		this.startTime = 0;
-		this.duration = 0;
+		this.startTime = Date.now();
+		this.endTime = null;
 		this.failures = [];
 		this.errors = [];
 		this.skipReasons = [];
-		this.complete = false;
+	}
+
+	_cancel(error) {
+		if (this.endTime === null) {
+			this.errors.push(error);
+			this._complete();
+		}
+	}
+
+	_complete() {
+		if (this.endTime === null) {
+			this.endTime = Date.now();
+			Object.freeze(this);
+		}
 	}
 
 	getSummary() {
-		const duration = (this.complete ? this.duration : (Date.now() - this.startTime));
-
-		if (!this.complete) {
-			return { count: 1, run: 1, duration };
+		if (this.endTime === null) {
+			return { count: 1, run: 1, duration: Date.now() - this.startTime };
 		}
+
+		const duration = this.endTime - this.startTime;
 		if (this.errors.length) {
 			return { count: 1, error: 1, duration };
 		}
@@ -39,23 +52,22 @@ export default class ResultStage {
 	}
 }
 
-ResultStage.of = async (label, fn, fnArg) => {
+ResultStage.of = async (label, fn) => {
 	const stage = new ResultStage(label);
-	stage.startTime = Date.now();
 	try {
-		await fn(fnArg);
+		await fn(stage);
 	} catch (error) {
-		if (error instanceof TestAssertionError) {
-			stage.failures.push(error);
-		} else if (error instanceof TestAssumptionError) {
-			stage.skipReasons.push(error);
-		} else {
-			stage.errors.push(error);
+		if (stage.endTime === null) {
+			if (error instanceof TestAssertionError) {
+				stage.failures.push(error);
+			} else if (error instanceof TestAssumptionError) {
+				stage.skipReasons.push(error);
+			} else {
+				stage.errors.push(error);
+			}
 		}
 	} finally {
-		stage.duration = Date.now() - stage.startTime;
-		stage.complete = true;
-		Object.freeze(stage);
+		stage._complete();
 	}
 	return stage;
 };

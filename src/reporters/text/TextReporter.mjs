@@ -76,6 +76,7 @@ export default class TextReporter {
 			process.exit(1);
 		} else if (summary.pass) {
 			this.output.write(this.output.green('PASS'));
+			process.exit(0); // explicitly exit to avoid hanging on dangling promises
 		} else {
 			this.output.write(this.output.yellow('NO TESTS RUN'));
 			process.exit(1);

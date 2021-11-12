@@ -17,6 +17,7 @@ export default class Result {
 		this.children = [];
 		this.stages = [];
 		this.forcedChildSummary = null;
+		this.cancelled = Boolean(parent?.cancelled);
 		parent?.children?.push(this);
 	}
 
@@ -24,10 +25,25 @@ export default class Result {
 		return Result.of(label, fn, { parent: this });
 	}
 
-	async createStage(config, label, fn) {
-		const stage = await ResultStage.of(label, fn, this);
-		this.stages.push({ config, stage });
-		return stage;
+	cancel(error) {
+		this.cancelled = true;
+		this.stages[0].stage._cancel(error || new Error('cancelled')); // mark 'core' stage with error
+		this.stages.forEach(({ config, stage }) => {
+			if (!config.noCancel) {
+				stage._complete(); // halt other stages without error
+			}
+		});
+	}
+
+	createStage(config, label, fn) {
+		return ResultStage.of(label, (stage) => {
+			this.stages.push({ config, stage });
+			if (this.cancelled && !config.noCancel) {
+				stage._complete();
+			} else {
+				return fn(this);
+			}
+		});
 	}
 
 	attachStage(config, stage) {

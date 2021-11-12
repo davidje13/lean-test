@@ -63,10 +63,10 @@ export default ({ order = 0 } = {}) => (builder) => {
 		} finally {
 			while ((i--) > 0) {
 				for (const { name, fn } of allTeardowns[i]) {
-					await result.createStage({ fail: true }, `teardown ${name}`, fn);
+					await result.createStage({ fail: true, noCancel: true }, `teardown ${name}`, fn);
 				}
 				for (const { name, fn } of after[i]) {
-					await result.createStage({ fail: true }, `after ${name}`, fn);
+					await result.createStage({ fail: true, noCancel: true }, `after ${name}`, fn);
 				}
 			}
 		}

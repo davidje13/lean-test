@@ -49,7 +49,7 @@ export default class Node {
 		this.parent = parent;
 		this.children = [];
 		parent?.children?.push(this);
-		this.discoveryResult = null;
+		this.discoveryStage = null;
 	}
 
 	selfOrDescendantMatches(predicate) {
@@ -66,7 +66,7 @@ export default class Node {
 	async runDiscovery(methods, beginHook) {
 		if (this.config.discovery) {
 			beginHook(this);
-			this.discoveryResult = await ResultStage.of(
+			this.discoveryStage = await ResultStage.of(
 				'discovery',
 				() => this.config.discovery(this, { ...methods }),
 			);
@@ -84,8 +84,8 @@ export default class Node {
 		return Result.of(
 			label,
 			(result) => {
-				if (this.discoveryResult) {
-					result.attachStage({ fail: true, time: true }, this.discoveryResult);
+				if (this.discoveryStage) {
+					result.attachStage({ fail: true, time: true }, this.discoveryStage);
 				}
 				return runChain(context[HIDDEN].interceptors, [context, result, this]);
 			},
