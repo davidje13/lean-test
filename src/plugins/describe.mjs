@@ -1,3 +1,7 @@
+const id = Symbol();
+const TEST_FN_NAME = Symbol();
+const SUB_FN_NAME = Symbol();
+
 const OPTIONS_FACTORY = (name, content, opts) => {
 	if (!content || (typeof content !== 'function' && typeof content !== 'object')) {
 		throw new Error('Invalid content');
@@ -16,17 +20,15 @@ const DISCOVERY = async (node, methods) => {
 	if (typeof resolvedContent === 'object' && resolvedContent) {
 		Object.entries(resolvedContent).forEach(([name, value]) => {
 			if (typeof value === 'function') {
-				methods[node.config.testFn](name, value);
+				methods[node.config[TEST_FN_NAME]](name, value);
 			} else if (typeof value === 'object' && value) {
-				methods[node.config.subFn](name, value);
+				methods[node.config[SUB_FN_NAME]](name, value);
 			} else {
 				throw new Error('Invalid test');
 			}
 		});
 	}
 };
-
-const id = Symbol();
 
 export default (fnName = 'describe', {
 	display,
@@ -35,9 +37,9 @@ export default (fnName = 'describe', {
 } = {}) => (builder) => {
 	builder.addNodeType(fnName, OPTIONS_FACTORY, {
 		display: display ?? fnName,
-		testFn,
-		subFn: subFn || fnName,
-		isBlock: true,
+		isBlock: true, // this is also checked by lifecycle to decide which hooks to run
+		[TEST_FN_NAME]: testFn,
+		[SUB_FN_NAME]: subFn || fnName,
 		discovery: DISCOVERY,
 	});
 

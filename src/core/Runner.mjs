@@ -53,8 +53,8 @@ Runner.Builder = class RunnerBuilder {
 
 	addRunCondition(fn, { id = null } = {}) {
 		return this.addRunInterceptor(async (next, context, ...rest) => {
-			const run = await fn(context, ...rest);
-			return await next(run ? context : { ...context, active: false });
+			const result = await fn(context, ...rest);
+			return await next(result ? context : { ...context, active: false });
 		}, { order: Number.NEGATIVE_INFINITY, id });
 	}
 

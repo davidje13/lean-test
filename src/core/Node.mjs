@@ -16,7 +16,7 @@ function updateArgs(oldArgs, newArgs) {
 }
 
 function runChain(chain, args) {
-	const runStep = async (index, args) => await chain[index]?.(
+	const runStep = async (index, args) => await chain[index](
 		(...newArgs) => runStep(index + 1, updateArgs(args, newArgs)),
 		...args
 	);

@@ -204,7 +204,7 @@ function updateArgs(oldArgs, newArgs) {
 }
 
 function runChain(chain, args) {
-	const runStep = async (index, args) => await chain[index]?.(
+	const runStep = async (index, args) => await chain[index](
 		(...newArgs) => runStep(index + 1, updateArgs(args, newArgs)),
 		...args
 	);
@@ -297,6 +297,10 @@ class ExtensionStore {
 	}
 }
 
+const id$1 = Symbol();
+const TEST_FN_NAME = Symbol();
+const SUB_FN_NAME = Symbol();
+
 const OPTIONS_FACTORY$1 = (name, content, opts) => {
 	if (!content || (typeof content !== 'function' && typeof content !== 'object')) {
 		throw new Error('Invalid content');
@@ -315,17 +319,15 @@ const DISCOVERY = async (node, methods) => {
 	if (typeof resolvedContent === 'object' && resolvedContent) {
 		Object.entries(resolvedContent).forEach(([name, value]) => {
 			if (typeof value === 'function') {
-				methods[node.config.testFn](name, value);
+				methods[node.config[TEST_FN_NAME]](name, value);
 			} else if (typeof value === 'object' && value) {
-				methods[node.config.subFn](name, value);
+				methods[node.config[SUB_FN_NAME]](name, value);
 			} else {
 				throw new Error('Invalid test');
 			}
 		});
 	}
 };
-
-const id$1 = Symbol();
 
 var describe = (fnName = 'describe', {
 	display,
@@ -334,9 +336,9 @@ var describe = (fnName = 'describe', {
 } = {}) => (builder) => {
 	builder.addNodeType(fnName, OPTIONS_FACTORY$1, {
 		display: display ?? fnName,
-		testFn,
-		subFn: subFn || fnName,
-		isBlock: true,
+		isBlock: true, // this is also checked by lifecycle to decide which hooks to run
+		[TEST_FN_NAME]: testFn,
+		[SUB_FN_NAME]: subFn || fnName,
 		discovery: DISCOVERY,
 	});
 
@@ -405,8 +407,8 @@ Runner.Builder = class RunnerBuilder {
 
 	addRunCondition(fn, { id = null } = {}) {
 		return this.addRunInterceptor(async (next, context, ...rest) => {
-			const run = await fn(context, ...rest);
-			return await next(run ? context : { ...context, active: false });
+			const result = await fn(context, ...rest);
+			return await next(result ? context : { ...context, active: false });
 		}, { order: Number.NEGATIVE_INFINITY, id });
 	}
 
@@ -1012,26 +1014,27 @@ var stopAtFirstFailure = () => (builder) => {
 	));
 };
 
+const id = Symbol();
+const TEST_FN = Symbol();
+
 const OPTIONS_FACTORY = (name, fn, opts) => ({ ...opts, name: name.trim(), fn });
 const CONFIG = {
 	display: 'test',
-	run: (node) => node.options.fn(),
+	[TEST_FN]: (node) => node.options.fn(),
 };
-
-const id = Symbol();
 
 var test = (fnName = 'test') => (builder) => {
 	builder.addNodeType(fnName, OPTIONS_FACTORY, CONFIG);
 
 	builder.addRunInterceptor((next, context, result, node) => {
-		if (!node.config.run) {
+		if (!node.config[TEST_FN]) {
 			return next();
 		}
 		return result.createStage({ tangible: true }, 'test', () => {
 			if (!context.active) {
 				throw new TestAssumptionError('ignored');
 			}
-			return node.config.run(node);
+			return node.config[TEST_FN](node);
 		});
 	}, { order: Number.POSITIVE_INFINITY, id });
 };
