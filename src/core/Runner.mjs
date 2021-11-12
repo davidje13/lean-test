@@ -1,17 +1,16 @@
-import Node from './Node.mjs';
+import Node, { RUN_INTERCEPTORS } from './Node.mjs';
 import ExtensionStore from './ExtensionStore.mjs';
 import describe from '../plugins/describe.mjs';
 
 export default class Runner {
-	constructor(baseNode, baseContext, runInterceptors) {
+	constructor(baseNode, baseContext) {
 		this.baseNode = baseNode;
 		this.baseContext = baseContext;
-		this.runInterceptors = runInterceptors;
 		Object.freeze(this);
 	}
 
 	run() {
-		return this.baseNode.run(this.runInterceptors, this.baseContext);
+		return this.baseNode.run(this.baseContext);
 	}
 }
 
@@ -144,12 +143,8 @@ Runner.Builder = class RunnerBuilder {
 
 		const baseContext = { active: true };
 		exts.get(CONTEXT_INIT).forEach(({ scope, value }) => { baseContext[scope] = Object.freeze(value()); });
-		this.runInterceptors.sort((a, b) => (a.order - b.order));
+		baseContext[RUN_INTERCEPTORS] = Object.freeze(this.runInterceptors.sort((a, b) => (a.order - b.order)).map((i) => i.fn));
 
-		return new Runner(
-			baseNode,
-			Object.freeze(baseContext),
-			Object.freeze(this.runInterceptors.map((i) => i.fn)),
-		);
+		return new Runner(baseNode, Object.freeze(baseContext));
 	}
 }

@@ -1,7 +1,7 @@
 import ResultStage from './ResultStage.mjs';
 import Result from './Result.mjs';
 
-const HIDDEN = Symbol();
+export const RUN_INTERCEPTORS = Symbol();
 
 function updateArgs(oldArgs, newArgs) {
 	if (!newArgs?.length) {
@@ -61,7 +61,7 @@ export default class Node {
 		Object.freeze(this);
 	}
 
-	_run(parentResult, context) {
+	run(context, parentResult = null) {
 		const label = this.config.display ? `${this.config.display}: ${this.options.name}` : null;
 		return Result.of(
 			label,
@@ -69,13 +69,9 @@ export default class Node {
 				if (this.discoveryStage) {
 					result.attachStage({ fail: true, time: true }, this.discoveryStage);
 				}
-				return runChain(context[HIDDEN].interceptors, [context, result, this]);
+				return runChain(context[RUN_INTERCEPTORS], [context, result, this]);
 			},
 			{ parent: parentResult },
 		);
-	}
-
-	run(interceptors, context) {
-		return this._run(null, { ...context, [HIDDEN]: { interceptors } });
 	}
 }

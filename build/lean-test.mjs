@@ -189,7 +189,7 @@ function combineSummary(a, b) {
 	return r;
 }
 
-const HIDDEN = Symbol();
+const RUN_INTERCEPTORS = Symbol();
 
 function updateArgs(oldArgs, newArgs) {
 	if (!newArgs?.length) {
@@ -249,7 +249,7 @@ class Node {
 		Object.freeze(this);
 	}
 
-	_run(parentResult, context) {
+	run(context, parentResult = null) {
 		const label = this.config.display ? `${this.config.display}: ${this.options.name}` : null;
 		return Result.of(
 			label,
@@ -257,14 +257,10 @@ class Node {
 				if (this.discoveryStage) {
 					result.attachStage({ fail: true, time: true }, this.discoveryStage);
 				}
-				return runChain(context[HIDDEN].interceptors, [context, result, this]);
+				return runChain(context[RUN_INTERCEPTORS], [context, result, this]);
 			},
 			{ parent: parentResult },
 		);
-	}
-
-	run(interceptors, context) {
-		return this._run(null, { ...context, [HIDDEN]: { interceptors } });
 	}
 }
 
@@ -349,25 +345,24 @@ var describe = (fnName = 'describe', {
 			return next();
 		}
 		if (node.options.parallel) {
-			await Promise.all(node.children.map((child) => child._run(result, context)));
+			await Promise.all(node.children.map((child) => child.run(context, result)));
 		} else {
 			for (const child of node.children) {
-				await child._run(result, context);
+				await child.run(context, result);
 			}
 		}
 	}, { order: Number.POSITIVE_INFINITY, id: id$1 });
 };
 
 class Runner {
-	constructor(baseNode, baseContext, runInterceptors) {
+	constructor(baseNode, baseContext) {
 		this.baseNode = baseNode;
 		this.baseContext = baseContext;
-		this.runInterceptors = runInterceptors;
 		Object.freeze(this);
 	}
 
 	run() {
-		return this.baseNode.run(this.runInterceptors, this.baseContext);
+		return this.baseNode.run(this.baseContext);
 	}
 }
 
@@ -500,13 +495,9 @@ Runner.Builder = class RunnerBuilder {
 
 		const baseContext = { active: true };
 		exts.get(CONTEXT_INIT).forEach(({ scope, value }) => { baseContext[scope] = Object.freeze(value()); });
-		this.runInterceptors.sort((a, b) => (a.order - b.order));
+		baseContext[RUN_INTERCEPTORS] = Object.freeze(this.runInterceptors.sort((a, b) => (a.order - b.order)).map((i) => i.fn));
 
-		return new Runner(
-			baseNode,
-			Object.freeze(baseContext),
-			Object.freeze(this.runInterceptors.map((i) => i.fn)),
-		);
+		return new Runner(baseNode, Object.freeze(baseContext));
 	}
 };
 
