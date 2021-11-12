@@ -49,6 +49,7 @@ export default ({ order = 0 } = {}) => (builder) => {
 							teardowns.unshift({ name, fn: teardown });
 						}
 					},
+					{ errorStackSkipFrames: 1 }
 				);
 				if (stage.hasFailed() || stage.hasSkipped()) {
 					skip = true;

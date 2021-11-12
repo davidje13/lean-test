@@ -5,19 +5,19 @@ import TestAssumptionError from '../core/TestAssumptionError.mjs';
 const FLUENT_MATCHERS = Symbol();
 
 const expect = () => (builder) => {
-	const invokeMatcher = (actual, matcher, ErrorType) =>
+	const invokeMatcher = (actual, matcher, ErrorType, trimFrames) =>
 		seq(matcher(actual), ({ success, message }) => {
 			if (!success) {
-				throw new ErrorType(resolveMessage(message));
+				throw new ErrorType(resolveMessage(message), trimFrames + 3);
 			}
 		});
 
 	const run = (context, ErrorType, actual, matcher = undefined) => {
 		if (matcher) {
-			return invokeMatcher(actual, matcher, ErrorType);
+			return invokeMatcher(actual, matcher, ErrorType, 2);
 		}
 		return Object.fromEntries(context.get(FLUENT_MATCHERS).map(([name, m]) =>
-			[name, (...args) => invokeMatcher(actual, m(...args), ErrorType)]
+			[name, (...args) => invokeMatcher(actual, m(...args), ErrorType, 1)]
 		));
 	};
 

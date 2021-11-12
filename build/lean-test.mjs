@@ -1,14 +1,99 @@
 import assert from 'assert/strict';
 
 class TestAssertionError extends Error {
-	constructor(message) {
+	constructor(message, trimFrames = 0) {
 		super(message);
+		this.trimFrames = trimFrames;
 	}
 }
 
 class TestAssumptionError extends Error {
-	constructor(message) {
+	constructor(message, trimFrames = 0) {
 		super(message);
+		this.trimFrames = trimFrames;
+	}
+}
+
+class CapturedError {
+	constructor(err, base) {
+		if (typeof base !== 'object') {
+			base = CapturedError.makeBase(0);
+		}
+		const stackList = extractStackList(err.stack);
+		this.stack = cutTrace(stackList, base);
+		if (err.trimFrames) {
+			this.stack.splice(0, err.trimFrames);
+		}
+		this.message = err.message;
+	}
+}
+
+CapturedError.makeBase = (skipFrames = 0) => ({
+	stackBase: extractStackList(new Error().stack)[1],
+	skipFrames,
+});
+
+function cutTrace(trace, base) {
+	let list = trace;
+
+	// cut to given base frame
+	if (base.stackBase) {
+		for (let i = 0; i < trace.length; ++i) {
+			if (trace[i].name === base.stackBase.name) {
+				list = trace.slice(0, Math.max(0, i - base.skipFrames));
+				break;
+			}
+			if (trace[i].name === 'async ' + base.stackBase.name) {
+				// if function is in async mode, the very next frame is probably user-relevant, so don't skip skipFrames
+				list = trace.slice(0, i);
+				break;
+			}
+		}
+	}
+
+	// remove any trailing "special" frames (e.g. node internal async task handling)
+	while (list.length > 0 && !isFile(list[list.length - 1].location)) {
+		list.length--;
+	}
+
+	// remove common file path prefix
+	const locations = trace.map((s) => s.location);
+	locations.push(base.stackBase.location);
+	const prefix = locations.filter(isFile).reduce((prefix, l) => {
+		for (let p = 0; p < prefix.length; ++p) {
+			if (l[p] !== prefix[p]) {
+				return prefix.substr(0, p);
+			}
+		}
+		return prefix;
+	});
+
+	return list.map(({ location, ...rest }) => ({ ...rest, location: isFile(location) ? location.substr(prefix.length) : location }));
+}
+
+function isFile(path) {
+	return path.includes('://');
+}
+
+function extractStackList(stack) {
+	if (typeof stack !== 'string') {
+		return [];
+	}
+	const list = stack.split('\n');
+	list.shift();
+	return list.map(extractStackLine);
+}
+
+const STACK_AT = /^at\s+/i;
+const STACK_REGEX = /^([^(]+?)\s*\(([^)]*)\)$/i;
+
+function extractStackLine(raw) {
+	const cleaned = raw.trim().replace(STACK_AT, '');
+	const match = cleaned.match(STACK_REGEX);
+	if (match) {
+		return { name: match[1], location: match[2] };
+	} else {
+		return { name: 'anonymous', location: cleaned };
 	}
 }
 
@@ -24,7 +109,7 @@ class ResultStage {
 
 	_cancel(error) {
 		if (this.endTime === null) {
-			this.errors.push(error);
+			this.errors.push(new CapturedError(error));
 			this._complete();
 		}
 	}
@@ -63,18 +148,19 @@ class ResultStage {
 	}
 }
 
-ResultStage.of = async (label, fn) => {
+ResultStage.of = async (label, fn, { errorStackSkipFrames = 0 } = {}) => {
 	const stage = new ResultStage(label);
 	try {
 		await fn(stage);
 	} catch (error) {
+		const base = CapturedError.makeBase(errorStackSkipFrames);
 		if (stage.endTime === null) {
 			if (error instanceof TestAssertionError) {
-				stage.failures.push(error);
+				stage.failures.push(new CapturedError(error, base));
 			} else if (error instanceof TestAssumptionError) {
-				stage.skipReasons.push(error);
+				stage.skipReasons.push(new CapturedError(error, base));
 			} else {
-				stage.errors.push(error);
+				stage.errors.push(new CapturedError(error, base));
 			}
 		}
 	} finally {
@@ -118,7 +204,7 @@ class Result {
 		});
 	}
 
-	createStage(config, label, fn) {
+	createStage(config, label, fn, { errorStackSkipFrames = 0 } = {}) {
 		return ResultStage.of(label, (stage) => {
 			this.stages.push({ config, stage });
 			if (this.cancelled && !config.noCancel) {
@@ -126,7 +212,7 @@ class Result {
 			} else {
 				return fn(this);
 			}
-		});
+		}, { errorStackSkipFrames: errorStackSkipFrames + 1 });
 	}
 
 	attachStage(config, stage) {
@@ -239,6 +325,7 @@ class Node {
 			this.discoveryStage = await ResultStage.of(
 				'discovery',
 				() => this.config.discovery(this, { ...methods }),
+				{ errorStackSkipFrames: 1 + (this.config.discoveryFrames || 0) }
 			);
 		}
 		for (const child of this.children) {
@@ -298,6 +385,7 @@ class ExtensionStore {
 }
 
 const id$1 = Symbol();
+const CONTENT_FN_NAME = Symbol();
 const TEST_FN_NAME = Symbol();
 const SUB_FN_NAME = Symbol();
 
@@ -305,11 +393,11 @@ const OPTIONS_FACTORY$1 = (name, content, opts) => {
 	if (!content || (typeof content !== 'function' && typeof content !== 'object')) {
 		throw new Error('Invalid content');
 	}
-	return { ...opts, name: name.trim(), content };
+	return { ...opts, name: name.trim(), [CONTENT_FN_NAME]: content };
 };
 
 const DISCOVERY = async (node, methods) => {
-	const { content } = node.options;
+	const content = node.options[CONTENT_FN_NAME];
 
 	let resolvedContent = content;
 	while (typeof resolvedContent === 'function') {
@@ -340,6 +428,7 @@ var describe = (fnName = 'describe', {
 		[TEST_FN_NAME]: testFn,
 		[SUB_FN_NAME]: subFn || fnName,
 		discovery: DISCOVERY,
+		discoveryFrames: 1,
 	});
 
 	builder.addRunInterceptor(async (next, context, result, node) => {
@@ -364,6 +453,8 @@ class Runner {
 	}
 
 	run() {
+		// enable some additional stack trace so that we can find common ancestors to cut it down in CapturedError
+		Error.stackTraceLimit = 20;
 		return this.baseNode.run(this.baseContext);
 	}
 }
@@ -763,19 +854,19 @@ var index$2 = /*#__PURE__*/Object.freeze({
 const FLUENT_MATCHERS = Symbol();
 
 const expect = () => (builder) => {
-	const invokeMatcher = (actual, matcher, ErrorType) =>
+	const invokeMatcher = (actual, matcher, ErrorType, trimFrames) =>
 		seq(matcher(actual), ({ success, message }) => {
 			if (!success) {
-				throw new ErrorType(resolveMessage(message));
+				throw new ErrorType(resolveMessage(message), trimFrames + 3);
 			}
 		});
 
 	const run = (context, ErrorType, actual, matcher = undefined) => {
 		if (matcher) {
-			return invokeMatcher(actual, matcher, ErrorType);
+			return invokeMatcher(actual, matcher, ErrorType, 2);
 		}
 		return Object.fromEntries(context.get(FLUENT_MATCHERS).map(([name, m]) =>
-			[name, (...args) => invokeMatcher(actual, m(...args), ErrorType)]
+			[name, (...args) => invokeMatcher(actual, m(...args), ErrorType, 1)]
 		));
 	};
 
@@ -802,10 +893,10 @@ expect.matchers = (...matcherDictionaries) => (builder) => {
 var fail = () => (builder) => {
 	builder.addMethods({
 		fail(message) {
-			throw new TestAssertionError(resolveMessage(message));
+			throw new TestAssertionError(resolveMessage(message), 1);
 		},
 		skip(message) {
-			throw new TestAssumptionError(resolveMessage(message));
+			throw new TestAssumptionError(resolveMessage(message), 1);
 		},
 	});
 };
@@ -892,6 +983,7 @@ var lifecycle = ({ order = 0 } = {}) => (builder) => {
 							teardowns.unshift({ name, fn: teardown });
 						}
 					},
+					{ errorStackSkipFrames: 1 }
 				);
 				if (stage.hasFailed() || stage.hasSkipped()) {
 					skip = true;
@@ -1017,25 +1109,22 @@ var stopAtFirstFailure = () => (builder) => {
 const id = Symbol();
 const TEST_FN = Symbol();
 
-const OPTIONS_FACTORY = (name, fn, opts) => ({ ...opts, name: name.trim(), fn });
-const CONFIG = {
-	display: 'test',
-	[TEST_FN]: (node) => node.options.fn(),
-};
+const OPTIONS_FACTORY = (name, fn, opts) => ({ ...opts, name: name.trim(), [TEST_FN]: fn });
+const CONFIG = { display: 'test' };
 
 var test = (fnName = 'test') => (builder) => {
 	builder.addNodeType(fnName, OPTIONS_FACTORY, CONFIG);
 
 	builder.addRunInterceptor((next, context, result, node) => {
-		if (!node.config[TEST_FN]) {
+		if (!node.options[TEST_FN]) {
 			return next();
 		}
 		return result.createStage({ tangible: true }, 'test', () => {
 			if (!context.active) {
 				throw new TestAssumptionError('ignored');
 			}
-			return node.config[TEST_FN](node);
-		});
+			return node.options[TEST_FN]();
+		}, { errorStackSkipFrames: 1 });
 	}, { order: Number.POSITIVE_INFINITY, id });
 };
 
@@ -1052,7 +1141,9 @@ var timeout = ({ order = 1 } = {}) => (builder) => {
 			(subResult) => Promise.race([
 				new Promise((resolve) => {
 					tm = setTimeout(() => {
-						subResult.cancel(new Error(`timeout after ${timeout}ms`));
+						const error = new Error(`timeout after ${timeout}ms`);
+						error.trimFrames = 1;
+						subResult.cancel(error);
 						resolve();
 					}, timeout);
 				}),
@@ -1081,7 +1172,7 @@ class Output {
 	constructor(writer) {
 		this.writer = writer;
 		if (writer.isTTY) {
-			this.colour = (index) => (v) => `\u001B[0;${index}m${v}\u001B[0m`;
+			this.colour = (index) => (v) => `\u001B[${index}m${v}\u001B[0m`;
 		} else {
 			this.colour = () => (v) => v;
 		}
@@ -1089,6 +1180,7 @@ class Output {
 		this.green = this.colour(32);
 		this.yellow = this.colour(33);
 		this.blue = this.colour(34);
+		this.bold = this.colour(1);
 	}
 
 	writeRaw(v) {
@@ -1105,6 +1197,14 @@ class Output {
 class TextReporter {
 	constructor(writer) {
 		this.output = new Output(writer);
+	}
+
+	_printerr(prefix, err, indent) {
+		this.output.write(
+			this.output.red(prefix + this.output.bold(err.message)) +
+			this.output.red(err.stack.map((s) => `\n at ${s.location}`).join('')),
+			indent,
+		);
 	}
 
 	_print(result, indent) {
@@ -1134,16 +1234,10 @@ class TextReporter {
 			);
 		}
 		result.getErrors().forEach((err) => {
-			this.output.write(
-				this.output.red(String(err)),
-				`${resultSpace} ${indent}  `,
-			);
+			this._printerr('Error: ', err, `${resultSpace} ${indent}  `);
 		});
-		result.getFailures().forEach((message) => {
-			this.output.write(
-				this.output.red(message),
-				`${resultSpace} ${indent}  `,
-			);
+		result.getFailures().forEach((err) => {
+			this._printerr('Failure: ', err, `${resultSpace} ${indent}  `);
 		});
 		const nextIndent = indent + (display ? '  ' : '');
 		result.children.forEach((child) => this._print(child, nextIndent));

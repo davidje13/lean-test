@@ -1,4 +1,5 @@
 const id = Symbol();
+const CONTENT_FN_NAME = Symbol();
 const TEST_FN_NAME = Symbol();
 const SUB_FN_NAME = Symbol();
 
@@ -6,11 +7,11 @@ const OPTIONS_FACTORY = (name, content, opts) => {
 	if (!content || (typeof content !== 'function' && typeof content !== 'object')) {
 		throw new Error('Invalid content');
 	}
-	return { ...opts, name: name.trim(), content };
+	return { ...opts, name: name.trim(), [CONTENT_FN_NAME]: content };
 };
 
 const DISCOVERY = async (node, methods) => {
-	const { content } = node.options;
+	const content = node.options[CONTENT_FN_NAME];
 
 	let resolvedContent = content;
 	while (typeof resolvedContent === 'function') {
@@ -41,6 +42,7 @@ export default (fnName = 'describe', {
 		[TEST_FN_NAME]: testFn,
 		[SUB_FN_NAME]: subFn || fnName,
 		discovery: DISCOVERY,
+		discoveryFrames: 1,
 	});
 
 	builder.addRunInterceptor(async (next, context, result, node) => {

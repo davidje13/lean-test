@@ -35,7 +35,7 @@ export default class Result {
 		});
 	}
 
-	createStage(config, label, fn) {
+	createStage(config, label, fn, { errorStackSkipFrames = 0 } = {}) {
 		return ResultStage.of(label, (stage) => {
 			this.stages.push({ config, stage });
 			if (this.cancelled && !config.noCancel) {
@@ -43,7 +43,7 @@ export default class Result {
 			} else {
 				return fn(this);
 			}
-		});
+		}, { errorStackSkipFrames: errorStackSkipFrames + 1 });
 	}
 
 	attachStage(config, stage) {

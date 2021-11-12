@@ -51,6 +51,7 @@ export default class Node {
 			this.discoveryStage = await ResultStage.of(
 				'discovery',
 				() => this.config.discovery(this, { ...methods }),
+				{ errorStackSkipFrames: 1 + (this.config.discoveryFrames || 0) }
 			);
 		}
 		for (const child of this.children) {

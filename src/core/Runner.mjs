@@ -10,6 +10,8 @@ export default class Runner {
 	}
 
 	run() {
+		// enable some additional stack trace so that we can find common ancestors to cut it down in CapturedError
+		Error.stackTraceLimit = 20;
 		return this.baseNode.run(this.baseContext);
 	}
 }

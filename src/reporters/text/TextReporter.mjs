@@ -5,6 +5,14 @@ export default class TextReporter {
 		this.output = new Output(writer);
 	}
 
+	_printerr(prefix, err, indent) {
+		this.output.write(
+			this.output.red(prefix + this.output.bold(err.message)) +
+			this.output.red(err.stack.map((s) => `\n at ${s.location}`).join('')),
+			indent,
+		);
+	}
+
 	_print(result, indent) {
 		const summary = result.getSummary();
 		const display = (result.label !== null);
@@ -32,16 +40,10 @@ export default class TextReporter {
 			);
 		}
 		result.getErrors().forEach((err) => {
-			this.output.write(
-				this.output.red(String(err)),
-				`${resultSpace} ${indent}  `,
-			);
+			this._printerr('Error: ', err, `${resultSpace} ${indent}  `);
 		});
-		result.getFailures().forEach((message) => {
-			this.output.write(
-				this.output.red(message),
-				`${resultSpace} ${indent}  `,
-			);
+		result.getFailures().forEach((err) => {
+			this._printerr('Failure: ', err, `${resultSpace} ${indent}  `);
 		});
 		const nextIndent = indent + (display ? '  ' : '');
 		result.children.forEach((child) => this._print(child, nextIndent));

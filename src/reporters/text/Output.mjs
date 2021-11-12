@@ -2,7 +2,7 @@ export default class Output {
 	constructor(writer) {
 		this.writer = writer;
 		if (writer.isTTY) {
-			this.colour = (index) => (v) => `\u001B[0;${index}m${v}\u001B[0m`;
+			this.colour = (index) => (v) => `\u001B[${index}m${v}\u001B[0m`;
 		} else {
 			this.colour = () => (v) => v;
 		}
@@ -10,6 +10,7 @@ export default class Output {
 		this.green = this.colour(32);
 		this.yellow = this.colour(33);
 		this.blue = this.colour(34);
+		this.bold = this.colour(1);
 	}
 
 	writeRaw(v) {

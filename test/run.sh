@@ -30,6 +30,7 @@ test() {
 echo "Running shell integration tests";
 test "discovery";
 test "basics";
+test "reporting";
 
 echo;
 echo "Shell integration tests passed";

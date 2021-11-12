@@ -11,7 +11,9 @@ export default ({ order = 1 } = {}) => (builder) => {
 			(subResult) => Promise.race([
 				new Promise((resolve) => {
 					tm = setTimeout(() => {
-						subResult.cancel(new Error(`timeout after ${timeout}ms`));
+						const error = new Error(`timeout after ${timeout}ms`);
+						error.trimFrames = 1;
+						subResult.cancel(error);
 						resolve();
 					}, timeout);
 				}),
