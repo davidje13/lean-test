@@ -1,12 +1,12 @@
 import assert from 'assert/strict';
 
-class TestAssumptionError extends Error {
+class TestAssertionError extends Error {
 	constructor(message) {
 		super(message);
 	}
 }
 
-class TestAssertionError extends Error {
+class TestAssumptionError extends Error {
 	constructor(message) {
 		super(message);
 	}
@@ -191,23 +191,6 @@ function combineSummary(a, b) {
 
 const HIDDEN = Symbol();
 
-async function finalInterceptor(_, context, result, node) {
-	if (node.config.run) {
-		await result.createStage({ tangible: true }, 'test', () => {
-			if (!context.active) {
-				throw new TestAssumptionError('ignored');
-			}
-			return node.config.run(node);
-		});
-	} else if (node.options.parallel) {
-		await Promise.all(node.children.map((child) => child._run(result, context)));
-	} else {
-		for (const child of node.children) {
-			await child._run(result, context);
-		}
-	}
-}
-
 function updateArgs(oldArgs, newArgs) {
 	if (!newArgs?.length) {
 		return oldArgs;
@@ -221,7 +204,7 @@ function updateArgs(oldArgs, newArgs) {
 }
 
 function runChain(chain, args) {
-	const runStep = async (index, args) => await chain[index](
+	const runStep = async (index, args) => await chain[index]?.(
 		(...newArgs) => runStep(index + 1, updateArgs(args, newArgs)),
 		...args
 	);
@@ -281,10 +264,7 @@ class Node {
 	}
 
 	run(interceptors, context) {
-		return this._run(null, {
-			...context,
-			[HIDDEN]: { interceptors: [...interceptors, finalInterceptor] },
-		});
+		return this._run(null, { ...context, [HIDDEN]: { interceptors } });
 	}
 }
 
@@ -349,17 +329,33 @@ const DISCOVERY = async (node, methods) => {
 	}
 };
 
+const id$1 = Symbol();
+
 var describe = (fnName = 'describe', {
 	display,
 	testFn = 'test',
 	subFn,
 } = {}) => (builder) => {
 	builder.addNodeType(fnName, OPTIONS_FACTORY$1, {
-		display: display || fnName,
+		display: display ?? fnName,
 		testFn,
 		subFn: subFn || fnName,
+		isBlock: true,
 		discovery: DISCOVERY,
 	});
+
+	builder.addRunInterceptor(async (next, context, result, node) => {
+		if (!node.config.isBlock) {
+			return next();
+		}
+		if (node.options.parallel) {
+			await Promise.all(node.children.map((child) => child._run(result, context)));
+		} else {
+			for (const child of node.children) {
+				await child._run(result, context);
+			}
+		}
+	}, { order: Number.POSITIVE_INFINITY, id: id$1 });
 };
 
 class Runner {
@@ -381,6 +377,7 @@ const NODE_TYPES = Symbol();
 const NODE_OPTIONS = Symbol();
 const NODE_INIT = Symbol();
 const CONTEXT_INIT = Symbol();
+const BASENODE_FN = Symbol();
 const SUITE_FN = Symbol();
 
 Runner.Builder = class RunnerBuilder {
@@ -389,6 +386,7 @@ Runner.Builder = class RunnerBuilder {
 		this.runInterceptors = [];
 		this.suites = [];
 		Object.freeze(this); // do not allow mutating the builder itself
+		this.addPlugin(describe(BASENODE_FN, { display: false, subFn: SUITE_FN }));
 		this.addPlugin(describe(SUITE_FN, { display: 'suite', subFn: 'describe' }));
 	}
 
@@ -402,16 +400,19 @@ Runner.Builder = class RunnerBuilder {
 		return this;
 	}
 
-	addRunInterceptor(fn, { order = 0 } = {}) {
-		this.runInterceptors.push({ order, fn });
+	addRunInterceptor(fn, { order = 0, id = null } = {}) {
+		if (id && this.runInterceptors.some((i) => (i.id === id))) {
+			return this;
+		}
+		this.runInterceptors.push({ order, fn, id });
 		return this;
 	}
 
-	addRunCondition(fn) {
+	addRunCondition(fn, { id = null } = {}) {
 		return this.addRunInterceptor(async (next, context, ...rest) => {
 			const run = await fn(context, ...rest);
 			return await next(run ? context : { ...context, active: false });
-		}, { order: Number.NEGATIVE_INFINITY });
+		}, { order: Number.NEGATIVE_INFINITY, id });
 	}
 
 	addSuite(name, content, options = {}) {
@@ -453,14 +454,14 @@ Runner.Builder = class RunnerBuilder {
 
 	async build() {
 		const exts = this.extensions.copy();
-		const baseNode = new Node(null, { display: false }, { parallel: true }, exts.get(NODE_INIT));
 
-		let curNode = baseNode;
+		let curNode = null;
+		let latestNode = null;
 		const addChildNode = (config, options) => {
-			if (!curNode) {
+			if (curNode === false) {
 				throw new Error('Cannot create new tests after discovery phase');
 			}
-			new Node(curNode, config, options, exts.get(NODE_INIT));
+			latestNode = new Node(curNode, config, options, exts.get(NODE_INIT));
 		};
 
 		const methodTarget = Object.freeze({
@@ -486,10 +487,14 @@ Runner.Builder = class RunnerBuilder {
 			)]),
 		]));
 
-		this.suites.forEach(([name, content, opts]) => scope[SUITE_FN](name, content, opts));
-
+		scope[BASENODE_FN](
+			'all tests',
+			() => this.suites.forEach(([name, content, opts]) => scope[SUITE_FN](name, content, opts)),
+			{ parallel: true },
+		);
+		const baseNode = latestNode;
 		await baseNode.runDiscovery(scope, (node) => { curNode = node; });
-		curNode = null;
+		curNode = false;
 
 		exts.freeze(); // ensure config cannot change post-discovery
 
@@ -860,7 +865,7 @@ var lifecycle = ({ order = 0 } = {}) => (builder) => {
 	builder.addRunInterceptor((next, context, result, node) => {
 		if (!context.active) {
 			return next(context);
-		} else if (node.config.run) {
+		} else if (!node.config.isBlock) {
 			return withWrappers(result, context[scope].beforeEach, context[scope].afterEach, (skip) => next({
 				...context,
 				active: !skip,
@@ -1022,9 +1027,22 @@ const CONFIG = {
 	run: (node) => node.options.fn(),
 };
 
-var test = () => (builder) => {
-	builder.addNodeType('test', OPTIONS_FACTORY, CONFIG);
-	builder.addNodeType('it', OPTIONS_FACTORY, CONFIG);
+const id = Symbol();
+
+var test = (fnName = 'test') => (builder) => {
+	builder.addNodeType(fnName, OPTIONS_FACTORY, CONFIG);
+
+	builder.addRunInterceptor((next, context, result, node) => {
+		if (!node.config.run) {
+			return next();
+		}
+		return result.createStage({ tangible: true }, 'test', () => {
+			if (!context.active) {
+				throw new TestAssumptionError('ignored');
+			}
+			return node.config.run(node);
+		});
+	}, { order: Number.POSITIVE_INFINITY, id });
 };
 
 var timeout = ({ order = 1 } = {}) => (builder) => {

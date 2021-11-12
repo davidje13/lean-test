@@ -97,6 +97,7 @@ const builder = new Runner.Builder()
 	.addPlugin(plugins.retry())
 	.addPlugin(plugins.stopAtFirstFailure())
 	.addPlugin(plugins.test())
+	.addPlugin(plugins.test('it'))
 	.addPlugin(plugins.timeout());
 
 for await (const { path, relative } of findPathsMatching(scanDirs, '**/*.{spec|test}.{js|mjs|jsx}', ['**/node_modules', '**/.*'])) {

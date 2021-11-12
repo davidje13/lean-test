@@ -15,7 +15,7 @@ export default ({ order = 0 } = {}) => (builder) => {
 	builder.addRunInterceptor((next, context, result, node) => {
 		if (!context.active) {
 			return next(context);
-		} else if (node.config.run) {
+		} else if (!node.config.isBlock) {
 			return withWrappers(result, context[scope].beforeEach, context[scope].afterEach, (skip) => next({
 				...context,
 				active: !skip,

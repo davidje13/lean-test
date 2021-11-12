@@ -1,25 +1,7 @@
-import TestAssumptionError from './TestAssumptionError.mjs';
 import ResultStage from './ResultStage.mjs';
 import Result from './Result.mjs';
 
 const HIDDEN = Symbol();
-
-async function finalInterceptor(_, context, result, node) {
-	if (node.config.run) {
-		await result.createStage({ tangible: true }, 'test', () => {
-			if (!context.active) {
-				throw new TestAssumptionError('ignored');
-			}
-			return node.config.run(node);
-		});
-	} else if (node.options.parallel) {
-		await Promise.all(node.children.map((child) => child._run(result, context)));
-	} else {
-		for (const child of node.children) {
-			await child._run(result, context);
-		}
-	}
-}
 
 function updateArgs(oldArgs, newArgs) {
 	if (!newArgs?.length) {
@@ -34,7 +16,7 @@ function updateArgs(oldArgs, newArgs) {
 }
 
 function runChain(chain, args) {
-	const runStep = async (index, args) => await chain[index](
+	const runStep = async (index, args) => await chain[index]?.(
 		(...newArgs) => runStep(index + 1, updateArgs(args, newArgs)),
 		...args
 	);
@@ -94,9 +76,6 @@ export default class Node {
 	}
 
 	run(interceptors, context) {
-		return this._run(null, {
-			...context,
-			[HIDDEN]: { interceptors: [...interceptors, finalInterceptor] },
-		});
+		return this._run(null, { ...context, [HIDDEN]: { interceptors } });
 	}
 }

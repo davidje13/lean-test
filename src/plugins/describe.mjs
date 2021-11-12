@@ -26,15 +26,31 @@ const DISCOVERY = async (node, methods) => {
 	}
 };
 
+const id = Symbol();
+
 export default (fnName = 'describe', {
 	display,
 	testFn = 'test',
 	subFn,
 } = {}) => (builder) => {
 	builder.addNodeType(fnName, OPTIONS_FACTORY, {
-		display: display || fnName,
+		display: display ?? fnName,
 		testFn,
 		subFn: subFn || fnName,
+		isBlock: true,
 		discovery: DISCOVERY,
 	});
+
+	builder.addRunInterceptor(async (next, context, result, node) => {
+		if (!node.config.isBlock) {
+			return next();
+		}
+		if (node.options.parallel) {
+			await Promise.all(node.children.map((child) => child._run(result, context)));
+		} else {
+			for (const child of node.children) {
+				await child._run(result, context);
+			}
+		}
+	}, { order: Number.POSITIVE_INFINITY, id });
 };
