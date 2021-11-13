@@ -45,17 +45,21 @@ export default class Node {
 		return this.scopes.get(key);
 	}
 
-	async runDiscovery(methods, beginHook) {
+	async runDiscovery(methods, options) {
 		if (this.config.discovery) {
-			beginHook(this);
+			options.beginHook(this);
 			this.discoveryStage = await ResultStage.of(
 				'discovery',
-				() => this.config.discovery(this, { ...methods }),
-				{ errorStackSkipFrames: 1 + (this.config.discoveryFrames || 0) }
+				() => this.config.discovery(this, methods),
+				{ errorStackSkipFrames: 1 + (this.config.discoveryFrames || 0), context: this },
 			);
 		}
-		for (const child of this.children) {
-			await child.runDiscovery(methods, beginHook);
+		if (options.parallel) {
+			await Promise.all(this.children.map((child) => child.runDiscovery(methods, options)));
+		} else {
+			for (const child of this.children) {
+				await child.runDiscovery(methods, options);
+			}
 		}
 		this.scopes.forEach(Object.freeze);
 		Object.freeze(this.children);

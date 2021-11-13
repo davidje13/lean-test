@@ -55,10 +55,10 @@ export default class ResultStage {
 	}
 }
 
-ResultStage.of = async (label, fn, { errorStackSkipFrames = 0 } = {}) => {
+ResultStage.of = async (label, fn, { errorStackSkipFrames = 0, context = null } = {}) => {
 	const stage = new ResultStage(label);
 	try {
-		await RESULT_STAGE_SCOPE.run(null, fn, stage);
+		await RESULT_STAGE_SCOPE.run(context, fn, stage);
 	} catch (error) {
 		const captured = RESULT_STAGE_SCOPE.getInnerError(error, errorStackSkipFrames);
 		if (stage.endTime === null) {
@@ -75,3 +75,5 @@ ResultStage.of = async (label, fn, { errorStackSkipFrames = 0 } = {}) => {
 	}
 	return stage;
 };
+
+ResultStage.getContext = () => RESULT_STAGE_SCOPE.get();

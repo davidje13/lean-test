@@ -61,6 +61,23 @@ export default class StackScope {
 	}
 }
 
+let supported = null;
+
+StackScope.isSupported = async () => {
+	if (supported === null) {
+		const scope = new StackScope('FEATURE_TEST');
+		const o = Symbol();
+		await scope.run(o, async () => {
+			if (scope.get() !== o) {
+				supported = false;
+			}
+			await Promise.resolve();
+			supported = (scope.get() === o);
+		});
+	}
+	return supported;
+};
+
 function extractStackList(error) {
 	if (error instanceof InnerError) {
 		return error.fullStackList;

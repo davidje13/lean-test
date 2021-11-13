@@ -1,5 +1,7 @@
 import Node, { RUN_INTERCEPTORS } from './Node.mjs';
 import ExtensionStore from './ExtensionStore.mjs';
+import ResultStage from './ResultStage.mjs';
+import StackScope from './StackScope.mjs';
 import describe from '../plugins/describe.mjs';
 
 export default class Runner {
@@ -28,11 +30,25 @@ const SUITE_FN = Symbol();
 Runner.Builder = class RunnerBuilder {
 	constructor() {
 		this.extensions = new ExtensionStore();
+		this.config = {
+			parallelDiscovery: false,
+			parallelSuites: false,
+		};
 		this.runInterceptors = [];
 		this.suites = [];
 		Object.freeze(this); // do not allow mutating the builder itself
 		this.addPlugin(describe(BASENODE_FN, { display: false, subFn: SUITE_FN }));
 		this.addPlugin(describe(SUITE_FN, { display: 'suite', subFn: 'describe' }));
+	}
+
+	useParallelDiscovery(enabled = true) {
+		this.config.parallelDiscovery = enabled;
+		return this;
+	}
+
+	useParallelSuites(enabled = true) {
+		this.config.parallelSuites = enabled;
+		return this;
 	}
 
 	addPlugin(...plugins) {
@@ -99,28 +115,41 @@ Runner.Builder = class RunnerBuilder {
 
 	async build() {
 		const exts = this.extensions.copy();
+		const parallelDiscovery = this.config.parallelDiscovery && await StackScope.isSupported();
+		if (parallelDiscovery) {
+			// enable long stack trace so that we can resolve which block we are in
+			Error.stackTraceLimit = 50;
+		}
 
+		let discoveryStage = 0;
+		let baseNode;
 		let curNode = null;
-		let latestNode = null;
+		const getCurrentNode = parallelDiscovery ? ResultStage.getContext : (() => curNode);
 		const addChildNode = (config, options) => {
-			if (curNode === false) {
+			if (discoveryStage === 2) {
 				throw new Error('Cannot create new tests after discovery phase');
 			}
-			latestNode = new Node(curNode, config, options, exts.get(NODE_INIT));
+			const parent = getCurrentNode();
+			const node = new Node(parent, config, options, exts.get(NODE_INIT));
+			if (discoveryStage === 0) {
+				baseNode = node;
+			} else if (!parent) {
+				throw new Error('Unable to determine test hierarchy; try using synchronous discovery mode');
+			}
 		};
 
 		const methodTarget = Object.freeze({
 			getCurrentNodeScope(scope) {
-				if (!curNode) {
+				if (discoveryStage === 2) {
 					throw new Error('Cannot configure tests after discovery phase');
 				}
-				return curNode.getScope(scope);
+				return getCurrentNode().getScope(scope);
 			},
 			extend: exts.add,
 			get: exts.get,
 		});
 
-		const scope = Object.freeze(Object.fromEntries([
+		const methods = Object.freeze(Object.fromEntries([
 			...exts.get(GLOBALS),
 			...exts.get(METHODS).map(([key, method]) => ([key, method.bind(methodTarget)])),
 			...exts.get(NODE_TYPES).map(({ key, optionsFactory, config }) => [key, Object.assign(
@@ -132,14 +161,18 @@ Runner.Builder = class RunnerBuilder {
 			)]),
 		]));
 
-		scope[BASENODE_FN](
+		methods[BASENODE_FN](
 			'all tests',
-			() => this.suites.forEach(([name, content, opts]) => scope[SUITE_FN](name, content, opts)),
-			{ parallel: true },
+			() => this.suites.forEach(([name, content, opts]) => methods[SUITE_FN](name, content, opts)),
+			{ parallel: this.config.parallelSuites },
 		);
-		const baseNode = latestNode;
-		await baseNode.runDiscovery(scope, (node) => { curNode = node; });
-		curNode = false;
+		discoveryStage = 1;
+		await baseNode.runDiscovery(methods, {
+			beginHook: (node) => { curNode = node; },
+			parallel: parallelDiscovery,
+		});
+		curNode = null;
+		discoveryStage = 2;
 
 		exts.freeze(); // ensure config cannot change post-discovery
 

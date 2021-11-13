@@ -84,6 +84,8 @@ if (!scanDirs.length) {
 const out = new reporters.TextReporter(stdout);
 
 const builder = new Runner.Builder()
+	.useParallelDiscovery(false) // does not provide much benefit and can fail with complex setups
+	.useParallelSuites(true)
 	.addPlugin(plugins.describe())
 	.addPlugin(plugins.expect())
 	.addPlugin(plugins.expect.matchers(matchers.core))
