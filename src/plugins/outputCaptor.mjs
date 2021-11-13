@@ -1,4 +1,4 @@
-import { StackScope } from '../core/StackScope.mjs';
+import StackScope from '../core/StackScope.mjs';
 
 const OUTPUT_CAPTOR_SCOPE = new StackScope('OUTPUT_CAPTOR');
 

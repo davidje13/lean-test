@@ -8,7 +8,7 @@ export default class TextReporter {
 	_printerr(prefix, err, indent) {
 		this.output.write(
 			this.output.red(prefix + this.output.bold(err.message)) +
-			this.output.red(err.stack.map((s) => `\n at ${s.location}`).join('')),
+			this.output.red(err.getStackParts().map((s) => `\n at ${s.location}`).join('')),
 			indent,
 		);
 	}

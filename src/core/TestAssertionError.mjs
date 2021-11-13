@@ -1,6 +1,6 @@
 export default class TestAssertionError extends Error {
-	constructor(message, trimFrames = 0) {
+	constructor(message, skipFrames = 0) {
 		super(message);
-		this.trimFrames = trimFrames;
+		this.skipFrames = skipFrames;
 	}
 }

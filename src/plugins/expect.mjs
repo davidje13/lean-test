@@ -5,10 +5,10 @@ import TestAssumptionError from '../core/TestAssumptionError.mjs';
 const FLUENT_MATCHERS = Symbol();
 
 const expect = () => (builder) => {
-	const invokeMatcher = (actual, matcher, ErrorType, trimFrames) =>
+	const invokeMatcher = (actual, matcher, ErrorType, skipFrames) =>
 		seq(matcher(actual), ({ success, message }) => {
 			if (!success) {
-				throw new ErrorType(resolveMessage(message), trimFrames + 3);
+				throw new ErrorType(resolveMessage(message), skipFrames + 3);
 			}
 		});
 

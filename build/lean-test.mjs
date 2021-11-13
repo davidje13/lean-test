@@ -1,38 +1,71 @@
 import assert from 'assert/strict';
 
 class TestAssertionError extends Error {
-	constructor(message, trimFrames = 0) {
+	constructor(message, skipFrames = 0) {
 		super(message);
-		this.trimFrames = trimFrames;
+		this.skipFrames = skipFrames;
 	}
 }
 
 class TestAssumptionError extends Error {
-	constructor(message, trimFrames = 0) {
+	constructor(message, skipFrames = 0) {
 		super(message);
-		this.trimFrames = trimFrames;
+		this.skipFrames = skipFrames;
 	}
 }
 
-/** same as result.then(then), but synchronous if result is synchronous */
-function seq(result, then) {
-	if (result instanceof Promise) {
-		return result.then(then);
-	} else {
-		return then(result);
+class InnerError {
+	constructor(error, fullStackList, stackList) {
+		this.error = error;
+		this.fullStackList = fullStackList;
+		this.stackList = stackList;
+	}
+
+	getStackParts() {
+		const parts = this.stackList.map(extractStackLine);
+
+		// remove any trailing "special" frames (e.g. node internal async task handling)
+		while (parts.length > 0 && !isFile(parts[parts.length - 1].location)) {
+			parts.length--;
+		}
+
+		// trim common prefix from paths
+		const prefix = getCommonPrefix(this.fullStackList.map((i) => extractStackLine(i).location).filter(isFile));
+		return parts.map(({ location, ...rest }) => ({
+			...rest,
+			location: isFile(location) ? location.substr(prefix.length) : location,
+		}));
+	}
+
+	get stack() {
+		return String(this.error) + '\n' + this.stackList.join('\n');
+	}
+
+	get message() {
+		return this.error.message;
+	}
+
+	toString() {
+		return String(this.error);
 	}
 }
 
-const resolveMessage = (message) => String((typeof message === 'function' ? message() : message) || '');
-
-function extractStackList(error, raw = false) {
-	const stack = error.stack;
-	if (typeof stack !== 'string') {
-		return [];
+function getCommonPrefix(values) {
+	if (!values.length) {
+		return '';
 	}
-	const list = stack.split('\n');
-	list.shift();
-	return raw ? list : list.map(extractStackLine);
+	return values.reduce((prefix, v) => {
+		for (let p = 0; p < prefix.length; ++p) {
+			if (v[p] !== prefix[p]) {
+				return prefix.substr(0, p);
+			}
+		}
+		return prefix;
+	});
+}
+
+function isFile(frame) {
+	return frame.includes('://');
 }
 
 const STACK_AT = /^at\s+/i;
@@ -48,66 +81,80 @@ function extractStackLine(raw) {
 	}
 }
 
-class CapturedError {
-	constructor(err, base) {
-		if (typeof base !== 'object') {
-			base = CapturedError.makeBase(0);
-		}
-		const stackList = extractStackList(err);
-		this.stack = cutTrace(stackList, base);
-		if (err.trimFrames) {
-			this.stack.splice(0, err.trimFrames);
-		}
-		this.message = err.message;
+const SCOPE_MATCH = /(async\s.*?)?__STACK_SCOPE_([^ ]*?)_([0-9]+)/;
+
+class StackScope {
+	constructor(namespace) {
+		this.namespace = namespace;
+		this.scopes = new Map();
+		this.index = 0;
 	}
-}
 
-CapturedError.makeBase = (skipFrames = 0) => ({
-	stackBase: extractStackList(new Error())[1],
-	skipFrames,
-});
+	async run(scope, fn, ...args) {
+		const id = String(++this.index);
+		if (scope) {
+			this.scopes.set(id, scope);
+		}
+		const name = `__STACK_SCOPE_${this.namespace}_${id}`;
+		const o = { [name]: async () => await fn(...args) };
+		try {
+			return await o[name]();
+		} finally {
+			this.scopes.delete(id);
+		}
+	}
 
-function cutTrace(trace, base) {
-	let list = trace;
+	get() {
+		const list = extractStackList(new Error());
+		for (const frame of list) {
+			const match = frame.match(SCOPE_MATCH);
+			if (match && match[2] === this.namespace) {
+				return this.scopes.get(match[3]);
+			}
+		}
+		return null;
+	}
 
-	// cut to given base frame
-	if (base.stackBase) {
-		for (let i = 0; i < trace.length; ++i) {
-			if (trace[i].name === base.stackBase.name) {
-				list = trace.slice(0, Math.max(0, i - base.skipFrames));
+	getInnerError(error, skipFrames = 0) {
+		const fullStackList = extractStackList(error);
+		const stackList = fullStackList.slice();
+
+		// truncate to beginning of scope (and remove requested skipFrames if match is found)
+		for (let i = 0; i < stackList.length; ++i) {
+			const match = stackList[i].match(SCOPE_MATCH);
+			if (match && match[2] === this.namespace) {
+				if (match[1]) {
+					// async, so next frame is likely user-relevant (do not apply skipFrames)
+					stackList.length = i;
+				} else {
+					stackList.length = Math.max(0, i - skipFrames);
+				}
 				break;
 			}
-			if (trace[i].name === 'async ' + base.stackBase.name) {
-				// if function is in async mode, the very next frame is probably user-relevant, so don't skip skipFrames
-				list = trace.slice(0, i);
-				break;
-			}
 		}
-	}
 
-	// remove any trailing "special" frames (e.g. node internal async task handling)
-	while (list.length > 0 && !isFile(list[list.length - 1].location)) {
-		list.length--;
-	}
-
-	// remove common file path prefix
-	const locations = trace.map((s) => s.location);
-	locations.push(base.stackBase.location);
-	const prefix = locations.filter(isFile).reduce((prefix, l) => {
-		for (let p = 0; p < prefix.length; ++p) {
-			if (l[p] !== prefix[p]) {
-				return prefix.substr(0, p);
-			}
+		// remove frames from head of trace if requested by error
+		if (error.skipFrames) {
+			stackList.splice(0, error.skipFrames);
 		}
-		return prefix;
-	});
 
-	return list.map(({ location, ...rest }) => ({ ...rest, location: isFile(location) ? location.substr(prefix.length) : location }));
+		return new InnerError(error, fullStackList, stackList);
+	}
 }
 
-function isFile(path) {
-	return path.includes('://');
+function extractStackList(error) {
+	if (error instanceof InnerError) {
+		return error.fullStackList;
+	}
+	if (!error || typeof error !== 'object' || typeof error.stack !== 'string') {
+		return [];
+	}
+	const list = error.stack.split('\n');
+	list.shift();
+	return list;
 }
+
+const RESULT_STAGE_SCOPE = new StackScope('RESULT_STAGE');
 
 class ResultStage {
 	constructor(label) {
@@ -121,7 +168,7 @@ class ResultStage {
 
 	_cancel(error) {
 		if (this.endTime === null) {
-			this.errors.push(new CapturedError(error));
+			this.errors.push(RESULT_STAGE_SCOPE.getInnerError(error));
 			this._complete();
 		}
 	}
@@ -163,16 +210,16 @@ class ResultStage {
 ResultStage.of = async (label, fn, { errorStackSkipFrames = 0 } = {}) => {
 	const stage = new ResultStage(label);
 	try {
-		await fn(stage);
+		await RESULT_STAGE_SCOPE.run(null, fn, stage);
 	} catch (error) {
-		const base = CapturedError.makeBase(errorStackSkipFrames);
+		const captured = RESULT_STAGE_SCOPE.getInnerError(error, errorStackSkipFrames);
 		if (stage.endTime === null) {
 			if (error instanceof TestAssertionError) {
-				stage.failures.push(new CapturedError(error, base));
+				stage.failures.push(captured);
 			} else if (error instanceof TestAssumptionError) {
-				stage.skipReasons.push(new CapturedError(error, base));
+				stage.skipReasons.push(captured);
 			} else {
-				stage.errors.push(new CapturedError(error, base));
+				stage.errors.push(captured);
 			}
 		}
 	} finally {
@@ -615,6 +662,17 @@ Runner.Builder = class RunnerBuilder {
 	}
 };
 
+/** same as result.then(then), but synchronous if result is synchronous */
+function seq(result, then) {
+	if (result instanceof Promise) {
+		return result.then(then);
+	} else {
+		return then(result);
+	}
+}
+
+const resolveMessage = (message) => String((typeof message === 'function' ? message() : message) || '');
+
 const ANY = Symbol();
 
 const checkEquals = (expected, actual, name) => {
@@ -865,10 +923,10 @@ var index$2 = /*#__PURE__*/Object.freeze({
 const FLUENT_MATCHERS = Symbol();
 
 const expect = () => (builder) => {
-	const invokeMatcher = (actual, matcher, ErrorType, trimFrames) =>
+	const invokeMatcher = (actual, matcher, ErrorType, skipFrames) =>
 		seq(matcher(actual), ({ success, message }) => {
 			if (!success) {
-				throw new ErrorType(resolveMessage(message), trimFrames + 3);
+				throw new ErrorType(resolveMessage(message), skipFrames + 3);
 			}
 		});
 
@@ -1043,39 +1101,6 @@ var lifecycle = ({ order = 0 } = {}) => (builder) => {
 		},
 	});
 };
-
-const SCOPE_MATCH = /__STACK_SCOPE_([^ ]*?)_([0-9]+)/;
-
-class StackScope {
-	constructor(namespace) {
-		this.namespace = namespace;
-		this.scopes = new Map();
-		this.index = 0;
-	}
-
-	async run(scope, fn) {
-		const id = String(++this.index);
-		this.scopes.set(id, scope);
-		const name = `__STACK_SCOPE_${this.namespace}_${id}`;
-		const o = { [name]: async () => await fn() };
-		try {
-			return await o[name]();
-		} finally {
-			this.scopes.delete(id);
-		}
-	}
-
-	get() {
-		const list = extractStackList(new Error(), true);
-		for (const frame of list) {
-			const match = frame.match(SCOPE_MATCH);
-			if (match && match[1] === this.namespace) {
-				return this.scopes.get(match[2]);
-			}
-		}
-		return null;
-	}
-}
 
 const OUTPUT_CAPTOR_SCOPE = new StackScope('OUTPUT_CAPTOR');
 
@@ -1270,7 +1295,7 @@ var timeout = ({ order = 1 } = {}) => (builder) => {
 				new Promise((resolve) => {
 					tm = setTimeout(() => {
 						const error = new Error(`timeout after ${timeout}ms`);
-						error.trimFrames = 1;
+						error.skipFrames = 1;
 						subResult.cancel(error);
 						resolve();
 					}, timeout);
@@ -1331,7 +1356,7 @@ class TextReporter {
 	_printerr(prefix, err, indent) {
 		this.output.write(
 			this.output.red(prefix + this.output.bold(err.message)) +
-			this.output.red(err.stack.map((s) => `\n at ${s.location}`).join('')),
+			this.output.red(err.getStackParts().map((s) => `\n at ${s.location}`).join('')),
 			indent,
 		);
 	}

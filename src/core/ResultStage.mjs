@@ -1,6 +1,8 @@
 import TestAssertionError from './TestAssertionError.mjs';
 import TestAssumptionError from './TestAssumptionError.mjs';
-import CapturedError from './CapturedError.mjs';
+import StackScope from './StackScope.mjs';
+
+const RESULT_STAGE_SCOPE = new StackScope('RESULT_STAGE');
 
 export default class ResultStage {
 	constructor(label) {
@@ -14,7 +16,7 @@ export default class ResultStage {
 
 	_cancel(error) {
 		if (this.endTime === null) {
-			this.errors.push(new CapturedError(error));
+			this.errors.push(RESULT_STAGE_SCOPE.getInnerError(error));
 			this._complete();
 		}
 	}
@@ -56,16 +58,16 @@ export default class ResultStage {
 ResultStage.of = async (label, fn, { errorStackSkipFrames = 0 } = {}) => {
 	const stage = new ResultStage(label);
 	try {
-		await fn(stage);
+		await RESULT_STAGE_SCOPE.run(null, fn, stage);
 	} catch (error) {
-		const base = CapturedError.makeBase(errorStackSkipFrames);
+		const captured = RESULT_STAGE_SCOPE.getInnerError(error, errorStackSkipFrames);
 		if (stage.endTime === null) {
 			if (error instanceof TestAssertionError) {
-				stage.failures.push(new CapturedError(error, base));
+				stage.failures.push(captured);
 			} else if (error instanceof TestAssumptionError) {
-				stage.skipReasons.push(new CapturedError(error, base));
+				stage.skipReasons.push(captured);
 			} else {
-				stage.errors.push(new CapturedError(error, base));
+				stage.errors.push(captured);
 			}
 		}
 	} finally {

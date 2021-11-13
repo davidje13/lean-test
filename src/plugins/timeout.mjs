@@ -12,7 +12,7 @@ export default ({ order = 1 } = {}) => (builder) => {
 				new Promise((resolve) => {
 					tm = setTimeout(() => {
 						const error = new Error(`timeout after ${timeout}ms`);
-						error.trimFrames = 1;
+						error.skipFrames = 1;
 						subResult.cancel(error);
 						resolve();
 					}, timeout);
