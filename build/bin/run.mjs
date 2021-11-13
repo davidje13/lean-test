@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { cwd, argv } from 'process';
+import { cwd, argv, stdout, exit } from 'process';
 import { join, resolve } from 'path';
 import fs from 'fs/promises';
 import { reporters, Runner, plugins, matchers } from '../lean-test.mjs';
@@ -81,7 +81,7 @@ if (!scanDirs.length) {
 	scanDirs.push(workingDir);
 }
 
-const out = new reporters.TextReporter(process.stdout);
+const out = new reporters.TextReporter(stdout);
 
 const builder = new Runner.Builder()
 	.addPlugin(plugins.describe())
@@ -113,3 +113,10 @@ const runner = await builder.build();
 
 const result = await runner.run();
 out.report(result);
+
+const summary = result.getSummary();
+if (summary.error || summary.fail || !summary.pass) {
+	exit(1);
+} else {
+	exit(0); // explicitly exit to avoid hanging on dangling promises
+}

@@ -1104,6 +1104,8 @@ var lifecycle = ({ order = 0 } = {}) => (builder) => {
 
 const OUTPUT_CAPTOR_SCOPE = new StackScope('OUTPUT_CAPTOR');
 
+// TODO: alternative browser behaviour (hook console functions instead)
+
 function interceptWrite(base, type, chunk, encoding, callback) {
 	const target = OUTPUT_CAPTOR_SCOPE.get();
 	if (!target) {
@@ -1409,7 +1411,7 @@ class TextReporter {
 
 		if (!summary.count) {
 			this.output.write(this.output.yellow('NO TESTS FOUND'));
-			process.exit(1);
+			return;
 		}
 
 		this.output.write('');
@@ -1425,16 +1427,12 @@ class TextReporter {
 
 		if (summary.error) {
 			this.output.write(this.output.red('ERROR'));
-			process.exit(1);
 		} else if (summary.fail) {
 			this.output.write(this.output.red('FAIL'));
-			process.exit(1);
 		} else if (summary.pass) {
 			this.output.write(this.output.green('PASS'));
-			process.exit(0); // explicitly exit to avoid hanging on dangling promises
 		} else {
 			this.output.write(this.output.yellow('NO TESTS RUN'));
-			process.exit(1);
 		}
 	}
 }

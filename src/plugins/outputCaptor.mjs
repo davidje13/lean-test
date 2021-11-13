@@ -2,6 +2,8 @@ import StackScope from '../core/StackScope.mjs';
 
 const OUTPUT_CAPTOR_SCOPE = new StackScope('OUTPUT_CAPTOR');
 
+// TODO: alternative browser behaviour (hook console functions instead)
+
 function interceptWrite(base, type, chunk, encoding, callback) {
 	const target = OUTPUT_CAPTOR_SCOPE.get();
 	if (!target) {
