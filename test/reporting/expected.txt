@@ -1,3 +1,13 @@
+[FAIL] suite: console.spec.mjs [xx]
+[FAIL]   describe: console [xx]
+[PASS]     test: hidden if successful [xx]
+[FAIL]     test: displayed if unsuccessful [xx]
+             should be seen
+             also seen
+             and this
+
+             Failure: oops
+              at test/reporting/console.spec.mjs:12:3
 [ERRO] suite: stacktrace.spec.mjs [xx]
 [ERRO]   describe: stack traces [xx]
 [ERRO]     test: error [xx]
@@ -39,10 +49,10 @@
 [ERRO]       with xx timeout [xx]
                Error: timeout after xx
 
-Total:    12
-Pass:     0
+Total:    14
+Pass:     1
 Errors:   2
-Failures: 10
+Failures: 11
 Skipped:  0
 Duration: xx
 

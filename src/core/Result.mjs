@@ -16,6 +16,7 @@ export default class Result {
 		this.parent = parent;
 		this.children = [];
 		this.stages = [];
+		this.output = '';
 		this.forcedChildSummary = null;
 		this.cancelled = Boolean(parent?.cancelled);
 		parent?.children?.push(this);
@@ -23,6 +24,10 @@ export default class Result {
 
 	createChild(label, fn) {
 		return Result.of(label, fn, { parent: this });
+	}
+
+	addOutput(detail) {
+		this.output += detail;
 	}
 
 	cancel(error) {
@@ -64,6 +69,10 @@ export default class Result {
 		const all = [];
 		this.stages.forEach(({ stage }) => all.push(...stage.failures));
 		return all;
+	}
+
+	getOutput() {
+		return this.output;
 	}
 
 	getSummary() {

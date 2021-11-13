@@ -1,4 +1,4 @@
-export default ({ order = -1 } = {}) => (builder) => {
+export default ({ order = -2 } = {}) => (builder) => {
 	builder.addRunInterceptor(async (next, context, result, node) => {
 		const maxAttempts = node.options.retry || 0;
 		if (!context.active || maxAttempts <= 1) {

@@ -4,6 +4,7 @@ export { default as fail } from './fail.mjs';
 export { default as focus } from './focus.mjs';
 export { default as ignore } from './ignore.mjs';
 export { default as lifecycle } from './lifecycle.mjs';
+export { default as outputCaptor } from './outputCaptor.mjs';
 export { default as repeat } from './repeat.mjs';
 export { default as retry } from './retry.mjs';
 export { default as stopAtFirstFailure } from './stopAtFirstFailure.mjs';

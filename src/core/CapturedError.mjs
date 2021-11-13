@@ -1,9 +1,11 @@
+import { extractStackList } from '../utils.mjs';
+
 export default class CapturedError {
 	constructor(err, base) {
 		if (typeof base !== 'object') {
 			base = CapturedError.makeBase(0);
 		}
-		const stackList = extractStackList(err.stack);
+		const stackList = extractStackList(err);
 		this.stack = cutTrace(stackList, base);
 		if (err.trimFrames) {
 			this.stack.splice(0, err.trimFrames);
@@ -13,7 +15,7 @@ export default class CapturedError {
 }
 
 CapturedError.makeBase = (skipFrames = 0) => ({
-	stackBase: extractStackList(new Error().stack)[1],
+	stackBase: extractStackList(new Error())[1],
 	skipFrames,
 });
 
@@ -57,26 +59,4 @@ function cutTrace(trace, base) {
 
 function isFile(path) {
 	return path.includes('://');
-}
-
-function extractStackList(stack) {
-	if (typeof stack !== 'string') {
-		return [];
-	}
-	const list = stack.split('\n');
-	list.shift();
-	return list.map(extractStackLine);
-}
-
-const STACK_AT = /^at\s+/i;
-const STACK_REGEX = /^([^(]+?)\s*\(([^)]*)\)$/i;
-
-function extractStackLine(raw) {
-	const cleaned = raw.trim().replace(STACK_AT, '');
-	const match = cleaned.match(STACK_REGEX);
-	if (match) {
-		return { name: match[1], location: match[2] };
-	} else {
-		return { name: 'anonymous', location: cleaned };
-	}
 }

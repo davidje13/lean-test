@@ -39,11 +39,16 @@ export default class TextReporter {
 				`${resultSpace} ${indent}`,
 			);
 		}
+		const infoIndent = `${resultSpace} ${indent}  `;
+		let output = result.getOutput();
+		if (output && (summary.error || summary.fail)) {
+			this.output.write(this.output.blue(output), infoIndent);
+		}
 		result.getErrors().forEach((err) => {
-			this._printerr('Error: ', err, `${resultSpace} ${indent}  `);
+			this._printerr('Error: ', err, infoIndent);
 		});
 		result.getFailures().forEach((err) => {
-			this._printerr('Failure: ', err, `${resultSpace} ${indent}  `);
+			this._printerr('Failure: ', err, infoIndent);
 		});
 		const nextIndent = indent + (display ? '  ' : '');
 		result.children.forEach((child) => this._print(child, nextIndent));

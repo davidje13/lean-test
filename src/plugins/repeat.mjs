@@ -1,4 +1,4 @@
-export default ({ order = -1 } = {}) => (builder) => {
+export default ({ order = -3 } = {}) => (builder) => {
 	builder.addRunInterceptor(async (next, context, result, node) => {
 		let { repeat = {} } = node.options;
 		if (typeof repeat !== 'object') {

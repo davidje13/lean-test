@@ -14,12 +14,46 @@ class TestAssumptionError extends Error {
 	}
 }
 
+/** same as result.then(then), but synchronous if result is synchronous */
+function seq(result, then) {
+	if (result instanceof Promise) {
+		return result.then(then);
+	} else {
+		return then(result);
+	}
+}
+
+const resolveMessage = (message) => String((typeof message === 'function' ? message() : message) || '');
+
+function extractStackList(error, raw = false) {
+	const stack = error.stack;
+	if (typeof stack !== 'string') {
+		return [];
+	}
+	const list = stack.split('\n');
+	list.shift();
+	return raw ? list : list.map(extractStackLine);
+}
+
+const STACK_AT = /^at\s+/i;
+const STACK_REGEX = /^([^(]+?)\s*\(([^)]*)\)$/i;
+
+function extractStackLine(raw) {
+	const cleaned = raw.trim().replace(STACK_AT, '');
+	const match = cleaned.match(STACK_REGEX);
+	if (match) {
+		return { name: match[1], location: match[2] };
+	} else {
+		return { name: 'anonymous', location: cleaned };
+	}
+}
+
 class CapturedError {
 	constructor(err, base) {
 		if (typeof base !== 'object') {
 			base = CapturedError.makeBase(0);
 		}
-		const stackList = extractStackList(err.stack);
+		const stackList = extractStackList(err);
 		this.stack = cutTrace(stackList, base);
 		if (err.trimFrames) {
 			this.stack.splice(0, err.trimFrames);
@@ -29,7 +63,7 @@ class CapturedError {
 }
 
 CapturedError.makeBase = (skipFrames = 0) => ({
-	stackBase: extractStackList(new Error().stack)[1],
+	stackBase: extractStackList(new Error())[1],
 	skipFrames,
 });
 
@@ -73,28 +107,6 @@ function cutTrace(trace, base) {
 
 function isFile(path) {
 	return path.includes('://');
-}
-
-function extractStackList(stack) {
-	if (typeof stack !== 'string') {
-		return [];
-	}
-	const list = stack.split('\n');
-	list.shift();
-	return list.map(extractStackLine);
-}
-
-const STACK_AT = /^at\s+/i;
-const STACK_REGEX = /^([^(]+?)\s*\(([^)]*)\)$/i;
-
-function extractStackLine(raw) {
-	const cleaned = raw.trim().replace(STACK_AT, '');
-	const match = cleaned.match(STACK_REGEX);
-	if (match) {
-		return { name: match[1], location: match[2] };
-	} else {
-		return { name: 'anonymous', location: cleaned };
-	}
 }
 
 class ResultStage {
@@ -185,6 +197,7 @@ class Result {
 		this.parent = parent;
 		this.children = [];
 		this.stages = [];
+		this.output = '';
 		this.forcedChildSummary = null;
 		this.cancelled = Boolean(parent?.cancelled);
 		parent?.children?.push(this);
@@ -192,6 +205,10 @@ class Result {
 
 	createChild(label, fn) {
 		return Result.of(label, fn, { parent: this });
+	}
+
+	addOutput(detail) {
+		this.output += detail;
 	}
 
 	cancel(error) {
@@ -233,6 +250,10 @@ class Result {
 		const all = [];
 		this.stages.forEach(({ stage }) => all.push(...stage.failures));
 		return all;
+	}
+
+	getOutput() {
+		return this.output;
 	}
 
 	getSummary() {
@@ -453,8 +474,8 @@ class Runner {
 	}
 
 	run() {
-		// enable some additional stack trace so that we can find common ancestors to cut it down in CapturedError
-		Error.stackTraceLimit = 20;
+		// enable long stack trace so that we can resolve scopes, cut down displayed traces, etc.
+		Error.stackTraceLimit = 50;
 		return this.baseNode.run(this.baseContext);
 	}
 }
@@ -593,16 +614,6 @@ Runner.Builder = class RunnerBuilder {
 		return new Runner(baseNode, Object.freeze(baseContext));
 	}
 };
-
-function seq(result, then) {
-	if (result instanceof Promise) {
-		return result.then(then);
-	} else {
-		return then(result);
-	}
-}
-
-const resolveMessage = (message) => String((typeof message === 'function' ? message() : message) || '');
 
 const ANY = Symbol();
 
@@ -1033,7 +1044,124 @@ var lifecycle = ({ order = 0 } = {}) => (builder) => {
 	});
 };
 
-var repeat = ({ order = -1 } = {}) => (builder) => {
+const SCOPE_MATCH = /__STACK_SCOPE_([^ ]*?)_([0-9]+)/;
+
+class StackScope {
+	constructor(namespace) {
+		this.namespace = namespace;
+		this.scopes = new Map();
+		this.index = 0;
+	}
+
+	async run(scope, fn) {
+		const id = String(++this.index);
+		this.scopes.set(id, scope);
+		const name = `__STACK_SCOPE_${this.namespace}_${id}`;
+		const o = { [name]: async () => await fn() };
+		try {
+			return await o[name]();
+		} finally {
+			this.scopes.delete(id);
+		}
+	}
+
+	get() {
+		const list = extractStackList(new Error(), true);
+		for (const frame of list) {
+			const match = frame.match(SCOPE_MATCH);
+			if (match && match[1] === this.namespace) {
+				return this.scopes.get(match[2]);
+			}
+		}
+		return null;
+	}
+}
+
+const OUTPUT_CAPTOR_SCOPE = new StackScope('OUTPUT_CAPTOR');
+
+function interceptWrite(base, type, chunk, encoding, callback) {
+	const target = OUTPUT_CAPTOR_SCOPE.get();
+	if (!target) {
+		// We do not seem to be within a scope; could be unrelated code,
+		// or could be that the stack got too deep to know.
+		// Call original function as fallback
+		return base.call(this, chunk, encoding, callback);
+	}
+	if (typeof encoding === 'function') {
+		callback = encoding;
+		encoding = null;
+	}
+	if (typeof chunk === 'string') {
+		chunk = Buffer.from(chunk, encoding ?? 'utf8');
+	}
+	target.push({ type, chunk });
+	callback?.();
+	return true;
+}
+
+let INTERCEPT_COUNT = 0;
+let ORIGINAL = null;
+async function addIntercept() {
+	if ((INTERCEPT_COUNT++) > 0) {
+		return;
+	}
+
+	ORIGINAL = {
+		stdout: process.stdout.write,
+		stderr: process.stderr.write,
+	};
+
+	process.stdout.write = interceptWrite.bind(process.stdout, process.stdout.write, 'stdout');
+	process.stderr.write = interceptWrite.bind(process.stderr, process.stderr.write, 'stderr');
+}
+
+async function removeIntercept() {
+	if ((--INTERCEPT_COUNT) > 0) {
+		return;
+	}
+	process.stdout.write = ORIGINAL.stdout;
+	process.stderr.write = ORIGINAL.stderr;
+	ORIGINAL = null;
+}
+
+function getOutput(type) {
+	const target = OUTPUT_CAPTOR_SCOPE.get();
+	if (!target) {
+		const err = new Error(`Unable to resolve ${type} scope`);
+		err.skipFrames = 2;
+		throw err;
+	}
+	return Buffer.concat(
+		target
+			.filter((i) => (i.type === type))
+			.map((i) => i.chunk)
+	).toString('utf8');
+}
+
+var outputCaptor = ({ order = -1 } = {}) => (builder) => {
+	builder.addMethods({
+		getStdout() {
+			return getOutput('stdout');
+		},
+		getStderr() {
+			return getOutput('stderr');
+		},
+	});
+	builder.addRunInterceptor(async (next, _, result) => {
+		const target = [];
+		try {
+			addIntercept();
+			await OUTPUT_CAPTOR_SCOPE.run(target, next);
+		} finally {
+			removeIntercept();
+			if (target.length) {
+				result.addOutput(Buffer.concat(target.map((i) => i.chunk)).toString('utf8'));
+			}
+		}
+	}, { order });
+};
+
+var repeat = ({ order = -3 } = {}) => (builder) => {
 	builder.addRunInterceptor(async (next, context, result, node) => {
 		let { repeat = {} } = node.options;
 		if (typeof repeat !== 'object') {
@@ -1077,7 +1205,7 @@ var repeat = ({ order = -1 } = {}) => (builder) => {
 	}, { order });
 };
 
-var retry = ({ order = -1 } = {}) => (builder) => {
+var retry = ({ order = -2 } = {}) => (builder) => {
 	builder.addRunInterceptor(async (next, context, result, node) => {
 		const maxAttempts = node.options.retry || 0;
 		if (!context.active || maxAttempts <= 1) {
@@ -1161,6 +1289,7 @@ var index$1 = /*#__PURE__*/Object.freeze({
 	focus: focus,
 	ignore: ignore,
 	lifecycle: lifecycle,
+	outputCaptor: outputCaptor,
 	repeat: repeat,
 	retry: retry,
 	stopAtFirstFailure: stopAtFirstFailure,
@@ -1233,11 +1362,16 @@ class TextReporter {
 				`${resultSpace} ${indent}`,
 			);
 		}
+		const infoIndent = `${resultSpace} ${indent}  `;
+		let output = result.getOutput();
+		if (output && (summary.error || summary.fail)) {
+			this.output.write(this.output.blue(output), infoIndent);
+		}
 		result.getErrors().forEach((err) => {
-			this._printerr('Error: ', err, `${resultSpace} ${indent}  `);
+			this._printerr('Error: ', err, infoIndent);
 		});
 		result.getFailures().forEach((err) => {
-			this._printerr('Failure: ', err, `${resultSpace} ${indent}  `);
+			this._printerr('Failure: ', err, infoIndent);
 		});
 		const nextIndent = indent + (display ? '  ' : '');
 		result.children.forEach((child) => this._print(child, nextIndent));
