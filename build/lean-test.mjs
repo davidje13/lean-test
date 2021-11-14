@@ -76,6 +76,8 @@ function extractStackLine(raw) {
 	const match = cleaned.match(STACK_REGEX);
 	if (match) {
 		return { name: match[1], location: match[2] };
+	} else if (cleaned.startsWith('async ')) {
+		return { name: 'async anonymous', location: cleaned.substr(6) };
 	} else {
 		return { name: 'anonymous', location: cleaned };
 	}
@@ -96,12 +98,16 @@ class StackScope {
 			this.scopes.set(id, scope);
 		}
 		const name = `__STACK_SCOPE_${this.namespace}_${id}`;
-		const o = { [name]: async () => await fn(...args) };
-		try {
-			return await o[name]();
-		} finally {
-			this.scopes.delete(id);
-		}
+		const o = {
+			[name]: async () => {
+				try {
+					await fn(...args);
+				} finally {
+					this.scopes.delete(id);
+				}
+			},
+		};
+		return o[name]();
 	}
 
 	get() {
@@ -528,7 +534,7 @@ var describe = (fnName = 'describe', {
 			return next();
 		}
 		if (node.options.parallel) {
-			await Promise.all(node.children.map((child) => child.run(context, result)));
+			return Promise.all(node.children.map((child) => child.run(context, result)));
 		} else {
 			for (const child of node.children) {
 				await child.run(context, result);
@@ -605,7 +611,7 @@ Runner.Builder = class RunnerBuilder {
 	addRunCondition(fn, { id = null } = {}) {
 		return this.addRunInterceptor(async (next, context, ...rest) => {
 			const result = await fn(context, ...rest);
-			return await next(result ? context : { ...context, active: false });
+			return next(result ? context : { ...context, active: false });
 		}, { order: Number.NEGATIVE_INFINITY, id });
 	}
 

@@ -15,12 +15,16 @@ export default class StackScope {
 			this.scopes.set(id, scope);
 		}
 		const name = `__STACK_SCOPE_${this.namespace}_${id}`;
-		const o = { [name]: async () => await fn(...args) };
-		try {
-			return await o[name]();
-		} finally {
-			this.scopes.delete(id);
-		}
+		const o = {
+			[name]: async () => {
+				try {
+					await fn(...args);
+				} finally {
+					this.scopes.delete(id);
+				}
+			},
+		};
+		return o[name]();
 	}
 
 	get() {

@@ -60,6 +60,8 @@ function extractStackLine(raw) {
 	const match = cleaned.match(STACK_REGEX);
 	if (match) {
 		return { name: match[1], location: match[2] };
+	} else if (cleaned.startsWith('async ')) {
+		return { name: 'async anonymous', location: cleaned.substr(6) };
 	} else {
 		return { name: 'anonymous', location: cleaned };
 	}

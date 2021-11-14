@@ -50,7 +50,7 @@ export default (fnName = 'describe', {
 			return next();
 		}
 		if (node.options.parallel) {
-			await Promise.all(node.children.map((child) => child.run(context, result)));
+			return Promise.all(node.children.map((child) => child.run(context, result)));
 		} else {
 			for (const child of node.children) {
 				await child.run(context, result);
