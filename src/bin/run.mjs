@@ -3,6 +3,7 @@
 import { cwd, argv, stdout, exit } from 'process';
 import { resolve } from 'path';
 import findPathsMatching from './findPathsMatching.mjs';
+import ArgumentParser from './ArgumentParser.mjs';
 import {
 	Runner,
 	matchers,
@@ -10,24 +11,24 @@ import {
 	reporters,
 } from '../index.mjs';
 
+const argparse = new ArgumentParser({
+	parallelDiscovery: { names: ['parallel-discovery', 'P'], type: 'boolean', default: false },
+	parallelSuites: { names: ['parallel-suites', 'parallel', 'p'], type: 'boolean', default: false },
+	pathsInclude: { names: ['include', 'i'], type: 'array', default: ['**/*.{spec|test}.{js|mjs|jsx}'] },
+	pathsExclude: { names: ['exclude', 'x'], type: 'array', default: ['**/node_modules', '**/.*'] },
+	rest: { names: ['scan', null], type: 'array', default: ['.'] }
+});
+
+const config = argparse.parse(argv);
+
 const workingDir = cwd();
-const scanDirs = [];
-for (let i = 2; i < argv.length; ++i) {
-	if (argv[i].startsWith('-')) {
-		// TODO: parse arguments
-	} else {
-		scanDirs.push(resolve(workingDir, argv[i]));
-	}
-}
-if (!scanDirs.length) {
-	scanDirs.push(workingDir);
-}
+const scanDirs = config.rest.map((path) => resolve(workingDir, path));
 
 const out = new reporters.TextReporter(stdout);
 
 const builder = new Runner.Builder()
-	.useParallelDiscovery(false) // does not provide much benefit and can fail with complex setups
-	.useParallelSuites(true)
+	.useParallelDiscovery(config.parallelDiscovery)
+	.useParallelSuites(config.parallelSuites)
 	.addPlugin(plugins.describe())
 	.addPlugin(plugins.expect())
 	.addPlugin(plugins.expect.matchers(matchers.core))
@@ -45,7 +46,7 @@ const builder = new Runner.Builder()
 	.addPlugin(plugins.test('it'))
 	.addPlugin(plugins.timeout());
 
-for await (const { path, relative } of findPathsMatching(scanDirs, '**/*.{spec|test}.{js|mjs|jsx}', ['**/node_modules', '**/.*'])) {
+for await (const { path, relative } of findPathsMatching(scanDirs, config.pathsInclude, config.pathsExclude)) {
 	builder.addSuite(relative, async (globals) => {
 		Object.assign(global, globals);
 		const result = await import(path);

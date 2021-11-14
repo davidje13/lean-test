@@ -6,7 +6,7 @@ BASE_DIR="$(cd "$(dirname "$0")/.." && pwd)";
 run() {
 	cd "$1";
 	set +e
-	"$BASE_DIR/build/bin/run.mjs";
+	"$BASE_DIR/build/bin/run.mjs" --parallel;
 	echo "EXIT: $?";
 	set -e
 	cd - >/dev/null;

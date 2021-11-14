@@ -11,7 +11,7 @@
     "index.d.ts"
   ],
   "scripts": {
-    "test": "./src/bin/run.mjs src && rollup --config rollup.config.js && ./test/run.sh"
+    "test": "./src/bin/run.mjs --parallel src && rollup --config rollup.config.js && ./test/run.sh"
   },
   "repository": {
     "type": "git",

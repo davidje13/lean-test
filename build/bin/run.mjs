@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { cwd, argv, stdout, exit } from 'process';
+import { argv, cwd, stdout, exit } from 'process';
 import { join, resolve } from 'path';
 import fs from 'fs/promises';
 import { reporters, Runner, plugins, matchers } from '../lean-test.mjs';
@@ -70,22 +70,115 @@ async function* findPathsMatching(baseDirs, pattern, exclude = []) {
 	}
 }
 
-const workingDir = cwd();
-const scanDirs = [];
-for (let i = 2; i < argv.length; ++i) {
-	if (argv[i].startsWith('-')) ; else {
-		scanDirs.push(resolve(workingDir, argv[i]));
+const YES = ['true', 'yes', '1', 'on'];
+const NO = ['false', 'no', '0', 'off'];
+
+class ArgumentParser {
+	constructor(opts) {
+		this.names = new Map();
+		this.defaults = {};
+		Object.entries(opts).forEach(([id, v]) => {
+			this.defaults[id] = v.default;
+			const config = { id, type: v.type || 'boolean' };
+			v.names.forEach((name) => this.names.set(name, config));
+		});
+	}
+
+	loadOpt(target, name, value, extra) {
+		const opt = this.names.get(name);
+		if (!opt) {
+			throw new Error(`Unknown flag: ${name}`);
+		}
+		let inc = 0;
+		const getNext = () => {
+			if (inc >= extra.length) {
+				throw new Error(`No value given for ${name}`);
+			}
+			return extra[inc++];
+		};
+		switch (opt.type) {
+			case 'boolean':
+				if (opt.id in target) {
+					throw new Error(`Multiple values for ${name} not supported`);
+				}
+				if (value === null || YES.includes(value)) {
+					target[opt.id] = true;
+				} else if (NO.includes(value)) {
+					target[opt.id] = false;
+				} else {
+					throw new Error(`Unknown boolean value for ${name}: ${value}`);
+				}
+				break;
+			case 'string':
+				if (opt.id in target) {
+					throw new Error(`Multiple values for ${name} not supported`);
+				}
+				target[opt.id] = value ?? getNext();
+				break;
+			case 'array':
+				const list = target[opt.id] || [];
+				list.push(value ?? getNext());
+				target[opt.id] = list;
+				break;
+			default:
+				throw new Error(`Unknown argument type for ${name}: ${opt.type}`);
+		}
+		return inc;
+	}
+
+	parse(argv, begin = 2) {
+		let rest = false;
+		const result = {};
+		for (let i = begin; i < argv.length; ++i) {
+			const arg = argv[i];
+			if (rest) {
+				this.loadOpt(result, null, arg, []);
+			} else if (arg === '--') {
+				rest = true;
+			} else if (arg.startsWith('--')) {
+				const [name, value] = split2(arg.substr(2), '=');
+				i += this.loadOpt(result, name, value, argv.slice(i + 1));
+			} else if (arg.startsWith('-')) {
+				const [names, value] = split2(arg.substr(1), '=');
+				for (let j = 0; j < names.length - 1; ++ j) {
+					this.loadOpt(result, names[j], null, []);
+				}
+				i += this.loadOpt(result, names[names.length - 1], value, argv.slice(i + 1));
+			} else {
+				this.loadOpt(result, null, arg, []);
+			}
+		}
+		return { ...this.defaults, ...result };
 	}
 }
-if (!scanDirs.length) {
-	scanDirs.push(workingDir);
+
+function split2(v, s) {
+	const p = v.indexOf(s);
+	if (p === -1) {
+		return [v, null];
+	} else {
+		return [v.substr(0, p), v.substr(p + 1)];
+	}
 }
+
+const argparse = new ArgumentParser({
+	parallelDiscovery: { names: ['parallel-discovery', 'P'], type: 'boolean', default: false },
+	parallelSuites: { names: ['parallel-suites', 'parallel', 'p'], type: 'boolean', default: false },
+	pathsInclude: { names: ['include', 'i'], type: 'array', default: ['**/*.{spec|test}.{js|mjs|jsx}'] },
+	pathsExclude: { names: ['exclude', 'x'], type: 'array', default: ['**/node_modules', '**/.*'] },
+	rest: { names: ['scan', null], type: 'array', default: ['.'] }
+});
+
+const config = argparse.parse(argv);
+
+const workingDir = cwd();
+const scanDirs = config.rest.map((path) => resolve(workingDir, path));
 
 const out = new reporters.TextReporter(stdout);
 
 const builder = new Runner.Builder()
-	.useParallelDiscovery(false) // does not provide much benefit and can fail with complex setups
-	.useParallelSuites(true)
+	.useParallelDiscovery(config.parallelDiscovery)
+	.useParallelSuites(config.parallelSuites)
 	.addPlugin(plugins.describe())
 	.addPlugin(plugins.expect())
 	.addPlugin(plugins.expect.matchers(matchers.core))
@@ -103,7 +196,7 @@ const builder = new Runner.Builder()
 	.addPlugin(plugins.test('it'))
 	.addPlugin(plugins.timeout());
 
-for await (const { path, relative } of findPathsMatching(scanDirs, '**/*.{spec|test}.{js|mjs|jsx}', ['**/node_modules', '**/.*'])) {
+for await (const { path, relative } of findPathsMatching(scanDirs, config.pathsInclude, config.pathsExclude)) {
 	builder.addSuite(relative, async (globals) => {
 		Object.assign(global, globals);
 		const result = await import(path);
