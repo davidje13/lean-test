@@ -1,7 +1,7 @@
 export default class Output {
-	constructor(writer) {
+	constructor(writer, forceTTY = null) {
 		this.writer = writer;
-		if (writer.isTTY) {
+		if (forceTTY ?? writer.isTTY) {
 			this.colour = (index) => (v) => `\u001B[${index}m${v}\u001B[0m`;
 		} else {
 			this.colour = () => (v) => v;

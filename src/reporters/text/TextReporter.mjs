@@ -1,8 +1,8 @@
 import Output from './Output.mjs';
 
 export default class TextReporter {
-	constructor(writer) {
-		this.output = new Output(writer);
+	constructor(writer, forceTTY = null) {
+		this.output = new Output(writer, forceTTY);
 	}
 
 	_printerr(prefix, err, indent) {

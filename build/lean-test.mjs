@@ -365,7 +365,7 @@ function combineSummary(a, b) {
 const RUN_INTERCEPTORS = Symbol();
 
 function updateArgs(oldArgs, newArgs) {
-	if (!newArgs?.length) {
+	if (!newArgs.length) {
 		return oldArgs;
 	}
 	const updated = [...newArgs, ...oldArgs.slice(newArgs.length)];
@@ -377,10 +377,11 @@ function updateArgs(oldArgs, newArgs) {
 }
 
 function runChain(chain, args) {
-	const runStep = async (index, args) => await chain[index](
-		(...newArgs) => runStep(index + 1, updateArgs(args, newArgs)),
-		...args
-	);
+	const runStep = (index, args, ...newArgs) => {
+		const updatedArgs = updateArgs(args, newArgs);
+		const next = runStep.bind(null, index + 1, updatedArgs);
+		return chain[index](next, ...updatedArgs);
+	};
 	return runStep(0, args);
 }
 
@@ -1379,9 +1380,9 @@ var index$1 = /*#__PURE__*/Object.freeze({
 });
 
 class Output {
-	constructor(writer) {
+	constructor(writer, forceTTY = null) {
 		this.writer = writer;
-		if (writer.isTTY) {
+		if (forceTTY ?? writer.isTTY) {
 			this.colour = (index) => (v) => `\u001B[${index}m${v}\u001B[0m`;
 		} else {
 			this.colour = () => (v) => v;
@@ -1405,8 +1406,8 @@ class Output {
 }
 
 class TextReporter {
-	constructor(writer) {
-		this.output = new Output(writer);
+	constructor(writer, forceTTY = null) {
+		this.output = new Output(writer, forceTTY);
 	}
 
 	_printerr(prefix, err, indent) {
