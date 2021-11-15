@@ -6,7 +6,7 @@ BASE_DIR="$(cd "$(dirname "$0")/.." && pwd)";
 run() {
 	cd "$1";
 	set +e
-	"$BASE_DIR/build/bin/run.mjs" --parallel;
+	"$BASE_DIR/build/bin/run.mjs" --parallel $2;
 	echo "EXIT: $?";
 	set -e
 	cd - >/dev/null;
@@ -14,7 +14,7 @@ run() {
 
 test() {
 	printf "Running test: $1";
-	RESULT="$(run "$BASE_DIR/test/$1" 2>&1 | sed -e 's/[0-9][0-9]*ms/xx/g' -e 's/ *$//')";
+	RESULT="$(run "$BASE_DIR/test/$1" "$2" 2>&1 | sed -e 's/[0-9][0-9]*ms/xx/g' -e 's/ *$//')";
 	EXPECTED="$(cat "$BASE_DIR/test/$1/expected.txt")";
 	if [ "$RESULT" != "$EXPECTED" ]; then
 		echo " [FAIL]";
@@ -31,6 +31,7 @@ echo "Running shell integration tests";
 test "discovery";
 test "basics";
 test "reporting";
+test "browser" --browser=chrome;
 
 echo;
 echo "Shell integration tests passed";

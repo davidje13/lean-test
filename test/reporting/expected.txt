@@ -17,29 +17,29 @@
              Failure: nope
               at test/reporting/stacktrace.spec.mjs:9:3
 [FAIL]     test: expect matcher [xx]
-             Failure: Expected value 1 !== 2
+             Failure: Expected value to equal 2, but 1 != 2.
               at test/reporting/stacktrace.spec.mjs:13:3
 [FAIL]     test: expect fluent [xx]
-             Failure: Expected value 1 !== 2
+             Failure: Expected value to equal 2, but 1 != 2.
               at test/reporting/stacktrace.spec.mjs:17:13
 [FAIL]     test: expect lambda matcher [xx]
-             Failure: Expected resolved value 7 !== 8
+             Failure: Expected resolved value to equal 8, but 7 != 8.
               at test/reporting/stacktrace.spec.mjs:21:3
 [FAIL]     test: expect lambda fluent [xx]
-             Failure: Expected resolved value 7 !== 8
+             Failure: Expected resolved value to equal 8, but 7 != 8.
               at test/reporting/stacktrace.spec.mjs:25:19
 [FAIL]     test: user-space function call [xx]
              Failure: inside
               at test/reporting/stacktrace.spec.mjs:30:4
               at test/reporting/stacktrace.spec.mjs:32:3
 [FAIL]     test: async 1 [xx]
-             Failure: Expected value 1 !== 2
+             Failure: Expected value to equal 2, but 1 != 2.
               at test/reporting/stacktrace.spec.mjs:36:3
 [FAIL]     test: async 2 [xx]
-             Failure: Expected value 1 !== 2
+             Failure: Expected value to equal 2, but 1 != 2.
               at test/reporting/stacktrace.spec.mjs:41:3
 [FAIL]     test: async 3 [xx]
-             Failure: Expected value 1 !== 2
+             Failure: Expected value to equal 2, but 1 != 2.
               at test/reporting/stacktrace.spec.mjs:47:3
 [FAIL]     test: async fn [xx]
              Failure: inside

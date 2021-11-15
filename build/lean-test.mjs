@@ -1,5 +1,3 @@
-import assert from 'assert/strict';
-
 class TestAssertionError extends Error {
 	constructor(message, skipFrames = 0) {
 		super(message);
@@ -737,12 +735,11 @@ const resolveMessage = (message) => String((typeof message === 'function' ? mess
 const ANY = Symbol();
 
 const checkEquals = (expected, actual, name) => {
-	try {
-		assert.deepStrictEqual(actual, expected);
+	const diff = getDiff(actual, expected);
+	if (diff) {
+		return { success: false, message: `Expected ${name} to equal ${expected}, but ${diff}.` };
+	} else {
 		return { success: true, message: `Expected ${name} not to equal ${expected}, but did.` };
-	} catch (e) {
-		const message = `Expected ${name} ${e.message.replace(/^[^\r\n]*[\r\n]+|[\r\n]+$/g, '')}`;
-		return { success: false, message };
 	}
 };
 
@@ -755,6 +752,39 @@ const delegateMatcher = (matcher, actual, name) => {
 		return checkEquals(matcher, actual, name);
 	}
 };
+
+function getDiff(a, b) {
+	if (a === b || (a !== a && b !== b)) {
+		return null;
+	}
+	if (typeof a !== 'object' || typeof a !== typeof b || Array.isArray(a) !== Array.isArray(b)) {
+		const simpleA = !a || typeof a !== 'object';
+		const simpleB = !b || typeof b !== 'object';
+		if (simpleA && simpleB) {
+			return `${a} != ${b}`;
+		} else {
+			return 'different types';
+		}
+	}
+	// TODO: cope with loops, improve formatting of message
+	const diffs = [];
+	for (const k of Object.keys(a)) {
+		if (!k in b) {
+			diffs.push(`missing ${JSON.stringify(k)}`);
+		} else {
+			const sub = getDiff(a[k], b[k]);
+			if (sub) {
+				diffs.push(`${sub} at ${JSON.stringify(k)}`);
+			}
+		}
+	}
+	for (const k of Object.keys(b)) {
+		if (!k in a) {
+			diffs.push(`extra ${JSON.stringify(k)}`);
+		}
+	}
+	return diffs.join(' and ');
+}
 
 const not = (matcher) => (...args) =>
 	seq(matcher(...args), ({ success, message }) => ({ success: !success, message }));
@@ -974,7 +1004,7 @@ var collections = /*#__PURE__*/Object.freeze({
 	isEmpty: isEmpty
 });
 
-var index$2 = /*#__PURE__*/Object.freeze({
+var matchers = /*#__PURE__*/Object.freeze({
 	__proto__: null,
 	core: core,
 	inequality: inequality,
@@ -1163,17 +1193,16 @@ var lifecycle = ({ order = 0 } = {}) => (builder) => {
 	});
 };
 
+const IS_BROWSER = (typeof process === 'undefined');
 const OUTPUT_CAPTOR_SCOPE = new StackScope('OUTPUT_CAPTOR');
 
-// TODO: alternative browser behaviour (hook console functions instead)
-
-function interceptWrite(base, type, chunk, encoding, callback) {
+function interceptWrite(original, type, chunk, encoding, callback) {
 	const target = OUTPUT_CAPTOR_SCOPE.get();
 	if (!target) {
 		// We do not seem to be within a scope; could be unrelated code,
 		// or could be that the stack got too deep to know.
 		// Call original function as fallback
-		return base.call(this, chunk, encoding, callback);
+		return original.call(this, chunk, encoding, callback);
 	}
 	if (typeof encoding === 'function') {
 		callback = encoding;
@@ -1187,52 +1216,70 @@ function interceptWrite(base, type, chunk, encoding, callback) {
 	return true;
 }
 
-let INTERCEPT_COUNT = 0;
-let ORIGINAL = null;
+function interceptConsole(original, type, ...args) {
+	const target = OUTPUT_CAPTOR_SCOPE.get();
+	if (!target) {
+		return original.call(this, ...args);
+	}
+	target.push({ type, args });
+	return true;
+}
+
+let interceptCount = 0;
+const teardowns = [];
+function overrideMethod(object, method, replacement, ...bindArgs) {
+	const original = object[method];
+	teardowns.push(() => {
+		object[method] = original;
+	});
+	object[method] = replacement.bind(object, original, ...bindArgs);
+}
+
 async function addIntercept() {
-	if ((INTERCEPT_COUNT++) > 0) {
+	if ((interceptCount++) > 0) {
 		return;
 	}
 
-	ORIGINAL = {
-		stdout: process.stdout.write,
-		stderr: process.stderr.write,
-	};
-
-	process.stdout.write = interceptWrite.bind(process.stdout, process.stdout.write, 'stdout');
-	process.stderr.write = interceptWrite.bind(process.stderr, process.stderr.write, 'stderr');
+	if (IS_BROWSER) {
+		['log', 'trace', 'debug', 'info', 'warn', 'error'].forEach((name) => {
+			overrideMethod(console, name, interceptConsole, name);
+		});
+	} else {
+		overrideMethod(process.stdout, 'write', interceptWrite, 'stdout');
+		overrideMethod(process.stderr, 'write', interceptWrite, 'stderr');
+	}
 }
 
 async function removeIntercept() {
-	if ((--INTERCEPT_COUNT) > 0) {
+	if ((--interceptCount) > 0) {
 		return;
 	}
-	process.stdout.write = ORIGINAL.stdout;
-	process.stderr.write = ORIGINAL.stderr;
-	ORIGINAL = null;
+	teardowns.forEach((fn) => fn());
+	teardowns.length = 0;
 }
 
-function getOutput(type) {
+function getOutput(type, binary) {
 	const target = OUTPUT_CAPTOR_SCOPE.get();
 	if (!target) {
 		const err = new Error(`Unable to resolve ${type} scope`);
 		err.skipFrames = 2;
 		throw err;
 	}
-	return Buffer.concat(
+	const all = Buffer.concat(
 		target
 			.filter((i) => (i.type === type))
 			.map((i) => i.chunk)
-	).toString('utf8');
+	);
+	return binary ? all : all.toString('utf8');
 }
 
 var outputCaptor = ({ order = -1 } = {}) => (builder) => {
 	builder.addMethods({
-		getStdout() {
-			return getOutput('stdout');
+		getStdout(binary = false) {
+			return getOutput('stdout', binary);
 		},
-		getStderr() {
-			return getOutput('stderr');
+		getStderr(binary = false) {
+			return getOutput('stderr', binary);
 		},
 	});
 	builder.addRunInterceptor(async (next, _, result) => {
@@ -1243,7 +1290,12 @@ var outputCaptor = ({ order = -1 } = {}) => (builder) => {
 		} finally {
 			removeIntercept();
 			if (target.length) {
-				result.addOutput(Buffer.concat(target.map((i) => i.chunk)).toString('utf8'));
+				if (IS_BROWSER) {
+					// This is not perfectly representative of what would be logged, but should be generally good enough for testing
+					result.addOutput(target.map((i) => i.args.map((a) => String(a)).join(' ')).join('\n'));
+				} else {
+					result.addOutput(Buffer.concat(target.map((i) => i.chunk)).toString('utf8'));
+				}
 			}
 		}
 	}, { order });
@@ -1503,4 +1555,27 @@ var index = /*#__PURE__*/Object.freeze({
 	TextReporter: TextReporter
 });
 
-export { Runner, TestAssertionError, TestAssumptionError, index$2 as matchers, index$1 as plugins, index as reporters };
+function standardRunner() {
+	const builder = new Runner.Builder()
+		.addPlugin(describe())
+		.addPlugin(expect())
+		.addPlugin(fail())
+		.addPlugin(focus())
+		.addPlugin(ignore())
+		.addPlugin(lifecycle())
+		.addPlugin(outputCaptor())
+		.addPlugin(repeat())
+		.addPlugin(retry())
+		.addPlugin(stopAtFirstFailure())
+		.addPlugin(test())
+		.addPlugin(test('it'))
+		.addPlugin(timeout());
+
+	for (const matcher of Object.values(matchers)) {
+		builder.addPlugin(expect.matchers(matcher));
+	}
+
+	return builder;
+}
+
+export { Runner, TestAssertionError, TestAssumptionError, matchers, index$1 as plugins, index as reporters, standardRunner };

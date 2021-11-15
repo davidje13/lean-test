@@ -1,16 +1,15 @@
 import StackScope from '../core/StackScope.mjs';
 
+const IS_BROWSER = (typeof process === 'undefined');
 const OUTPUT_CAPTOR_SCOPE = new StackScope('OUTPUT_CAPTOR');
 
-// TODO: alternative browser behaviour (hook console functions instead)
-
-function interceptWrite(base, type, chunk, encoding, callback) {
+function interceptWrite(original, type, chunk, encoding, callback) {
 	const target = OUTPUT_CAPTOR_SCOPE.get();
 	if (!target) {
 		// We do not seem to be within a scope; could be unrelated code,
 		// or could be that the stack got too deep to know.
 		// Call original function as fallback
-		return base.call(this, chunk, encoding, callback);
+		return original.call(this, chunk, encoding, callback);
 	}
 	if (typeof encoding === 'function') {
 		callback = encoding;
@@ -24,52 +23,70 @@ function interceptWrite(base, type, chunk, encoding, callback) {
 	return true;
 }
 
-let INTERCEPT_COUNT = 0;
-let ORIGINAL = null;
+function interceptConsole(original, type, ...args) {
+	const target = OUTPUT_CAPTOR_SCOPE.get();
+	if (!target) {
+		return original.call(this, ...args);
+	}
+	target.push({ type, args });
+	return true;
+}
+
+let interceptCount = 0;
+const teardowns = [];
+function overrideMethod(object, method, replacement, ...bindArgs) {
+	const original = object[method];
+	teardowns.push(() => {
+		object[method] = original;
+	});
+	object[method] = replacement.bind(object, original, ...bindArgs);
+}
+
 async function addIntercept() {
-	if ((INTERCEPT_COUNT++) > 0) {
+	if ((interceptCount++) > 0) {
 		return;
 	}
 
-	ORIGINAL = {
-		stdout: process.stdout.write,
-		stderr: process.stderr.write,
-	};
-
-	process.stdout.write = interceptWrite.bind(process.stdout, process.stdout.write, 'stdout');
-	process.stderr.write = interceptWrite.bind(process.stderr, process.stderr.write, 'stderr');
+	if (IS_BROWSER) {
+		['log', 'trace', 'debug', 'info', 'warn', 'error'].forEach((name) => {
+			overrideMethod(console, name, interceptConsole, name);
+		});
+	} else {
+		overrideMethod(process.stdout, 'write', interceptWrite, 'stdout');
+		overrideMethod(process.stderr, 'write', interceptWrite, 'stderr');
+	}
 }
 
 async function removeIntercept() {
-	if ((--INTERCEPT_COUNT) > 0) {
+	if ((--interceptCount) > 0) {
 		return;
 	}
-	process.stdout.write = ORIGINAL.stdout;
-	process.stderr.write = ORIGINAL.stderr;
-	ORIGINAL = null;
+	teardowns.forEach((fn) => fn());
+	teardowns.length = 0;
 }
 
-function getOutput(type) {
+function getOutput(type, binary) {
 	const target = OUTPUT_CAPTOR_SCOPE.get();
 	if (!target) {
 		const err = new Error(`Unable to resolve ${type} scope`);
 		err.skipFrames = 2;
 		throw err;
 	}
-	return Buffer.concat(
+	const all = Buffer.concat(
 		target
 			.filter((i) => (i.type === type))
 			.map((i) => i.chunk)
-	).toString('utf8');
+	);
+	return binary ? all : all.toString('utf8');
 }
 
 export default ({ order = -1 } = {}) => (builder) => {
 	builder.addMethods({
-		getStdout() {
-			return getOutput('stdout');
+		getStdout(binary = false) {
+			return getOutput('stdout', binary);
 		},
-		getStderr() {
-			return getOutput('stderr');
+		getStderr(binary = false) {
+			return getOutput('stderr', binary);
 		},
 	});
 	builder.addRunInterceptor(async (next, _, result) => {
@@ -80,7 +97,12 @@ export default ({ order = -1 } = {}) => (builder) => {
 		} finally {
 			removeIntercept();
 			if (target.length) {
-				result.addOutput(Buffer.concat(target.map((i) => i.chunk)).toString('utf8'));
+				if (IS_BROWSER) {
+					// This is not perfectly representative of what would be logged, but should be generally good enough for testing
+					result.addOutput(target.map((i) => i.args.map((a) => String(a)).join(' ')).join('\n'));
+				} else {
+					result.addOutput(Buffer.concat(target.map((i) => i.chunk)).toString('utf8'));
+				}
 			}
 		}
 	}, { order });

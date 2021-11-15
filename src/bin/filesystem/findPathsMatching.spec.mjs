@@ -8,8 +8,8 @@ describe('findPathsMatching', {
 		const results = await toList(findPathsMatching(cwd(), '**/findPathsMatching.*', COMMON_EXCLUDE));
 		const relativePaths = results.map((r) => r.relative);
 		expect(relativePaths.sort(), equals([
-			'src/bin/findPathsMatching.mjs',
-			'src/bin/findPathsMatching.spec.mjs',
+			'src/bin/filesystem/findPathsMatching.mjs',
+			'src/bin/filesystem/findPathsMatching.spec.mjs',
 		]));
 	},
 

@@ -15,14 +15,11 @@ const renameExternal = (from, to) => ({
 export default [
 	{
 		input: 'src/index.mjs',
-		external: ['assert/strict'], // TODO: remove (used by matchers.core.equals; not browser-compatible)
-		output: [
-			{
-				file: 'build/lean-test.mjs',
-				format: 'es',
-				name: 'lean-test',
-			},
-		],
+		output: {
+			file: 'build/lean-test.mjs',
+			format: 'es',
+			name: 'lean-test',
+		},
 	},
 	{
 		input: 'src/bin/run.mjs',
@@ -30,13 +27,13 @@ export default [
 			'process',
 			'path',
 			'fs/promises',
+			'child_process',
+			'http',
 		],
-		output: [
-			{
-				file: 'build/bin/run.mjs',
-				format: 'es',
-			},
-		],
+		output: {
+			file: 'build/bin/run.mjs',
+			format: 'es',
+		},
 		plugins: [
 			script(),
 			renameExternal('../index.mjs', '../lean-test.mjs'),
