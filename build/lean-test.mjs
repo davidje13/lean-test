@@ -67,7 +67,7 @@ function isFile(frame) {
 }
 
 const STACK_AT = /^at\s+/i;
-const STACK_REGEX = /^([^(]+?)\s*\(([^)]*)\)$/i;
+const STACK_REGEX = /^([^(@]*?)\s*[@\(]\s*([^)]*)\)?$/i;
 
 function extractStackLine(raw) {
 	const cleaned = raw.trim().replace(STACK_AT, '');

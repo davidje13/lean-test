@@ -1,0 +1,44 @@
+[FAIL] suite: browser.spec.mjs [xx]
+[PASS]   test: runs in the browser [xx]
+[FAIL]   describe: console [xx]
+[PASS]     test: hidden if successful [xx]
+[FAIL]     test: displayed if unsuccessful [xx]
+             should be seen
+             Failure: oops
+              at browser.spec.mjs:15:7
+[ERRO] suite: stacktrace.spec.mjs [xx]
+[ERRO]   describe: stack traces [xx]
+[ERRO]     test: error [xx]
+             Error: nope
+[FAIL]     test: fail [xx]
+             Failure: nope
+              at stacktrace.spec.mjs:9:7
+[FAIL]     test: user-space function call [xx]
+             Failure: inside
+              at stacktrace.spec.mjs:14:8
+              at stacktrace.spec.mjs:16:3
+[FAIL]     test: async 1 [xx]
+             Failure: Expected value to equal 2, but 1 != 2.
+              at stacktrace.spec.mjs:20:9
+[FAIL]     test: async 2 [xx]
+             Failure: Expected value to equal 2, but 1 != 2.
+              at stacktrace.spec.mjs:25:9
+[FAIL]     test: async 3 [xx]
+             Failure: Expected value to equal 2, but 1 != 2.
+              at stacktrace.spec.mjs:31:9
+[FAIL]     test: async fn [xx]
+             Failure: inside
+              at stacktrace.spec.mjs:37:8
+[ERRO]     test: timeout [xx]
+[ERRO]       with xx timeout [xx]
+               Error: timeout after xx
+
+Total:    11
+Pass:     2
+Errors:   2
+Failures: 7
+Skipped:  0
+Duration: xx
+
+ERROR
+EXIT: 1

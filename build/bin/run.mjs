@@ -332,6 +332,13 @@ function launchBrowser(name, url) {
 				'--remote-debugging-port=0', // required to avoid immediate termination, but not actually used
 				url,
 			], { stdio: 'ignore' });
+		case 'firefox':
+			return spawn('/Applications/Firefox.app/Contents/MacOS/firefox', [
+				'--no-remote',
+				'--new-instance',
+				'--headless',
+				url,
+			], { stdio: 'ignore', env: { MOZ_DISABLE_AUTO_SAFE_MODE: 'true' } });
 		default:
 			process$1.stderr.write(`Unknown browser: ${name}\n`);
 			process$1.stderr.write(`Open this URL to run tests: ${url}\n`);
@@ -469,7 +476,7 @@ function isFile(frame) {
 }
 
 const STACK_AT = /^at\s+/i;
-const STACK_REGEX = /^([^(]+?)\s*\(([^)]*)\)$/i;
+const STACK_REGEX = /^([^(@]*?)\s*[@\(]\s*([^)]*)\)?$/i;
 
 function extractStackLine(raw) {
 	const cleaned = raw.trim().replace(STACK_AT, '');
