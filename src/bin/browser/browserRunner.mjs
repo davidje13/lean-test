@@ -3,7 +3,7 @@ import { dirname, resolve, relative } from 'path';
 import process from 'process';
 import Server from './Server.mjs';
 
-export default async function browserRunner(config, paths, output) {
+export default async function browserRunner(config, paths) {
 	const index = await buildIndex(config, paths);
 	const leanTestPath = resolve(dirname(process.argv[1]), '../../build/lean-test.mjs');
 	const server = new Server(process.cwd(), index, leanTestPath);
@@ -11,11 +11,10 @@ export default async function browserRunner(config, paths, output) {
 	await server.listen(0, '127.0.0.1');
 
 	const url = server.baseurl();
-	const result = await run(launchBrowser(config.browser, url, output), () => resultPromise);
+	const { result } = await run(launchBrowser(config.browser, url), () => resultPromise);
 	server.close();
 
-	output.write(result.output);
-	return result.summary;
+	return result;
 }
 
 const CHROME_ARGS = [
@@ -41,7 +40,7 @@ const CHROME_ARGS = [
 	'--force-fieldtrials=*BackgroundTracing/default/',
 ];
 
-function launchBrowser(name, url, output) {
+function launchBrowser(name, url) {
 	// TODO: this is mac-only and relies on standard installation location
 	// could use https://github.com/GoogleChrome/chrome-launcher to be cross-platform, but pulls in a few dependencies
 	switch (name) {
@@ -53,8 +52,8 @@ function launchBrowser(name, url, output) {
 				url,
 			], { stdio: 'ignore' });
 		default:
-			output.write(`Unknown browser: ${name}\n`);
-			output.write(`Open this URL to run tests: ${url}\n`);
+			process.stderr.write(`Unknown browser: ${name}\n`);
+			process.stderr.write(`Open this URL to run tests: ${url}\n`);
 			return null;
 	}
 }
@@ -81,7 +80,7 @@ const INDEX = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <script type="module">
-import { standardRunner, reporters } from '/lean-test.mjs';
+import { standardRunner } from '/lean-test.mjs';
 
 const builder = standardRunner()
 	.useParallelDiscovery(false)
@@ -92,12 +91,7 @@ const builder = standardRunner()
 const runner = await builder.build();
 const result = await runner.run();
 
-const parts = [];
-const out = new reporters.TextReporter({ write: (v) => parts.push(v) });
-out.report(result);
-const output = parts.join('');
-const summary = result.getSummary();
-await fetch('/', { method: 'POST', body: JSON.stringify({ output, summary }) });
+await fetch('/', { method: 'POST', body: JSON.stringify({ result }) });
 window.close();
 </script>
 </head>

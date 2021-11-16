@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import process$1, { argv, cwd, stdout, exit } from 'process';
 import { join, resolve, dirname, relative } from 'path';
+import { reporters } from '../lean-test.mjs';
 import fs, { readFile } from 'fs/promises';
 import { spawn } from 'child_process';
 import { createServer } from 'http';
@@ -272,7 +273,7 @@ class HttpError extends Error {
 	}
 }
 
-async function browserRunner(config, paths, output) {
+async function browserRunner(config, paths) {
 	const index = await buildIndex(config, paths);
 	const leanTestPath = resolve(dirname(process$1.argv[1]), '../../build/lean-test.mjs');
 	const server = new Server(process$1.cwd(), index, leanTestPath);
@@ -280,11 +281,10 @@ async function browserRunner(config, paths, output) {
 	await server.listen(0, '127.0.0.1');
 
 	const url = server.baseurl();
-	const result = await run(launchBrowser(config.browser, url, output), () => resultPromise);
+	const { result } = await run(launchBrowser(config.browser, url), () => resultPromise);
 	server.close();
 
-	output.write(result.output);
-	return result.summary;
+	return result;
 }
 
 const CHROME_ARGS = [
@@ -310,7 +310,7 @@ const CHROME_ARGS = [
 	'--force-fieldtrials=*BackgroundTracing/default/',
 ];
 
-function launchBrowser(name, url, output) {
+function launchBrowser(name, url) {
 	// TODO: this is mac-only and relies on standard installation location
 	// could use https://github.com/GoogleChrome/chrome-launcher to be cross-platform, but pulls in a few dependencies
 	switch (name) {
@@ -322,8 +322,8 @@ function launchBrowser(name, url, output) {
 				url,
 			], { stdio: 'ignore' });
 		default:
-			output.write(`Unknown browser: ${name}\n`);
-			output.write(`Open this URL to run tests: ${url}\n`);
+			process$1.stderr.write(`Unknown browser: ${name}\n`);
+			process$1.stderr.write(`Open this URL to run tests: ${url}\n`);
 			return null;
 	}
 }
@@ -350,7 +350,7 @@ const INDEX = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <script type="module">
-import { standardRunner, reporters } from '/lean-test.mjs';
+import { standardRunner } from '/lean-test.mjs';
 
 const builder = standardRunner()
 	.useParallelDiscovery(false)
@@ -361,12 +361,7 @@ const builder = standardRunner()
 const runner = await builder.build();
 const result = await runner.run();
 
-const parts = [];
-const out = new reporters.TextReporter({ write: (v) => parts.push(v) });
-out.report(result);
-const output = parts.join('');
-const summary = result.getSummary();
-await fetch('/', { method: 'POST', body: JSON.stringify({ output, summary }) });
+await fetch('/', { method: 'POST', body: JSON.stringify({ result }) });
 window.close();
 </script>
 </head>
@@ -705,23 +700,7 @@ class Result {
 		this.forcedChildSummary = s;
 	}
 
-	getErrors() {
-		const all = [];
-		this.stages.forEach(({ stage }) => all.push(...stage.errors));
-		return all;
-	}
-
-	getFailures() {
-		const all = [];
-		this.stages.forEach(({ stage }) => all.push(...stage.failures));
-		return all;
-	}
-
-	getOutput() {
-		return this.output;
-	}
-
-	getSummary() {
+	getSummary(_flatChildSummaries) {
 		const stagesSummary = this.stages
 			.map(({ config, stage }) => filterSummary(config, stage.getSummary()))
 			.reduce(combineSummary, {});
@@ -730,9 +709,10 @@ class Result {
 			stagesSummary.pass = 0;
 		}
 
-		const childSummary = this.forcedChildSummary || this.children
-			.map((child) => child.getSummary())
-			.reduce(combineSummary, {});
+		const childSummary = (
+			this.forcedChildSummary ||
+			(_flatChildSummaries || this.children.map((child) => child.getSummary())).reduce(combineSummary, {})
+		);
 
 		return combineSummary(
 			stagesSummary,
@@ -744,6 +724,23 @@ class Result {
 		const summary = this.getSummary();
 		return Boolean(summary.error || summary.fail);
 	}
+
+	build() {
+		const errors = [];
+		const failures = [];
+		this.stages.forEach(({ stage }) => errors.push(...stage.errors));
+		this.stages.forEach(({ stage }) => failures.push(...stage.failures));
+		const children = this.children.map((child) => child.build());
+		const summary = this.getSummary(children.map((child) => child.summary));
+		return {
+			label: this.label,
+			summary,
+			errors: errors.map(buildError),
+			failures: failures.map(buildError),
+			output: this.output,
+			children,
+		};
+	}
 }
 
 Result.of = async (label, fn, { parent = null } = {}) => {
@@ -752,6 +749,13 @@ Result.of = async (label, fn, { parent = null } = {}) => {
 	Object.freeze(result);
 	return result;
 };
+
+function buildError(err) {
+	return {
+		message: err.message,
+		stackList: err.getStackParts(),
+	};
+}
 
 function combineSummary(a, b) {
 	const r = { ...a };
@@ -943,10 +947,11 @@ class Runner {
 		Object.freeze(this);
 	}
 
-	run() {
+	async run() {
 		// enable long stack trace so that we can resolve scopes, cut down displayed traces, etc.
 		Error.stackTraceLimit = 50;
-		return this.baseNode.run(this.baseContext);
+		const result = await this.baseNode.run(this.baseContext);
+		return result.build();
 	}
 }
 
@@ -1816,119 +1821,6 @@ var timeout = ({ order = 1 } = {}) => (builder) => {
 	}, { order });
 };
 
-class Output {
-	constructor(writer, forceTTY = null) {
-		this.writer = writer;
-		if (forceTTY ?? writer.isTTY) {
-			this.colour = (index) => (v) => `\u001B[${index}m${v}\u001B[0m`;
-		} else {
-			this.colour = () => (v) => v;
-		}
-		this.red = this.colour(31);
-		this.green = this.colour(32);
-		this.yellow = this.colour(33);
-		this.blue = this.colour(34);
-		this.bold = this.colour(1);
-	}
-
-	writeRaw(v) {
-		this.writer.write(v);
-	}
-
-	write(v, linePrefix = '', continuationPrefix = null) {
-		String(v).split(/\r\n|\n\r?/g).forEach((ln, i) => {
-			this.writer.write(((i ? continuationPrefix : null) ?? linePrefix) + ln + '\n');
-		});
-	}
-}
-
-class TextReporter {
-	constructor(writer, forceTTY = null) {
-		this.output = new Output(writer, forceTTY);
-	}
-
-	_printerr(prefix, err, indent) {
-		this.output.write(
-			this.output.red(prefix + this.output.bold(err.message)) +
-			this.output.red(err.getStackParts().map((s) => `\n at ${s.location}`).join('')),
-			indent,
-		);
-	}
-
-	_print(result, indent) {
-		const summary = result.getSummary();
-		const display = (result.label !== null);
-		let marker = '';
-		if (summary.error) {
-			marker = this.output.red('[ERRO]');
-		} else if (summary.fail) {
-			marker = this.output.red('[FAIL]');
-		} else if (summary.run) {
-			marker = this.output.blue('[....]');
-		} else if (summary.pass) {
-			marker = this.output.green('[PASS]');
-		} else if (summary.skip) {
-			marker = this.output.yellow('[SKIP]');
-		} else {
-			marker = this.output.yellow('[NONE]');
-		}
-		const resultSpace = '      ';
-
-		if (display) {
-			this.output.write(
-				`${result.label} [${summary.duration}ms]`,
-				`${marker} ${indent}`,
-				`${resultSpace} ${indent}`,
-			);
-		}
-		const infoIndent = `${resultSpace} ${indent}  `;
-		let output = result.getOutput();
-		if (output && (summary.error || summary.fail)) {
-			this.output.write(this.output.blue(output), infoIndent);
-		}
-		result.getErrors().forEach((err) => {
-			this._printerr('Error: ', err, infoIndent);
-		});
-		result.getFailures().forEach((err) => {
-			this._printerr('Failure: ', err, infoIndent);
-		});
-		const nextIndent = indent + (display ? '  ' : '');
-		result.children.forEach((child) => this._print(child, nextIndent));
-	}
-
-	report(result) {
-		const summary = result.getSummary();
-
-		this._print(result, '');
-
-		if (!summary.count) {
-			this.output.write(this.output.yellow('NO TESTS FOUND'));
-			return;
-		}
-
-		this.output.write('');
-		this.output.write(`Total:    ${summary.count || 0}`);
-		this.output.write(`Pass:     ${summary.pass || 0}`);
-		this.output.write(`Errors:   ${summary.error || 0}`);
-		this.output.write(`Failures: ${summary.fail || 0}`);
-		this.output.write(`Skipped:  ${summary.skip || 0}`);
-		this.output.write(`Duration: ${summary.duration}ms`);
-		this.output.write('');
-
-		// TODO: warn or error if any node contains 0 tests
-
-		if (summary.error) {
-			this.output.write(this.output.red('ERROR'));
-		} else if (summary.fail) {
-			this.output.write(this.output.red('FAIL'));
-		} else if (summary.pass) {
-			this.output.write(this.output.green('PASS'));
-		} else {
-			this.output.write(this.output.yellow('NO TESTS RUN'));
-		}
-	}
-}
-
 function standardRunner() {
 	const builder = new Runner.Builder()
 		.addPlugin(describe())
@@ -1952,9 +1844,7 @@ function standardRunner() {
 	return builder;
 }
 
-async function nodeRunner(config, paths, output) {
-	const out = new TextReporter(output);
-
+async function nodeRunner(config, paths) {
 	const builder = standardRunner()
 		.useParallelDiscovery(config.parallelDiscovery)
 		.useParallelSuites(config.parallelSuites);
@@ -1968,10 +1858,7 @@ async function nodeRunner(config, paths, output) {
 	}
 
 	const runner = await builder.build();
-	const result = await runner.run();
-	out.report(result);
-
-	return result.getSummary();
+	return runner.run();
 }
 
 const argparse = new ArgumentParser({
@@ -1987,11 +1874,13 @@ const config = argparse.parse(argv);
 
 const scanDirs = config.rest.map((path) => resolve(cwd(), path));
 const paths = findPathsMatching(scanDirs, config.pathsInclude, config.pathsExclude);
+const out = new reporters.TextReporter(stdout);
 
 const runner = config.browser ? browserRunner : nodeRunner;
-const summary = await runner(config, paths, stdout);
+const result = await runner(config, paths);
+out.report(result);
 
-if (summary.error || summary.fail || !summary.pass) {
+if (result.summary.error || result.summary.fail || !result.summary.pass) {
 	exit(1);
 } else {
 	exit(0); // explicitly exit to avoid hanging on dangling promises

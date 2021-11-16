@@ -8,14 +8,14 @@ export default class TextReporter {
 	_printerr(prefix, err, indent) {
 		this.output.write(
 			this.output.red(prefix + this.output.bold(err.message)) +
-			this.output.red(err.getStackParts().map((s) => `\n at ${s.location}`).join('')),
+			this.output.red(err.stackList.map((s) => `\n at ${s.location}`).join('')),
 			indent,
 		);
 	}
 
 	_print(result, indent) {
-		const summary = result.getSummary();
-		const display = (result.label !== null);
+		const { label, summary } = result;
+		const display = (label !== null);
 		let marker = '';
 		if (summary.error) {
 			marker = this.output.red('[ERRO]');
@@ -34,20 +34,19 @@ export default class TextReporter {
 
 		if (display) {
 			this.output.write(
-				`${result.label} [${summary.duration}ms]`,
+				`${label} [${summary.duration}ms]`,
 				`${marker} ${indent}`,
 				`${resultSpace} ${indent}`,
 			);
 		}
 		const infoIndent = `${resultSpace} ${indent}  `;
-		let output = result.getOutput();
-		if (output && (summary.error || summary.fail)) {
-			this.output.write(this.output.blue(output), infoIndent);
+		if (result.output && (summary.error || summary.fail)) {
+			this.output.write(this.output.blue(result.output), infoIndent);
 		}
-		result.getErrors().forEach((err) => {
+		result.errors.forEach((err) => {
 			this._printerr('Error: ', err, infoIndent);
 		});
-		result.getFailures().forEach((err) => {
+		result.failures.forEach((err) => {
 			this._printerr('Failure: ', err, infoIndent);
 		});
 		const nextIndent = indent + (display ? '  ' : '');
@@ -55,7 +54,7 @@ export default class TextReporter {
 	}
 
 	report(result) {
-		const summary = result.getSummary();
+		const { summary } = result;
 
 		this._print(result, '');
 

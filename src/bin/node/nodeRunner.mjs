@@ -1,8 +1,6 @@
-import { standardRunner, reporters } from '../../index.mjs';
+import { standardRunner } from '../../index.mjs';
 
-export default async function nodeRunner(config, paths, output) {
-	const out = new reporters.TextReporter(output);
-
+export default async function nodeRunner(config, paths) {
 	const builder = standardRunner()
 		.useParallelDiscovery(config.parallelDiscovery)
 		.useParallelSuites(config.parallelSuites);
@@ -16,8 +14,5 @@ export default async function nodeRunner(config, paths, output) {
 	}
 
 	const runner = await builder.build();
-	const result = await runner.run();
-	out.report(result);
-
-	return result.getSummary();
+	return runner.run();
 }

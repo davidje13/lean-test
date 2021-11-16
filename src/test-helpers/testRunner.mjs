@@ -9,12 +9,11 @@ export default async function testRunner(plugins, expectedResult, block) {
 	builder.addSuite('test', block);
 	const runner = await builder.build();
 	const result = await runner.run();
-	const summary = result.getSummary();
 
 	// allow omitted fields to have any value
-	const looseExpected = { ...summary, ...expectedResult };
+	const looseExpected = { ...result.summary, ...expectedResult };
 
-	const match = equals(looseExpected)(summary);
+	const match = equals(looseExpected)(result.summary);
 	if (!match.success) {
 		new TextReporter(process.stdout, false).report(result);
 		fail(match.message);

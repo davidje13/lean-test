@@ -13,7 +13,7 @@ describe('outputCaptor', {
 
 		const suiteResult = result.children[0];
 		const testResult = suiteResult.children[0];
-		expect(testResult.getOutput(), equals('hidden\n'));
+		expect(testResult.output, equals('hidden\n'));
 	},
 
 	async 'captures multiple parallel test runs separately'() {
@@ -37,8 +37,8 @@ describe('outputCaptor', {
 		const blockResult = suiteResult.children[0];
 		const test1Result = blockResult.children[0];
 		const test2Result = blockResult.children[1];
-		expect(test1Result.getOutput(), equals('t1a\nt1b\n'));
-		expect(test2Result.getOutput(), equals('t2a\nt2b\n'));
+		expect(test1Result.output, equals('t1a\nt1b\n'));
+		expect(test2Result.output, equals('t2a\nt2b\n'));
 	},
 
 	async 'makes current stdout available to the test'() {

@@ -11,10 +11,11 @@ export default class Runner {
 		Object.freeze(this);
 	}
 
-	run() {
+	async run() {
 		// enable long stack trace so that we can resolve scopes, cut down displayed traces, etc.
 		Error.stackTraceLimit = 50;
-		return this.baseNode.run(this.baseContext);
+		const result = await this.baseNode.run(this.baseContext);
+		return result.build();
 	}
 }
 

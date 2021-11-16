@@ -9,7 +9,7 @@ describe('timeout', {
 				await forever();
 			}, { timeout: 10 });
 		});
-		expect(result.getSummary().duration, isGreaterThanOrEqual(10));
+		expect(result.summary.duration, isGreaterThanOrEqual(10));
 	},
 
 	async 'ignores success after the specified time has elapsed'() {

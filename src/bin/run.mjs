@@ -2,6 +2,7 @@
 
 import { cwd, argv, stdout, exit } from 'process';
 import { resolve } from 'path';
+import { reporters } from '../index.mjs';
 import findPathsMatching from './filesystem/findPathsMatching.mjs';
 import ArgumentParser from './ArgumentParser.mjs';
 import browserRunner from './browser/browserRunner.mjs';
@@ -20,11 +21,13 @@ const config = argparse.parse(argv);
 
 const scanDirs = config.rest.map((path) => resolve(cwd(), path));
 const paths = findPathsMatching(scanDirs, config.pathsInclude, config.pathsExclude);
+const out = new reporters.TextReporter(stdout);
 
 const runner = config.browser ? browserRunner : nodeRunner;
-const summary = await runner(config, paths, stdout);
+const result = await runner(config, paths);
+out.report(result);
 
-if (summary.error || summary.fail || !summary.pass) {
+if (result.summary.error || result.summary.fail || !result.summary.pass) {
 	exit(1);
 } else {
 	exit(0); // explicitly exit to avoid hanging on dangling promises

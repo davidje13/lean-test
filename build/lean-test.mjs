@@ -310,23 +310,7 @@ class Result {
 		this.forcedChildSummary = s;
 	}
 
-	getErrors() {
-		const all = [];
-		this.stages.forEach(({ stage }) => all.push(...stage.errors));
-		return all;
-	}
-
-	getFailures() {
-		const all = [];
-		this.stages.forEach(({ stage }) => all.push(...stage.failures));
-		return all;
-	}
-
-	getOutput() {
-		return this.output;
-	}
-
-	getSummary() {
+	getSummary(_flatChildSummaries) {
 		const stagesSummary = this.stages
 			.map(({ config, stage }) => filterSummary(config, stage.getSummary()))
 			.reduce(combineSummary, {});
@@ -335,9 +319,10 @@ class Result {
 			stagesSummary.pass = 0;
 		}
 
-		const childSummary = this.forcedChildSummary || this.children
-			.map((child) => child.getSummary())
-			.reduce(combineSummary, {});
+		const childSummary = (
+			this.forcedChildSummary ||
+			(_flatChildSummaries || this.children.map((child) => child.getSummary())).reduce(combineSummary, {})
+		);
 
 		return combineSummary(
 			stagesSummary,
@@ -349,6 +334,23 @@ class Result {
 		const summary = this.getSummary();
 		return Boolean(summary.error || summary.fail);
 	}
+
+	build() {
+		const errors = [];
+		const failures = [];
+		this.stages.forEach(({ stage }) => errors.push(...stage.errors));
+		this.stages.forEach(({ stage }) => failures.push(...stage.failures));
+		const children = this.children.map((child) => child.build());
+		const summary = this.getSummary(children.map((child) => child.summary));
+		return {
+			label: this.label,
+			summary,
+			errors: errors.map(buildError),
+			failures: failures.map(buildError),
+			output: this.output,
+			children,
+		};
+	}
 }
 
 Result.of = async (label, fn, { parent = null } = {}) => {
@@ -357,6 +359,13 @@ Result.of = async (label, fn, { parent = null } = {}) => {
 	Object.freeze(result);
 	return result;
 };
+
+function buildError(err) {
+	return {
+		message: err.message,
+		stackList: err.getStackParts(),
+	};
+}
 
 function combineSummary(a, b) {
 	const r = { ...a };
@@ -548,10 +557,11 @@ class Runner {
 		Object.freeze(this);
 	}
 
-	run() {
+	async run() {
 		// enable long stack trace so that we can resolve scopes, cut down displayed traces, etc.
 		Error.stackTraceLimit = 50;
-		return this.baseNode.run(this.baseContext);
+		const result = await this.baseNode.run(this.baseContext);
+		return result.build();
 	}
 }
 
@@ -1471,14 +1481,14 @@ class TextReporter {
 	_printerr(prefix, err, indent) {
 		this.output.write(
 			this.output.red(prefix + this.output.bold(err.message)) +
-			this.output.red(err.getStackParts().map((s) => `\n at ${s.location}`).join('')),
+			this.output.red(err.stackList.map((s) => `\n at ${s.location}`).join('')),
 			indent,
 		);
 	}
 
 	_print(result, indent) {
-		const summary = result.getSummary();
-		const display = (result.label !== null);
+		const { label, summary } = result;
+		const display = (label !== null);
 		let marker = '';
 		if (summary.error) {
 			marker = this.output.red('[ERRO]');
@@ -1497,20 +1507,19 @@ class TextReporter {
 
 		if (display) {
 			this.output.write(
-				`${result.label} [${summary.duration}ms]`,
+				`${label} [${summary.duration}ms]`,
 				`${marker} ${indent}`,
 				`${resultSpace} ${indent}`,
 			);
 		}
 		const infoIndent = `${resultSpace} ${indent}  `;
-		let output = result.getOutput();
-		if (output && (summary.error || summary.fail)) {
-			this.output.write(this.output.blue(output), infoIndent);
+		if (result.output && (summary.error || summary.fail)) {
+			this.output.write(this.output.blue(result.output), infoIndent);
 		}
-		result.getErrors().forEach((err) => {
+		result.errors.forEach((err) => {
 			this._printerr('Error: ', err, infoIndent);
 		});
-		result.getFailures().forEach((err) => {
+		result.failures.forEach((err) => {
 			this._printerr('Failure: ', err, infoIndent);
 		});
 		const nextIndent = indent + (display ? '  ' : '');
@@ -1518,7 +1527,7 @@ class TextReporter {
 	}
 
 	report(result) {
-		const summary = result.getSummary();
+		const { summary } = result;
 
 		this._print(result, '');
 
