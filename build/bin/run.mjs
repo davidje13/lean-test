@@ -112,10 +112,15 @@ class ArgumentParser {
 				}
 				break;
 			case 'string':
+			case 'int':
 				if (opt.id in target) {
 					throw new Error(`Multiple values for ${name} not supported`);
 				}
-				target[opt.id] = value ?? getNext();
+				let v = value ?? getNext();
+				if (opt.type === 'int') {
+					v = Number.parseInt(v, 10);
+				}
+				target[opt.id] = v;
 				break;
 			case 'array':
 				const list = target[opt.id] || [];
@@ -180,6 +185,7 @@ class Server {
 			['txt', 'text/plain'],
 			['json', 'text/json'],
 		]);
+		this.ignore404 = ['/favicon.ico'];
 
 		this.hostname = null;
 		this.port = null;
@@ -230,7 +236,9 @@ class Server {
 				throw new HttpError(404, 'Not Found');
 			}
 		} catch (e) {
-			console.warn(`Error while serving ${req.url}`);
+			if (!this.ignore404.includes(req.url)) {
+				console.warn(`Error while serving ${req.url}`);
+			}
 			let status = 500;
 			let message = 'An internal error occurred';
 			if (typeof e === 'object' && e.message) {
@@ -278,7 +286,7 @@ async function browserRunner(config, paths) {
 	const leanTestPath = resolve(dirname(process$1.argv[1]), '../../build/lean-test.mjs');
 	const server = new Server(process$1.cwd(), index, leanTestPath);
 	const resultPromise = new Promise((res) => { server.callback = res; });
-	await server.listen(0, '127.0.0.1');
+	await server.listen(Number(config.port), config.host);
 
 	const url = server.baseurl();
 	const { result } = await run(launchBrowser(config.browser, url), () => resultPromise);
@@ -314,6 +322,9 @@ function launchBrowser(name, url) {
 	// TODO: this is mac-only and relies on standard installation location
 	// could use https://github.com/GoogleChrome/chrome-launcher to be cross-platform, but pulls in a few dependencies
 	switch (name) {
+		case 'manual':
+			process$1.stderr.write(`Ready to run test: ${url}\n`);
+			return null;
 		case 'chrome':
 			return spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', [
 				...CHROME_ARGS,
@@ -362,6 +373,7 @@ const runner = await builder.build();
 const result = await runner.run();
 
 await fetch('/', { method: 'POST', body: JSON.stringify({ result }) });
+document.body.innerText = 'Test complete.';
 window.close();
 </script>
 </head>
@@ -1867,6 +1879,8 @@ const argparse = new ArgumentParser({
 	pathsInclude: { names: ['include', 'i'], type: 'array', default: ['**/*.{spec|test}.{js|mjs|jsx}'] },
 	pathsExclude: { names: ['exclude', 'x'], type: 'array', default: ['**/node_modules', '**/.*'] },
 	browser: { names: ['browser', 'b'], type: 'string', default: null },
+	port: { names: ['port'], type: 'int', default: 0 },
+	host: { names: ['host'], type: 'string', default: '127.0.0.1' },
 	rest: { names: ['scan', null], type: 'array', default: ['.'] }
 });
 

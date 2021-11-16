@@ -20,6 +20,7 @@ export default class Server {
 			['txt', 'text/plain'],
 			['json', 'text/json'],
 		]);
+		this.ignore404 = ['/favicon.ico'];
 
 		this.hostname = null;
 		this.port = null;
@@ -70,7 +71,9 @@ export default class Server {
 				throw new HttpError(404, 'Not Found');
 			}
 		} catch (e) {
-			console.warn(`Error while serving ${req.url}`);
+			if (!this.ignore404.includes(req.url)) {
+				console.warn(`Error while serving ${req.url}`);
+			}
 			let status = 500;
 			let message = 'An internal error occurred';
 			if (typeof e === 'object' && e.message) {

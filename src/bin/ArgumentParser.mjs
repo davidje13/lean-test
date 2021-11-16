@@ -38,10 +38,15 @@ export default class ArgumentParser {
 				}
 				break;
 			case 'string':
+			case 'int':
 				if (opt.id in target) {
 					throw new Error(`Multiple values for ${name} not supported`);
 				}
-				target[opt.id] = value ?? getNext();
+				let v = value ?? getNext();
+				if (opt.type === 'int') {
+					v = Number.parseInt(v, 10);
+				}
+				target[opt.id] = v;
 				break;
 			case 'array':
 				const list = target[opt.id] || [];

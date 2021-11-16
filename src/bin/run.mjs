@@ -14,6 +14,8 @@ const argparse = new ArgumentParser({
 	pathsInclude: { names: ['include', 'i'], type: 'array', default: ['**/*.{spec|test}.{js|mjs|jsx}'] },
 	pathsExclude: { names: ['exclude', 'x'], type: 'array', default: ['**/node_modules', '**/.*'] },
 	browser: { names: ['browser', 'b'], type: 'string', default: null },
+	port: { names: ['port'], type: 'int', default: 0 },
+	host: { names: ['host'], type: 'string', default: '127.0.0.1' },
 	rest: { names: ['scan', null], type: 'array', default: ['.'] }
 });
 

@@ -8,7 +8,7 @@ export default async function browserRunner(config, paths) {
 	const leanTestPath = resolve(dirname(process.argv[1]), '../../build/lean-test.mjs');
 	const server = new Server(process.cwd(), index, leanTestPath);
 	const resultPromise = new Promise((res) => { server.callback = res; });
-	await server.listen(0, '127.0.0.1');
+	await server.listen(Number(config.port), config.host);
 
 	const url = server.baseurl();
 	const { result } = await run(launchBrowser(config.browser, url), () => resultPromise);
@@ -44,6 +44,9 @@ function launchBrowser(name, url) {
 	// TODO: this is mac-only and relies on standard installation location
 	// could use https://github.com/GoogleChrome/chrome-launcher to be cross-platform, but pulls in a few dependencies
 	switch (name) {
+		case 'manual':
+			process.stderr.write(`Ready to run test: ${url}\n`);
+			return null;
 		case 'chrome':
 			return spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', [
 				...CHROME_ARGS,
@@ -92,6 +95,7 @@ const runner = await builder.build();
 const result = await runner.run();
 
 await fetch('/', { method: 'POST', body: JSON.stringify({ result }) });
+document.body.innerText = 'Test complete.';
 window.close();
 </script>
 </head>
