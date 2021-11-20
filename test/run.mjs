@@ -11,6 +11,7 @@ process.stdout.write('Running integration tests...\n\n');
 
 const results = await Promise.all([
 	runIntegrationTest('discovery'),
+	runIntegrationTest('discovery', 'expected.txt', '--parallel-discovery'),
 	runIntegrationTest('basics'),
 	runIntegrationTest('reporting'),
 	runIntegrationTest('browser', 'expected.txt', '--browser=chrome'),
