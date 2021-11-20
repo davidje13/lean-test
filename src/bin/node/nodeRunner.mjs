@@ -1,4 +1,4 @@
-import { standardRunner } from '../../index.mjs';
+import { standardRunner } from '../../lean-test.mjs';
 
 export default async function nodeRunner(config, paths, listener) {
 	const builder = standardRunner()

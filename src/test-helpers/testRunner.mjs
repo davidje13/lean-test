@@ -1,4 +1,4 @@
-import { Runner } from '../index.mjs';
+import { Runner } from '../lean-test.mjs';
 import test from '../plugins/test.mjs';
 import Writer from '../outputs/Writer.mjs';
 import FullReporter from '../reporters/Full.mjs';

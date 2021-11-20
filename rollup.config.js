@@ -7,18 +7,22 @@ const script = () => ({
 	}),
 	renderChunk: (code, chunk) => (shebangs.get(chunk.facadeModuleId) || '') + code,
 });
-const renameExternal = (from, to) => ({
-	options: (inputOptions) => ({ ...inputOptions, external: [...inputOptions.external, to] }),
-	resolveId: (id) => (id === from ? to : null),
-});
 
 export default [
 	{
-		input: 'src/index.mjs',
+		input: 'src/lean-test.mjs',
 		output: {
 			file: 'build/lean-test.mjs',
 			format: 'es',
 			name: 'lean-test',
+		},
+	},
+	{
+		input: 'src/browser-runtime.mjs',
+		external: ['./lean-test.mjs'],
+		output: {
+			file: 'build/browser-runtime.mjs',
+			format: 'es',
 		},
 	},
 	{
@@ -29,14 +33,12 @@ export default [
 			'fs/promises',
 			'child_process',
 			'http',
+			'../lean-test.mjs',
 		],
 		output: {
 			file: 'build/bin/run.mjs',
 			format: 'es',
 		},
-		plugins: [
-			script(),
-			renameExternal('../index.mjs', '../lean-test.mjs'),
-		],
+		plugins: [script()],
 	},
 ];

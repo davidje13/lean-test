@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-import process$1 from 'process';
+import process$1, { stderr as stderr$1 } from 'process';
 import { join, resolve, dirname, relative } from 'path';
-import { outputs, reporters } from '../lean-test.mjs';
+import '../lean-test.mjs';
 import fs, { readFile } from 'fs/promises';
 import { spawn } from 'child_process';
 import { createServer } from 'http';
@@ -168,143 +168,6 @@ function split2(v, s) {
 	}
 }
 
-const CHARSET = '; charset=utf-8';
-
-class Server {
-	constructor(workingDir, index, leanTestBundle) {
-		this.workingDir = workingDir;
-		this.index = index;
-		this.leanTestBundle = leanTestBundle;
-		this.callback = null;
-		this.mimes = new Map([
-			['js', 'application/javascript'],
-			['mjs', 'application/javascript'],
-			['css', 'text/css'],
-			['htm', 'text/html'],
-			['html', 'text/html'],
-			['txt', 'text/plain'],
-			['json', 'text/json'],
-		]);
-		this.ignore404 = ['/favicon.ico'];
-
-		this.hostname = null;
-		this.port = null;
-		this.server = createServer(this._handleRequest.bind(this));
-		this.close = this.close.bind(this);
-	}
-
-	getContentType(ext) {
-		return (this.mimes.get(ext) || 'text/plain') + CHARSET;
-	}
-
-	async _handleRequest(req, res) {
-		try {
-			if (req.url === '/') {
-				if (req.method === 'POST') {
-					const all = [];
-					for await (const part of req) {
-						all.push(part);
-					}
-					this.callback(JSON.parse(Buffer.concat(all).toString('utf-8')));
-					res.setHeader('Content-Type', this.getContentType('json'));
-					res.end(JSON.stringify({'result': 'ok'}));
-				} else {
-					res.setHeader('Content-Type', this.getContentType('html'));
-					res.end(this.index);
-				}
-				return;
-			}
-			if (req.url.includes('..')) {
-				throw new HttpError(400, 'Invalid resource path');
-			}
-			let path;
-			if (req.url === '/lean-test.mjs') {
-				path = this.leanTestBundle;
-			} else {
-				path = resolve(this.workingDir, req.url.substr(1));
-				if (!path.startsWith(this.workingDir)) {
-					throw new HttpError(400, 'Invalid resource path');
-				}
-			}
-
-			try {
-				const data = await readFile(path);
-				const ext = path.substr(path.lastIndexOf('.') + 1).toLowerCase();
-				res.setHeader('Content-Type', this.getContentType(ext));
-				res.end(data);
-			} catch (e) {
-				throw new HttpError(404, 'Not Found');
-			}
-		} catch (e) {
-			if (!this.ignore404.includes(req.url)) {
-				console.warn(`Error while serving ${req.url}`);
-			}
-			let status = 500;
-			let message = 'An internal error occurred';
-			if (typeof e === 'object' && e.message) {
-				status = e.status || 400;
-				message = e.message;
-			}
-			res.statusCode = status;
-			res.setHeader('Content-Type', this.getContentType('txt'));
-			res.end(message + '\n');
-		}
-	}
-
-	baseurl() {
-		return 'http://' + this.hostname + ':' + this.port + '/';
-	}
-
-	async listen(port, hostname) {
-		await new Promise((resolve) => this.server.listen(port, hostname, resolve));
-		const addr = this.server.address();
-		this.hostname = addr.address;
-		this.port = addr.port;
-		process$1.addListener('SIGINT', this.close);
-	}
-
-	async close() {
-		if (!this.hostname) {
-			return;
-		}
-		this.hostname = null;
-		this.port = null;
-		await new Promise((resolve) => this.server.close(resolve));
-		process$1.removeListener('SIGINT', this.close);
-	}
-}
-
-class HttpError extends Error {
-	constructor(status, message) {
-		super(message);
-		this.status = status;
-	}
-}
-
-async function browserRunner(config, paths, listener) {
-	const index = await buildIndex(config, paths);
-	const leanTestPath = resolve(dirname(process$1.argv[1]), '../../build/lean-test.mjs');
-	const server = new Server(process$1.cwd(), index, leanTestPath);
-	const resultPromise = new Promise((res) => {
-		server.callback = ({ events }) => {
-			for (const event of events) {
-				if (event.type === 'browser-end') {
-					res(event.result);
-				} else {
-					listener?.(event);
-				}
-			}
-		};
-	});
-	await server.listen(Number(config.port), config.host);
-
-	const url = server.baseurl();
-	const result = await run(launchBrowser(config.browser, url), () => resultPromise);
-	server.close();
-
-	return result;
-}
-
 const CHROME_ARGS = [
 	// flag list from chrome-launcher: https://github.com/GoogleChrome/chrome-launcher/blob/master/src/flags.ts
 	'--disable-features=Translate',
@@ -333,7 +196,7 @@ function launchBrowser(name, url) {
 	// could use https://github.com/GoogleChrome/chrome-launcher to be cross-platform, but pulls in a few dependencies
 	switch (name) {
 		case 'manual':
-			process$1.stderr.write(`Ready to run test: ${url}\n`);
+			stderr$1.write(`Ready to run test: ${url}\n`);
 			return null;
 		case 'chrome':
 			return spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', [
@@ -350,10 +213,151 @@ function launchBrowser(name, url) {
 				url,
 			], { stdio: 'ignore', env: { MOZ_DISABLE_AUTO_SAFE_MODE: 'true' } });
 		default:
-			process$1.stderr.write(`Unknown browser: ${name}\n`);
-			process$1.stderr.write(`Open this URL to run tests: ${url}\n`);
+			stderr$1.write(`Unknown browser: ${name}\n`);
+			stderr$1.write(`Open this URL to run tests: ${url}\n`);
 			return null;
 	}
+}
+
+const CHARSET = '; charset=utf-8';
+
+class Server {
+	constructor(index, directories) {
+		this.index = index;
+		this.directories = directories;
+		this.callback = null;
+		this.mimes = new Map([
+			['js', 'application/javascript'],
+			['mjs', 'application/javascript'],
+			['css', 'text/css'],
+			['htm', 'text/html'],
+			['html', 'text/html'],
+			['txt', 'text/plain'],
+			['json', 'text/json'],
+		]);
+		this.ignore404 = ['/favicon.ico'];
+
+		this.hostname = null;
+		this.port = null;
+		this.server = createServer(this._handleRequest.bind(this));
+		this.close = this.close.bind(this);
+	}
+
+	getContentType(ext) {
+		return (this.mimes.get(ext.toLowerCase()) || 'text/plain') + CHARSET;
+	}
+
+	async _handleRequest(req, res) {
+		try {
+			if (req.url === '/') {
+				if (req.method === 'POST') {
+					const all = [];
+					for await (const part of req) {
+						all.push(part);
+					}
+					this.callback(JSON.parse(Buffer.concat(all).toString('utf-8')));
+					res.setHeader('Content-Type', this.getContentType('json'));
+					res.end(JSON.stringify({'result': 'ok'}));
+				} else {
+					res.setHeader('Content-Type', this.getContentType('html'));
+					res.end(this.index);
+				}
+				return;
+			}
+			if (req.url.includes('..')) {
+				throw new HttpError(400, 'Invalid resource path');
+			}
+			for (const [base, dir] of this.directories) {
+				if (req.url.startsWith(base)) {
+					const path = resolve(dir, req.url.substr(base.length));
+					if (!path.startsWith(dir)) {
+						throw new HttpError(400, 'Invalid resource path');
+					}
+					try {
+						const data = await readFile(path);
+						const ext = path.substr(path.lastIndexOf('.') + 1);
+						res.setHeader('Content-Type', this.getContentType(ext));
+						res.end(data);
+						return;
+					} catch (e) {
+						throw new HttpError(404, 'Not Found');
+					}
+				}
+			}
+			throw new HttpError(404, 'Not Found');
+		} catch (e) {
+			let status = 500;
+			let message = 'An internal error occurred';
+			if (typeof e === 'object' && e.message) {
+				status = e.status || 400;
+				message = e.message;
+			}
+			if (!this.ignore404.includes(req.url)) {
+				console.warn(`Error while serving ${req.url} - returning ${status} ${message}`);
+			}
+			res.statusCode = status;
+			res.setHeader('Content-Type', this.getContentType('txt'));
+			res.end(message + '\n');
+		}
+	}
+
+	baseurl() {
+		return 'http://' + this.hostname + ':' + this.port + '/';
+	}
+
+	async listen(port, hostname) {
+		await new Promise((resolve) => this.server.listen(port, hostname, resolve));
+		const addr = this.server.address();
+		if (typeof addr !== 'object') {
+			await this.close();
+			throw new Exception(`Server.address unexpectedly returned ${addr}; aborting`);
+		}
+		this.hostname = addr.address;
+		this.port = addr.port;
+		process$1.addListener('SIGINT', this.close);
+	}
+
+	async close() {
+		if (!this.hostname) {
+			return;
+		}
+		this.hostname = null;
+		this.port = null;
+		await new Promise((resolve) => this.server.close(resolve));
+		process$1.removeListener('SIGINT', this.close);
+	}
+}
+
+class HttpError extends Error {
+	constructor(status, message) {
+		super(message);
+		this.status = status;
+	}
+}
+
+async function browserRunner(config, paths, listener) {
+	const basePath = process$1.cwd();
+	const index = await buildIndex(config, paths, basePath);
+	const leanTestBaseDir = resolve(dirname(process$1.argv[1]), '..');
+	const server = new Server(index, [['/.lean-test/', leanTestBaseDir], ['/', basePath]]);
+	const resultPromise = new Promise((res) => {
+		server.callback = ({ events }) => {
+			for (const event of events) {
+				if (event.type === 'browser-end') {
+					res(event.result);
+				} else {
+					listener?.(event);
+				}
+			}
+		};
+	});
+	await server.listen(Number(config.port), config.host);
+
+	const url = server.baseurl();
+	const result = await run(launchBrowser(config.browser, url), () => resultPromise);
+	server.close();
+
+	return result;
 }
 
 async function run(proc, fn) {
@@ -377,93 +381,23 @@ async function run(proc, fn) {
 const INDEX = `<!DOCTYPE html>
 <html lang="en">
 <head>
+<title>Lean Test Runner</title>
 <script type="module">
-import { standardRunner } from '/lean-test.mjs';
-
-class Aggregator {
-	constructor(next) {
-		this.queue = [];
-		this.timer = null;
-		this.next = next;
-		this.emptyCallback = null;
-		this.invoke = this.invoke.bind(this);
-		this._invoke = this._invoke.bind(this);
-	}
-
-	invoke(value) {
-		this.queue.push(value);
-		if (this.timer === null) {
-			this.timer = setTimeout(this._invoke, 0);
-		}
-	}
-
-	wait() {
-		if (!this.timer) {
-			return Promise.resolve();
-		}
-		return new Promise((resolve) => {
-			this.emptyCallback = resolve;
-		});
-	}
-
-	async _invoke() {
-		const current = this.queue.slice();
-		this.queue.length = 0;
-		try {
-			await this.next(current);
-		} catch (e) {
-			console.error('error during throttled call', e);
-		}
-		if (this.queue.length) {
-			this.timer = setTimeout(this._invoke, 0);
-		} else {
-			this.timer = null;
-			this.emptyCallback?.();
-		}
-	}
-}
-
-const eventDispatcher = new Aggregator((events) => fetch('/', {
-	method: 'POST',
-	body: JSON.stringify({ events }),
-}));
-
-const builder = standardRunner()
-	.useParallelDiscovery(false)
-	.useParallelSuites(/*USE_PARALLEL_SUITES*/);
-
-/*SUITES*/
-
-const runner = await builder.build();
-const result = await runner.run(eventDispatcher.invoke);
-
-document.body.innerText = 'Test run complete.';
-eventDispatcher.invoke({ type: 'browser-end', result });
-await eventDispatcher.wait();
-window.close();
+import run from '/.lean-test/browser-runtime.mjs';
+await run(/*CONFIG*/, /*SUITES*/);
 </script>
 </head>
 <body></body>
 </html>`;
 
-const INDEX_SUITE = `builder.addSuite(/*NAME*/, async (globals) => {
-	Object.assign(window, globals);
-	const result = await import(/*PATH*/);
-	return result.default;
-});`;
-
-async function buildIndex(config, paths) {
-	let suites = [];
-	for await (const i of paths) {
-		suites.push(
-			INDEX_SUITE
-				.replace('/*NAME*/', JSON.stringify(i.relative))
-				.replace('/*PATH*/', JSON.stringify('/' + relative(process$1.cwd(), i.path)))
-		);
+async function buildIndex(config, paths, basePath) {
+	const suites = [];
+	for await (const path of paths) {
+		suites.push([path.relative, '/' + relative(basePath, path.path)]);
 	}
 	return INDEX
-		.replace('/*USE_PARALLEL_SUITES*/', JSON.stringify(config.parallelSuites))
-		.replace('/*SUITES*/', suites.join('\n'));
+		.replace('/*CONFIG*/', JSON.stringify(config))
+		.replace('/*SUITES*/', JSON.stringify(suites));
 }
 
 class TestAssertionError extends Error {
@@ -1939,6 +1873,192 @@ var timeout = ({ order = 1 } = {}) => (builder) => {
 	}, { order });
 };
 
+class Writer {
+	constructor(writer, forceTTY = null) {
+		this.writer = writer;
+		this.dynamic = forceTTY ?? writer.isTTY;
+		if (this.dynamic) {
+			this.colour = (...vs) => {
+				const prefix = '\u001B[' + vs.join(';') + 'm';
+				return (v) => `${prefix}${v}\u001B[0m`;
+			};
+		} else {
+			this.colour = () => (v, fallback) => (fallback ?? v);
+		}
+		this.red = this.colour(31);
+		this.green = this.colour(32);
+		this.yellow = this.colour(33);
+		this.blue = this.colour(34);
+		this.purple = this.colour(35);
+		this.cyan = this.colour(36);
+		this.gray = this.colour(37);
+		this.redBack = this.colour(41, 38, 5, 231);
+		this.greenBack = this.colour(42, 38, 5, 231);
+		this.yellowBack = this.colour(43, 38, 5, 231);
+		this.blueBack = this.colour(44, 38, 5, 231);
+		this.purpleBack = this.colour(45, 38, 5, 231);
+		this.cyanBack = this.colour(46, 38, 5, 231);
+		this.grayBack = this.colour(47, 38, 5, 231);
+		this.bold = this.colour(1);
+		this.faint = this.colour(2);
+
+		// grab the write function so that nothing in the tests can intercept it
+		this.writeRaw = this.writer.write.bind(this.writer);
+	}
+
+	write(v, linePrefix = '', continuationPrefix = null) {
+		String(v).split(/\r\n|\n\r?/g).forEach((ln, i) => {
+			this.writeRaw(((i ? continuationPrefix : null) ?? linePrefix) + ln + '\n');
+		});
+	}
+}
+
+class Dots {
+	constructor(output) {
+		this.output = output;
+		this.lineLimit = 50;
+		this.blockSep = 10;
+		this.count = 0;
+		this.eventListener = this.eventListener.bind(this);
+	}
+
+	eventListener(event) {
+		if (event.type === 'complete') {
+			if (!event.parent) {
+				// whole test run complete
+				this.output.writeRaw('\n\n');
+				return;
+			}
+			const { summary } = event;
+			if (event.isBlock) {
+				if (summary.count || (!summary.error && !summary.fail)) {
+					// do not care about block-level events unless they failed without running any children
+					return;
+				}
+			}
+			let marker = null;
+			if (summary.error) {
+				marker = this.output.redBack('!');
+			} else if (summary.fail) {
+				marker = this.output.redBack('X');
+			} else if (summary.pass) {
+				marker = this.output.green('*');
+			} else if (summary.skip) {
+				marker = this.output.yellow('-');
+			} else {
+				marker = this.output.yellow('-');
+			}
+			this.output.writeRaw(marker);
+			++this.count;
+			if ((this.count % this.lineLimit) === 0) {
+				this.output.writeRaw('\n');
+			} else if ((this.count % this.blockSep) === 0) {
+				this.output.writeRaw(' ');
+			}
+		}
+	}
+}
+
+class Full$1 {
+	constructor(output) {
+		this.output = output;
+	}
+
+	_printerr(prefix, err, indent) {
+		this.output.write(
+			this.output.red(prefix + this.output.bold(err.message)) +
+			this.output.red(err.stackList.map((s) => `\n at ${s.location}`).join('')),
+			indent,
+		);
+	}
+
+	_print(result, indent) {
+		const { summary } = result;
+		let marker = '';
+		if (summary.error) {
+			marker = this.output.redBack(' ERRO ', '[ERRO]');
+		} else if (summary.fail) {
+			marker = this.output.redBack(' FAIL ', '[FAIL]');
+		} else if (summary.run) {
+			marker = this.output.blueBack(' .... ', '[....]');
+		} else if (summary.pass) {
+			marker = this.output.greenBack(' PASS ', '[PASS]');
+		} else if (summary.skip) {
+			marker = this.output.yellowBack(' SKIP ', '[SKIP]');
+		} else {
+			marker = this.output.yellowBack(' NONE ', '[NONE]');
+		}
+		const resultSpace = '      ';
+
+		const isBlock = (result.children.length > 0 || !summary.count);
+		const isSlow = (summary.duration > 500);
+
+		const display = (result.label !== null);
+		const formattedLabel = isBlock ? this.output.bold(this.output.cyan(result.label)) : result.label;
+
+		const duration = `[${summary.duration}ms]`;
+		const formattedDuration = isSlow ? this.output.yellow(duration) : this.output.faint(duration);
+
+		if (display) {
+			this.output.write(
+				`${formattedLabel} ${formattedDuration}`,
+				`${marker} ${indent}`,
+				`${resultSpace} ${indent}`,
+			);
+		}
+		const infoIndent = `${resultSpace} ${indent}  `;
+		if (result.output && (summary.error || summary.fail)) {
+			this.output.write(this.output.blue(result.output), infoIndent);
+		}
+		result.errors.forEach((err) => {
+			this._printerr('Error: ', err, infoIndent);
+		});
+		result.failures.forEach((err) => {
+			this._printerr('Failure: ', err, infoIndent);
+		});
+		const nextIndent = indent + (display ? '  ' : '');
+		result.children.forEach((child) => this._print(child, nextIndent));
+	}
+
+	report(result) {
+		this._print(result, '');
+
+		if (!result.summary.count) {
+			this.output.write(this.output.yellow('NO TESTS FOUND'));
+		}
+
+		this.output.write('');
+	}
+}
+
+class Full {
+	constructor(output) {
+		this.output = output;
+	}
+
+	report(result) {
+		const { summary } = result;
+
+		this.output.write(`Total:    ${summary.count || 0}`);
+		this.output.write(`Pass:     ${summary.pass || 0}`);
+		this.output.write(`Errors:   ${summary.error || 0}`);
+		this.output.write(`Failures: ${summary.fail || 0}`);
+		this.output.write(`Skipped:  ${summary.skip || 0}`);
+		this.output.write(`Duration: ${summary.duration}ms`);
+		this.output.write('');
+
+		if (summary.error) {
+			this.output.write(this.output.red('ERROR'));
+		} else if (summary.fail) {
+			this.output.write(this.output.red('FAIL'));
+		} else if (summary.pass) {
+			this.output.write(this.output.green('PASS'));
+		} else {
+			this.output.write(this.output.yellow('NO TESTS RUN'));
+		}
+	}
+}
+
 function standardRunner() {
 	const builder = new Runner.Builder()
 		.addPlugin(describe())
@@ -1995,12 +2115,12 @@ const config = argparse.parse(process$1.argv);
 const scanDirs = config.rest.map((path) => resolve(process$1.cwd(), path));
 const paths = findPathsMatching(scanDirs, config.pathsInclude, config.pathsExclude);
 
-const stdout = new outputs.Writer(process$1.stdout);
-const stderr = new outputs.Writer(process$1.stderr);
-const liveReporter = new reporters.Dots(stderr);
+const stdout = new Writer(process$1.stdout);
+const stderr = new Writer(process$1.stderr);
+const liveReporter = new Dots(stderr);
 const finalReporters = [
-	new reporters.Full(stdout),
-	new reporters.Summary(stdout),
+	new Full$1(stdout),
+	new Full(stdout),
 ];
 
 const runner = config.browser ? browserRunner : nodeRunner;

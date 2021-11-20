@@ -2,7 +2,7 @@
 
 import process from 'process';
 import { resolve } from 'path';
-import { outputs, reporters } from '../index.mjs';
+import { outputs, reporters } from '../lean-test.mjs';
 import findPathsMatching from './filesystem/findPathsMatching.mjs';
 import ArgumentParser from './ArgumentParser.mjs';
 import browserRunner from './browser/browserRunner.mjs';

@@ -6,10 +6,9 @@ import process from 'process';
 const CHARSET = '; charset=utf-8';
 
 export default class Server {
-	constructor(workingDir, index, leanTestBundle) {
-		this.workingDir = workingDir;
+	constructor(index, directories) {
 		this.index = index;
-		this.leanTestBundle = leanTestBundle;
+		this.directories = directories;
 		this.callback = null;
 		this.mimes = new Map([
 			['js', 'application/javascript'],
@@ -29,7 +28,7 @@ export default class Server {
 	}
 
 	getContentType(ext) {
-		return (this.mimes.get(ext) || 'text/plain') + CHARSET;
+		return (this.mimes.get(ext.toLowerCase()) || 'text/plain') + CHARSET;
 	}
 
 	async _handleRequest(req, res) {
@@ -52,33 +51,33 @@ export default class Server {
 			if (req.url.includes('..')) {
 				throw new HttpError(400, 'Invalid resource path');
 			}
-			let path;
-			if (req.url === '/lean-test.mjs') {
-				path = this.leanTestBundle;
-			} else {
-				path = resolve(this.workingDir, req.url.substr(1));
-				if (!path.startsWith(this.workingDir)) {
-					throw new HttpError(400, 'Invalid resource path');
+			for (const [base, dir] of this.directories) {
+				if (req.url.startsWith(base)) {
+					const path = resolve(dir, req.url.substr(base.length));
+					if (!path.startsWith(dir)) {
+						throw new HttpError(400, 'Invalid resource path');
+					}
+					try {
+						const data = await readFile(path);
+						const ext = path.substr(path.lastIndexOf('.') + 1);
+						res.setHeader('Content-Type', this.getContentType(ext));
+						res.end(data);
+						return;
+					} catch (e) {
+						throw new HttpError(404, 'Not Found');
+					}
 				}
 			}
-
-			try {
-				const data = await readFile(path);
-				const ext = path.substr(path.lastIndexOf('.') + 1).toLowerCase();
-				res.setHeader('Content-Type', this.getContentType(ext));
-				res.end(data);
-			} catch (e) {
-				throw new HttpError(404, 'Not Found');
-			}
+			throw new HttpError(404, 'Not Found');
 		} catch (e) {
-			if (!this.ignore404.includes(req.url)) {
-				console.warn(`Error while serving ${req.url}`);
-			}
 			let status = 500;
 			let message = 'An internal error occurred';
 			if (typeof e === 'object' && e.message) {
 				status = e.status || 400;
 				message = e.message;
+			}
+			if (!this.ignore404.includes(req.url)) {
+				console.warn(`Error while serving ${req.url} - returning ${status} ${message}`);
 			}
 			res.statusCode = status;
 			res.setHeader('Content-Type', this.getContentType('txt'));
@@ -93,6 +92,10 @@ export default class Server {
 	async listen(port, hostname) {
 		await new Promise((resolve) => this.server.listen(port, hostname, resolve));
 		const addr = this.server.address();
+		if (typeof addr !== 'object') {
+			await this.close();
+			throw new Exception(`Server.address unexpectedly returned ${addr}; aborting`);
+		}
 		this.hostname = addr.address;
 		this.port = addr.port;
 		process.addListener('SIGINT', this.close);

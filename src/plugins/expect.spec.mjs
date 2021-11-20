@@ -1,6 +1,6 @@
 import testRunner from '../test-helpers/testRunner.mjs';
 import sleep from '../test-helpers/sleep.mjs';
-import { core } from '../matchers/index.mjs';
+import * as core from '../matchers/core.mjs';
 import expect from './expect.mjs';
 
 const MY_CUSTOM_SAME_MATCHER = (expected) => (actual) => {

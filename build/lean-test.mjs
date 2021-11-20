@@ -1548,16 +1548,18 @@ class Dots {
 				this.output.writeRaw('\n\n');
 				return;
 			}
-			if (event.isBlock) {
-				// do not care about block-level events
-				return;
-			}
 			const { summary } = event;
+			if (event.isBlock) {
+				if (summary.count || (!summary.error && !summary.fail)) {
+					// do not care about block-level events unless they failed without running any children
+					return;
+				}
+			}
 			let marker = null;
 			if (summary.error) {
-				marker = this.output.red('!');
+				marker = this.output.redBack('!');
 			} else if (summary.fail) {
-				marker = this.output.red('X');
+				marker = this.output.redBack('X');
 			} else if (summary.pass) {
 				marker = this.output.green('*');
 			} else if (summary.skip) {
