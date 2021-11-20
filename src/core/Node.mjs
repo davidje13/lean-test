@@ -2,6 +2,7 @@ import ResultStage from './ResultStage.mjs';
 import Result from './Result.mjs';
 
 export const RUN_INTERCEPTORS = Symbol();
+export const LISTENER = Symbol();
 
 function updateArgs(oldArgs, newArgs) {
 	if (!newArgs.length) {
@@ -67,11 +68,18 @@ export default class Node {
 		Object.freeze(this);
 	}
 
-	run(context, parentResult = null) {
+	async run(context, parentResult = null) {
 		const label = this.config.display ? `${this.config.display}: ${this.options.name}` : null;
-		return Result.of(
+		const listener = context[LISTENER];
+		const result = await Result.of(
 			label,
 			(result) => {
+				listener?.({
+					type: 'begin',
+					time: Date.now(),
+					isBlock: Boolean(this.config.isBlock),
+					...result.info,
+				});
 				if (this.discoveryStage) {
 					result.attachStage({ fail: true, time: true }, this.discoveryStage);
 				}
@@ -79,5 +87,12 @@ export default class Node {
 			},
 			{ parent: parentResult },
 		);
+		listener?.({
+			type: 'complete',
+			time: Date.now(),
+			isBlock: Boolean(this.config.isBlock),
+			...result,
+		});
+		return result;
 	}
 }

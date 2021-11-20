@@ -14,7 +14,7 @@ run() {
 
 test() {
 	printf "Running test: $1";
-	RESULT="$(run "$BASE_DIR/test/$1" "$3" 2>&1 | sed -e 's/[0-9][0-9]*ms/xx/g' -e 's/ *$//')";
+	RESULT="$(run "$BASE_DIR/test/$1" "$3" 2>/dev/null | sed -e 's/[0-9][0-9]*ms/xx/g' -e 's/ *$//')";
 	EXPECTED="$(cat "$BASE_DIR/test/$1/${2:-expected.txt}")";
 	if [ "$RESULT" != "$EXPECTED" ]; then
 		echo " [FAIL]";

@@ -1,4 +1,4 @@
-import Node, { RUN_INTERCEPTORS } from './Node.mjs';
+import Node, { RUN_INTERCEPTORS, LISTENER } from './Node.mjs';
 import ExtensionStore from './ExtensionStore.mjs';
 import ResultStage from './ResultStage.mjs';
 import StackScope from './StackScope.mjs';
@@ -11,11 +11,13 @@ export default class Runner {
 		Object.freeze(this);
 	}
 
-	async run() {
+	run(listener = null) {
 		// enable long stack trace so that we can resolve scopes, cut down displayed traces, etc.
 		Error.stackTraceLimit = 50;
-		const result = await this.baseNode.run(this.baseContext);
-		return result.build();
+		return this.baseNode.run(Object.freeze({
+			...this.baseContext,
+			[LISTENER]: listener,
+		}));
 	}
 }
 

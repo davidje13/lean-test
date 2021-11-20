@@ -99,7 +99,7 @@ export default ({ order = -1 } = {}) => (builder) => {
 			if (target.length) {
 				if (IS_BROWSER) {
 					// This is not perfectly representative of what would be logged, but should be generally good enough for testing
-					result.addOutput(target.map((i) => i.args.map((a) => String(a)).join(' ')).join('\n'));
+					result.addOutput(target.map((i) => i.args.map((a) => String(a)).join(' ') + '\n').join(''));
 				} else {
 					result.addOutput(Buffer.concat(target.map((i) => i.chunk)).toString('utf8'));
 				}

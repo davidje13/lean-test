@@ -4,6 +4,7 @@ import * as plugins from './plugins/index.mjs';
 
 export { default as TestAssertionError } from './core/TestAssertionError.mjs';
 export { default as TestAssumptionError } from './core/TestAssumptionError.mjs';
+export * as outputs from './outputs/index.mjs';
 export * as reporters from './reporters/index.mjs';
 
 export {

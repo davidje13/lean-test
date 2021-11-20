@@ -4,6 +4,7 @@
 [PASS]     test: hidden if successful [xx]
 [FAIL]     test: displayed if unsuccessful [xx]
              should be seen
+
              Failure: oops
               at browser.spec.mjs:15:7
 [ERRO] suite: stacktrace.spec.mjs [xx]

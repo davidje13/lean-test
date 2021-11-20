@@ -1,6 +1,7 @@
 import { Runner } from '../index.mjs';
 import test from '../plugins/test.mjs';
-import TextReporter from '../reporters/text/TextReporter.mjs';
+import Writer from '../outputs/Writer.mjs';
+import FullReporter from '../reporters/Full.mjs';
 
 export default async function testRunner(plugins, expectedResult, block) {
 	const builder = new Runner.Builder();
@@ -15,7 +16,7 @@ export default async function testRunner(plugins, expectedResult, block) {
 
 	const match = equals(looseExpected)(result.summary);
 	if (!match.success) {
-		new TextReporter(process.stdout, false).report(result);
+		new FullReporter(new Writer(process.stdout, false)).report(result);
 		fail(match.message);
 	}
 	return result;

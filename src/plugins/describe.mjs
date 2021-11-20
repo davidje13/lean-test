@@ -38,7 +38,7 @@ export default (fnName = 'describe', {
 } = {}) => (builder) => {
 	builder.addNodeType(fnName, OPTIONS_FACTORY, {
 		display: display ?? fnName,
-		isBlock: true, // this is also checked by lifecycle to decide which hooks to run
+		isBlock: true, // this is also checked by lifecycle to decide which hooks to run and events for reporters to check
 		[TEST_FN_NAME]: testFn,
 		[SUB_FN_NAME]: subFn || fnName,
 		discovery: DISCOVERY,

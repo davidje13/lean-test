@@ -1,4 +1,5 @@
 import ResultStage from './ResultStage.mjs';
+let nextID = 0;
 
 const filterSummary = ({ tangible, time, fail }, summary) => ({
 	count: tangible ? summary.count : 0,
@@ -12,6 +13,7 @@ const filterSummary = ({ tangible, time, fail }, summary) => ({
 
 export default class Result {
 	constructor(label, parent) {
+		this.id = (++nextID);
 		this.label = label;
 		this.parent = parent;
 		this.children = [];
@@ -20,6 +22,7 @@ export default class Result {
 		this.forcedChildSummary = null;
 		this.cancelled = Boolean(parent?.cancelled);
 		parent?.children?.push(this);
+		this.buildCache = null;
 	}
 
 	createChild(label, fn) {
@@ -59,7 +62,11 @@ export default class Result {
 		this.forcedChildSummary = s;
 	}
 
-	getSummary(_flatChildSummaries) {
+	getCurrentSummary() {
+		if (this.buildCache) {
+			return this.buildCache.summary;
+		}
+
 		const stagesSummary = this.stages
 			.map(({ config, stage }) => filterSummary(config, stage.getSummary()))
 			.reduce(combineSummary, {});
@@ -70,7 +77,7 @@ export default class Result {
 
 		const childSummary = (
 			this.forcedChildSummary ||
-			(_flatChildSummaries || this.children.map((child) => child.getSummary())).reduce(combineSummary, {})
+			this.children.map((child) => child.getCurrentSummary()).reduce(combineSummary, {})
 		);
 
 		return combineSummary(
@@ -80,33 +87,48 @@ export default class Result {
 	}
 
 	hasFailed() {
-		const summary = this.getSummary();
+		const summary = this.getCurrentSummary();
 		return Boolean(summary.error || summary.fail);
 	}
 
+	get info() {
+		return {
+			id: this.id,
+			parent: this.parent?.id ?? null,
+			label: this.label,
+		};
+	}
+
 	build() {
+		if (this.buildCache) {
+			return this.buildCache;
+		}
+
 		const errors = [];
 		const failures = [];
 		this.stages.forEach(({ stage }) => errors.push(...stage.errors));
 		this.stages.forEach(({ stage }) => failures.push(...stage.failures));
 		const children = this.children.map((child) => child.build());
-		const summary = this.getSummary(children.map((child) => child.summary));
-		return {
-			label: this.label,
+		const summary = this.getCurrentSummary();
+		this.buildCache = {
+			...this.info,
 			summary,
 			errors: errors.map(buildError),
 			failures: failures.map(buildError),
 			output: this.output,
 			children,
 		};
+		Object.freeze(this.stages);
+		Object.freeze(this.children);
+		Object.freeze(this);
+		return this.buildCache;
 	}
 }
 
 Result.of = async (label, fn, { parent = null } = {}) => {
 	const result = new Result(label, parent);
 	await result.createStage({ fail: true, time: true }, 'core', fn);
-	Object.freeze(result);
-	return result;
+	return result.build();
 };
 
 function buildError(err) {

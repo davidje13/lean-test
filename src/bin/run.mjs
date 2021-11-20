@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-import { cwd, argv, stdout, exit } from 'process';
+import process from 'process';
 import { resolve } from 'path';
-import { reporters } from '../index.mjs';
+import { outputs, reporters } from '../index.mjs';
 import findPathsMatching from './filesystem/findPathsMatching.mjs';
 import ArgumentParser from './ArgumentParser.mjs';
 import browserRunner from './browser/browserRunner.mjs';
@@ -19,18 +19,27 @@ const argparse = new ArgumentParser({
 	rest: { names: ['scan', null], type: 'array', default: ['.'] }
 });
 
-const config = argparse.parse(argv);
+const config = argparse.parse(process.argv);
 
-const scanDirs = config.rest.map((path) => resolve(cwd(), path));
+const scanDirs = config.rest.map((path) => resolve(process.cwd(), path));
 const paths = findPathsMatching(scanDirs, config.pathsInclude, config.pathsExclude);
-const out = new reporters.TextReporter(stdout);
+
+const stdout = new outputs.Writer(process.stdout);
+const stderr = new outputs.Writer(process.stderr);
+const liveReporter = new reporters.Dots(stderr);
+const finalReporters = [
+	new reporters.Full(stdout),
+	new reporters.Summary(stdout),
+];
 
 const runner = config.browser ? browserRunner : nodeRunner;
-const result = await runner(config, paths);
-out.report(result);
+const result = await runner(config, paths, liveReporter.eventListener);
+finalReporters.forEach((reporter) => reporter.report(result));
+
+// TODO: warn or error if any node contains 0 tests
 
 if (result.summary.error || result.summary.fail || !result.summary.pass) {
-	exit(1);
+	process.exit(1);
 } else {
-	exit(0); // explicitly exit to avoid hanging on dangling promises
+	process.exit(0); // explicitly exit to avoid hanging on dangling promises
 }

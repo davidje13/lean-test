@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-import process$1, { argv, cwd, stdout, exit } from 'process';
+import process$1 from 'process';
 import { join, resolve, dirname, relative } from 'path';
-import { reporters } from '../lean-test.mjs';
+import { outputs, reporters } from '../lean-test.mjs';
 import fs, { readFile } from 'fs/promises';
 import { spawn } from 'child_process';
 import { createServer } from 'http';
@@ -281,15 +281,25 @@ class HttpError extends Error {
 	}
 }
 
-async function browserRunner(config, paths) {
+async function browserRunner(config, paths, listener) {
 	const index = await buildIndex(config, paths);
 	const leanTestPath = resolve(dirname(process$1.argv[1]), '../../build/lean-test.mjs');
 	const server = new Server(process$1.cwd(), index, leanTestPath);
-	const resultPromise = new Promise((res) => { server.callback = res; });
+	const resultPromise = new Promise((res) => {
+		server.callback = ({ events }) => {
+			for (const event of events) {
+				if (event.type === 'browser-end') {
+					res(event.result);
+				} else {
+					listener?.(event);
+				}
+			}
+		};
+	});
 	await server.listen(Number(config.port), config.host);
 
 	const url = server.baseurl();
-	const { result } = await run(launchBrowser(config.browser, url), () => resultPromise);
+	const result = await run(launchBrowser(config.browser, url), () => resultPromise);
 	server.close();
 
 	return result;
@@ -370,6 +380,54 @@ const INDEX = `<!DOCTYPE html>
 <script type="module">
 import { standardRunner } from '/lean-test.mjs';
 
+class Aggregator {
+	constructor(next) {
+		this.queue = [];
+		this.timer = null;
+		this.next = next;
+		this.emptyCallback = null;
+		this.invoke = this.invoke.bind(this);
+		this._invoke = this._invoke.bind(this);
+	}
+
+	invoke(value) {
+		this.queue.push(value);
+		if (this.timer === null) {
+			this.timer = setTimeout(this._invoke, 0);
+		}
+	}
+
+	wait() {
+		if (!this.timer) {
+			return Promise.resolve();
+		}
+		return new Promise((resolve) => {
+			this.emptyCallback = resolve;
+		});
+	}
+
+	async _invoke() {
+		const current = this.queue.slice();
+		this.queue.length = 0;
+		try {
+			await this.next(current);
+		} catch (e) {
+			console.error('error during throttled call', e);
+		}
+		if (this.queue.length) {
+			this.timer = setTimeout(this._invoke, 0);
+		} else {
+			this.timer = null;
+			this.emptyCallback?.();
+		}
+	}
+}
+
+const eventDispatcher = new Aggregator((events) => fetch('/', {
+	method: 'POST',
+	body: JSON.stringify({ events }),
+}));
+
 const builder = standardRunner()
 	.useParallelDiscovery(false)
 	.useParallelSuites(/*USE_PARALLEL_SUITES*/);
@@ -377,10 +435,11 @@ const builder = standardRunner()
 /*SUITES*/
 
 const runner = await builder.build();
-const result = await runner.run();
+const result = await runner.run(eventDispatcher.invoke);
 
-await fetch('/', { method: 'POST', body: JSON.stringify({ result }) });
-document.body.innerText = 'Test complete.';
+document.body.innerText = 'Test run complete.';
+eventDispatcher.invoke({ type: 'browser-end', result });
+await eventDispatcher.wait();
 window.close();
 </script>
 </head>
@@ -660,6 +719,8 @@ ResultStage.of = async (label, fn, { errorStackSkipFrames = 0, context = null } 
 
 ResultStage.getContext = () => RESULT_STAGE_SCOPE.get();
 
+let nextID = 0;
+
 const filterSummary = ({ tangible, time, fail }, summary) => ({
 	count: tangible ? summary.count : 0,
 	run: tangible ? summary.run : 0,
@@ -672,6 +733,7 @@ const filterSummary = ({ tangible, time, fail }, summary) => ({
 
 class Result {
 	constructor(label, parent) {
+		this.id = (++nextID);
 		this.label = label;
 		this.parent = parent;
 		this.children = [];
@@ -680,6 +742,7 @@ class Result {
 		this.forcedChildSummary = null;
 		this.cancelled = Boolean(parent?.cancelled);
 		parent?.children?.push(this);
+		this.buildCache = null;
 	}
 
 	createChild(label, fn) {
@@ -719,7 +782,11 @@ class Result {
 		this.forcedChildSummary = s;
 	}
 
-	getSummary(_flatChildSummaries) {
+	getCurrentSummary() {
+		if (this.buildCache) {
+			return this.buildCache.summary;
+		}
+
 		const stagesSummary = this.stages
 			.map(({ config, stage }) => filterSummary(config, stage.getSummary()))
 			.reduce(combineSummary, {});
@@ -730,7 +797,7 @@ class Result {
 
 		const childSummary = (
 			this.forcedChildSummary ||
-			(_flatChildSummaries || this.children.map((child) => child.getSummary())).reduce(combineSummary, {})
+			this.children.map((child) => child.getCurrentSummary()).reduce(combineSummary, {})
 		);
 
 		return combineSummary(
@@ -740,33 +807,48 @@ class Result {
 	}
 
 	hasFailed() {
-		const summary = this.getSummary();
+		const summary = this.getCurrentSummary();
 		return Boolean(summary.error || summary.fail);
 	}
 
+	get info() {
+		return {
+			id: this.id,
+			parent: this.parent?.id ?? null,
+			label: this.label,
+		};
+	}
+
 	build() {
+		if (this.buildCache) {
+			return this.buildCache;
+		}
+
 		const errors = [];
 		const failures = [];
 		this.stages.forEach(({ stage }) => errors.push(...stage.errors));
 		this.stages.forEach(({ stage }) => failures.push(...stage.failures));
 		const children = this.children.map((child) => child.build());
-		const summary = this.getSummary(children.map((child) => child.summary));
-		return {
-			label: this.label,
+		const summary = this.getCurrentSummary();
+		this.buildCache = {
+			...this.info,
 			summary,
 			errors: errors.map(buildError),
 			failures: failures.map(buildError),
 			output: this.output,
 			children,
 		};
+		Object.freeze(this.stages);
+		Object.freeze(this.children);
+		Object.freeze(this);
+		return this.buildCache;
 	}
 }
 
 Result.of = async (label, fn, { parent = null } = {}) => {
 	const result = new Result(label, parent);
 	await result.createStage({ fail: true, time: true }, 'core', fn);
-	Object.freeze(result);
-	return result;
+	return result.build();
 };
 
 function buildError(err) {
@@ -785,6 +867,7 @@ function combineSummary(a, b) {
 }
 
 const RUN_INTERCEPTORS = Symbol();
+const LISTENER = Symbol();
 
 function updateArgs(oldArgs, newArgs) {
 	if (!newArgs.length) {
@@ -850,11 +933,18 @@ class Node {
 		Object.freeze(this);
 	}
 
-	run(context, parentResult = null) {
+	async run(context, parentResult = null) {
 		const label = this.config.display ? `${this.config.display}: ${this.options.name}` : null;
-		return Result.of(
+		const listener = context[LISTENER];
+		const result = await Result.of(
 			label,
 			(result) => {
+				listener?.({
+					type: 'begin',
+					time: Date.now(),
+					isBlock: Boolean(this.config.isBlock),
+					...result.info,
+				});
 				if (this.discoveryStage) {
 					result.attachStage({ fail: true, time: true }, this.discoveryStage);
 				}
@@ -862,6 +952,13 @@ class Node {
 			},
 			{ parent: parentResult },
 		);
+		listener?.({
+			type: 'complete',
+			time: Date.now(),
+			isBlock: Boolean(this.config.isBlock),
+			...result,
+		});
+		return result;
 	}
 }
 
@@ -938,7 +1035,7 @@ var describe = (fnName = 'describe', {
 } = {}) => (builder) => {
 	builder.addNodeType(fnName, OPTIONS_FACTORY$1, {
 		display: display ?? fnName,
-		isBlock: true, // this is also checked by lifecycle to decide which hooks to run
+		isBlock: true, // this is also checked by lifecycle to decide which hooks to run and events for reporters to check
 		[TEST_FN_NAME]: testFn,
 		[SUB_FN_NAME]: subFn || fnName,
 		discovery: DISCOVERY,
@@ -966,11 +1063,13 @@ class Runner {
 		Object.freeze(this);
 	}
 
-	async run() {
+	run(listener = null) {
 		// enable long stack trace so that we can resolve scopes, cut down displayed traces, etc.
 		Error.stackTraceLimit = 50;
-		const result = await this.baseNode.run(this.baseContext);
-		return result.build();
+		return this.baseNode.run(Object.freeze({
+			...this.baseContext,
+			[LISTENER]: listener,
+		}));
 	}
 }
 
@@ -1711,7 +1810,7 @@ var outputCaptor = ({ order = -1 } = {}) => (builder) => {
 			if (target.length) {
 				if (IS_BROWSER) {
 					// This is not perfectly representative of what would be logged, but should be generally good enough for testing
-					result.addOutput(target.map((i) => i.args.map((a) => String(a)).join(' ')).join('\n'));
+					result.addOutput(target.map((i) => i.args.map((a) => String(a)).join(' ') + '\n').join(''));
 				} else {
 					result.addOutput(Buffer.concat(target.map((i) => i.chunk)).toString('utf8'));
 				}
@@ -1742,7 +1841,7 @@ var repeat = ({ order = -3 } = {}) => (builder) => {
 				`repetition ${repetition + 1} of ${total}`,
 				(subResult) => next(context, subResult),
 			);
-			const subSummary = subResult.getSummary();
+			const subSummary = subResult.summary;
 			if (subSummary.error || subSummary.fail || !subSummary.pass) {
 				failureCount++;
 				if (!bestFailSummary || subSummary.pass > bestFailSummary.pass) {
@@ -1776,7 +1875,7 @@ var retry = ({ order = -2 } = {}) => (builder) => {
 				`attempt ${attempt + 1} of ${maxAttempts}`,
 				(subResult) => next(context, subResult),
 			);
-			const subSummary = subResult.getSummary();
+			const subSummary = subResult.summary;
 			result.overrideChildSummary(subSummary);
 			if (!subSummary.error && !subSummary.fail) {
 				break;
@@ -1863,7 +1962,7 @@ function standardRunner() {
 	return builder;
 }
 
-async function nodeRunner(config, paths) {
+async function nodeRunner(config, paths, listener) {
 	const builder = standardRunner()
 		.useParallelDiscovery(config.parallelDiscovery)
 		.useParallelSuites(config.parallelSuites);
@@ -1877,7 +1976,7 @@ async function nodeRunner(config, paths) {
 	}
 
 	const runner = await builder.build();
-	return runner.run();
+	return runner.run(listener);
 }
 
 const argparse = new ArgumentParser({
@@ -1891,18 +1990,27 @@ const argparse = new ArgumentParser({
 	rest: { names: ['scan', null], type: 'array', default: ['.'] }
 });
 
-const config = argparse.parse(argv);
+const config = argparse.parse(process$1.argv);
 
-const scanDirs = config.rest.map((path) => resolve(cwd(), path));
+const scanDirs = config.rest.map((path) => resolve(process$1.cwd(), path));
 const paths = findPathsMatching(scanDirs, config.pathsInclude, config.pathsExclude);
-const out = new reporters.TextReporter(stdout);
+
+const stdout = new outputs.Writer(process$1.stdout);
+const stderr = new outputs.Writer(process$1.stderr);
+const liveReporter = new reporters.Dots(stderr);
+const finalReporters = [
+	new reporters.Full(stdout),
+	new reporters.Summary(stdout),
+];
 
 const runner = config.browser ? browserRunner : nodeRunner;
-const result = await runner(config, paths);
-out.report(result);
+const result = await runner(config, paths, liveReporter.eventListener);
+finalReporters.forEach((reporter) => reporter.report(result));
+
+// TODO: warn or error if any node contains 0 tests
 
 if (result.summary.error || result.summary.fail || !result.summary.pass) {
-	exit(1);
+	process$1.exit(1);
 } else {
-	exit(0); // explicitly exit to avoid hanging on dangling promises
+	process$1.exit(0); // explicitly exit to avoid hanging on dangling promises
 }

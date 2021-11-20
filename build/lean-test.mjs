@@ -251,6 +251,8 @@ ResultStage.of = async (label, fn, { errorStackSkipFrames = 0, context = null } 
 
 ResultStage.getContext = () => RESULT_STAGE_SCOPE.get();
 
+let nextID = 0;
+
 const filterSummary = ({ tangible, time, fail }, summary) => ({
 	count: tangible ? summary.count : 0,
 	run: tangible ? summary.run : 0,
@@ -263,6 +265,7 @@ const filterSummary = ({ tangible, time, fail }, summary) => ({
 
 class Result {
 	constructor(label, parent) {
+		this.id = (++nextID);
 		this.label = label;
 		this.parent = parent;
 		this.children = [];
@@ -271,6 +274,7 @@ class Result {
 		this.forcedChildSummary = null;
 		this.cancelled = Boolean(parent?.cancelled);
 		parent?.children?.push(this);
+		this.buildCache = null;
 	}
 
 	createChild(label, fn) {
@@ -310,7 +314,11 @@ class Result {
 		this.forcedChildSummary = s;
 	}
 
-	getSummary(_flatChildSummaries) {
+	getCurrentSummary() {
+		if (this.buildCache) {
+			return this.buildCache.summary;
+		}
+
 		const stagesSummary = this.stages
 			.map(({ config, stage }) => filterSummary(config, stage.getSummary()))
 			.reduce(combineSummary, {});
@@ -321,7 +329,7 @@ class Result {
 
 		const childSummary = (
 			this.forcedChildSummary ||
-			(_flatChildSummaries || this.children.map((child) => child.getSummary())).reduce(combineSummary, {})
+			this.children.map((child) => child.getCurrentSummary()).reduce(combineSummary, {})
 		);
 
 		return combineSummary(
@@ -331,33 +339,48 @@ class Result {
 	}
 
 	hasFailed() {
-		const summary = this.getSummary();
+		const summary = this.getCurrentSummary();
 		return Boolean(summary.error || summary.fail);
 	}
 
+	get info() {
+		return {
+			id: this.id,
+			parent: this.parent?.id ?? null,
+			label: this.label,
+		};
+	}
+
 	build() {
+		if (this.buildCache) {
+			return this.buildCache;
+		}
+
 		const errors = [];
 		const failures = [];
 		this.stages.forEach(({ stage }) => errors.push(...stage.errors));
 		this.stages.forEach(({ stage }) => failures.push(...stage.failures));
 		const children = this.children.map((child) => child.build());
-		const summary = this.getSummary(children.map((child) => child.summary));
-		return {
-			label: this.label,
+		const summary = this.getCurrentSummary();
+		this.buildCache = {
+			...this.info,
 			summary,
 			errors: errors.map(buildError),
 			failures: failures.map(buildError),
 			output: this.output,
 			children,
 		};
+		Object.freeze(this.stages);
+		Object.freeze(this.children);
+		Object.freeze(this);
+		return this.buildCache;
 	}
 }
 
 Result.of = async (label, fn, { parent = null } = {}) => {
 	const result = new Result(label, parent);
 	await result.createStage({ fail: true, time: true }, 'core', fn);
-	Object.freeze(result);
-	return result;
+	return result.build();
 };
 
 function buildError(err) {
@@ -376,6 +399,7 @@ function combineSummary(a, b) {
 }
 
 const RUN_INTERCEPTORS = Symbol();
+const LISTENER = Symbol();
 
 function updateArgs(oldArgs, newArgs) {
 	if (!newArgs.length) {
@@ -441,11 +465,18 @@ class Node {
 		Object.freeze(this);
 	}
 
-	run(context, parentResult = null) {
+	async run(context, parentResult = null) {
 		const label = this.config.display ? `${this.config.display}: ${this.options.name}` : null;
-		return Result.of(
+		const listener = context[LISTENER];
+		const result = await Result.of(
 			label,
 			(result) => {
+				listener?.({
+					type: 'begin',
+					time: Date.now(),
+					isBlock: Boolean(this.config.isBlock),
+					...result.info,
+				});
 				if (this.discoveryStage) {
 					result.attachStage({ fail: true, time: true }, this.discoveryStage);
 				}
@@ -453,6 +484,13 @@ class Node {
 			},
 			{ parent: parentResult },
 		);
+		listener?.({
+			type: 'complete',
+			time: Date.now(),
+			isBlock: Boolean(this.config.isBlock),
+			...result,
+		});
+		return result;
 	}
 }
 
@@ -529,7 +567,7 @@ var describe = (fnName = 'describe', {
 } = {}) => (builder) => {
 	builder.addNodeType(fnName, OPTIONS_FACTORY$1, {
 		display: display ?? fnName,
-		isBlock: true, // this is also checked by lifecycle to decide which hooks to run
+		isBlock: true, // this is also checked by lifecycle to decide which hooks to run and events for reporters to check
 		[TEST_FN_NAME]: testFn,
 		[SUB_FN_NAME]: subFn || fnName,
 		discovery: DISCOVERY,
@@ -557,11 +595,13 @@ class Runner {
 		Object.freeze(this);
 	}
 
-	async run() {
+	run(listener = null) {
 		// enable long stack trace so that we can resolve scopes, cut down displayed traces, etc.
 		Error.stackTraceLimit = 50;
-		const result = await this.baseNode.run(this.baseContext);
-		return result.build();
+		return this.baseNode.run(Object.freeze({
+			...this.baseContext,
+			[LISTENER]: listener,
+		}));
 	}
 }
 
@@ -1302,7 +1342,7 @@ var outputCaptor = ({ order = -1 } = {}) => (builder) => {
 			if (target.length) {
 				if (IS_BROWSER) {
 					// This is not perfectly representative of what would be logged, but should be generally good enough for testing
-					result.addOutput(target.map((i) => i.args.map((a) => String(a)).join(' ')).join('\n'));
+					result.addOutput(target.map((i) => i.args.map((a) => String(a)).join(' ') + '\n').join(''));
 				} else {
 					result.addOutput(Buffer.concat(target.map((i) => i.chunk)).toString('utf8'));
 				}
@@ -1333,7 +1373,7 @@ var repeat = ({ order = -3 } = {}) => (builder) => {
 				`repetition ${repetition + 1} of ${total}`,
 				(subResult) => next(context, subResult),
 			);
-			const subSummary = subResult.getSummary();
+			const subSummary = subResult.summary;
 			if (subSummary.error || subSummary.fail || !subSummary.pass) {
 				failureCount++;
 				if (!bestFailSummary || subSummary.pass > bestFailSummary.pass) {
@@ -1367,7 +1407,7 @@ var retry = ({ order = -2 } = {}) => (builder) => {
 				`attempt ${attempt + 1} of ${maxAttempts}`,
 				(subResult) => next(context, subResult),
 			);
-			const subSummary = subResult.getSummary();
+			const subSummary = subResult.summary;
 			result.overrideChildSummary(subSummary);
 			if (!subSummary.error && !subSummary.fail) {
 				break;
@@ -1431,7 +1471,7 @@ var timeout = ({ order = 1 } = {}) => (builder) => {
 	}, { order });
 };
 
-var index$1 = /*#__PURE__*/Object.freeze({
+var index$2 = /*#__PURE__*/Object.freeze({
 	__proto__: null,
 	describe: describe,
 	expect: expect,
@@ -1447,35 +1487,98 @@ var index$1 = /*#__PURE__*/Object.freeze({
 	timeout: timeout
 });
 
-class Output {
+class Writer {
 	constructor(writer, forceTTY = null) {
 		this.writer = writer;
-		if (forceTTY ?? writer.isTTY) {
-			this.colour = (index) => (v) => `\u001B[${index}m${v}\u001B[0m`;
+		this.dynamic = forceTTY ?? writer.isTTY;
+		if (this.dynamic) {
+			this.colour = (...vs) => {
+				const prefix = '\u001B[' + vs.join(';') + 'm';
+				return (v) => `${prefix}${v}\u001B[0m`;
+			};
 		} else {
-			this.colour = () => (v) => v;
+			this.colour = () => (v, fallback) => (fallback ?? v);
 		}
 		this.red = this.colour(31);
 		this.green = this.colour(32);
 		this.yellow = this.colour(33);
 		this.blue = this.colour(34);
+		this.purple = this.colour(35);
+		this.cyan = this.colour(36);
+		this.gray = this.colour(37);
+		this.redBack = this.colour(41, 38, 5, 231);
+		this.greenBack = this.colour(42, 38, 5, 231);
+		this.yellowBack = this.colour(43, 38, 5, 231);
+		this.blueBack = this.colour(44, 38, 5, 231);
+		this.purpleBack = this.colour(45, 38, 5, 231);
+		this.cyanBack = this.colour(46, 38, 5, 231);
+		this.grayBack = this.colour(47, 38, 5, 231);
 		this.bold = this.colour(1);
-	}
+		this.faint = this.colour(2);
 
-	writeRaw(v) {
-		this.writer.write(v);
+		// grab the write function so that nothing in the tests can intercept it
+		this.writeRaw = this.writer.write.bind(this.writer);
 	}
 
 	write(v, linePrefix = '', continuationPrefix = null) {
 		String(v).split(/\r\n|\n\r?/g).forEach((ln, i) => {
-			this.writer.write(((i ? continuationPrefix : null) ?? linePrefix) + ln + '\n');
+			this.writeRaw(((i ? continuationPrefix : null) ?? linePrefix) + ln + '\n');
 		});
 	}
 }
 
-class TextReporter {
-	constructor(writer, forceTTY = null) {
-		this.output = new Output(writer, forceTTY);
+var index$1 = /*#__PURE__*/Object.freeze({
+	__proto__: null,
+	Writer: Writer
+});
+
+class Dots {
+	constructor(output) {
+		this.output = output;
+		this.lineLimit = 50;
+		this.blockSep = 10;
+		this.count = 0;
+		this.eventListener = this.eventListener.bind(this);
+	}
+
+	eventListener(event) {
+		if (event.type === 'complete') {
+			if (!event.parent) {
+				// whole test run complete
+				this.output.writeRaw('\n\n');
+				return;
+			}
+			if (event.isBlock) {
+				// do not care about block-level events
+				return;
+			}
+			const { summary } = event;
+			let marker = null;
+			if (summary.error) {
+				marker = this.output.red('!');
+			} else if (summary.fail) {
+				marker = this.output.red('X');
+			} else if (summary.pass) {
+				marker = this.output.green('*');
+			} else if (summary.skip) {
+				marker = this.output.yellow('-');
+			} else {
+				marker = this.output.yellow('-');
+			}
+			this.output.writeRaw(marker);
+			++this.count;
+			if ((this.count % this.lineLimit) === 0) {
+				this.output.writeRaw('\n');
+			} else if ((this.count % this.blockSep) === 0) {
+				this.output.writeRaw(' ');
+			}
+		}
+	}
+}
+
+class Full$1 {
+	constructor(output) {
+		this.output = output;
 	}
 
 	_printerr(prefix, err, indent) {
@@ -1487,27 +1590,35 @@ class TextReporter {
 	}
 
 	_print(result, indent) {
-		const { label, summary } = result;
-		const display = (label !== null);
+		const { summary } = result;
 		let marker = '';
 		if (summary.error) {
-			marker = this.output.red('[ERRO]');
+			marker = this.output.redBack(' ERRO ', '[ERRO]');
 		} else if (summary.fail) {
-			marker = this.output.red('[FAIL]');
+			marker = this.output.redBack(' FAIL ', '[FAIL]');
 		} else if (summary.run) {
-			marker = this.output.blue('[....]');
+			marker = this.output.blueBack(' .... ', '[....]');
 		} else if (summary.pass) {
-			marker = this.output.green('[PASS]');
+			marker = this.output.greenBack(' PASS ', '[PASS]');
 		} else if (summary.skip) {
-			marker = this.output.yellow('[SKIP]');
+			marker = this.output.yellowBack(' SKIP ', '[SKIP]');
 		} else {
-			marker = this.output.yellow('[NONE]');
+			marker = this.output.yellowBack(' NONE ', '[NONE]');
 		}
 		const resultSpace = '      ';
 
+		const isBlock = (result.children.length > 0 || !summary.count);
+		const isSlow = (summary.duration > 500);
+
+		const display = (result.label !== null);
+		const formattedLabel = isBlock ? this.output.bold(this.output.cyan(result.label)) : result.label;
+
+		const duration = `[${summary.duration}ms]`;
+		const formattedDuration = isSlow ? this.output.yellow(duration) : this.output.faint(duration);
+
 		if (display) {
 			this.output.write(
-				`${label} [${summary.duration}ms]`,
+				`${formattedLabel} ${formattedDuration}`,
 				`${marker} ${indent}`,
 				`${resultSpace} ${indent}`,
 			);
@@ -1527,16 +1638,24 @@ class TextReporter {
 	}
 
 	report(result) {
-		const { summary } = result;
-
 		this._print(result, '');
 
-		if (!summary.count) {
+		if (!result.summary.count) {
 			this.output.write(this.output.yellow('NO TESTS FOUND'));
-			return;
 		}
 
 		this.output.write('');
+	}
+}
+
+class Full {
+	constructor(output) {
+		this.output = output;
+	}
+
+	report(result) {
+		const { summary } = result;
+
 		this.output.write(`Total:    ${summary.count || 0}`);
 		this.output.write(`Pass:     ${summary.pass || 0}`);
 		this.output.write(`Errors:   ${summary.error || 0}`);
@@ -1544,8 +1663,6 @@ class TextReporter {
 		this.output.write(`Skipped:  ${summary.skip || 0}`);
 		this.output.write(`Duration: ${summary.duration}ms`);
 		this.output.write('');
-
-		// TODO: warn or error if any node contains 0 tests
 
 		if (summary.error) {
 			this.output.write(this.output.red('ERROR'));
@@ -1561,7 +1678,9 @@ class TextReporter {
 
 var index = /*#__PURE__*/Object.freeze({
 	__proto__: null,
-	TextReporter: TextReporter
+	Dots: Dots,
+	Full: Full$1,
+	Summary: Full
 });
 
 function standardRunner() {
@@ -1587,4 +1706,4 @@ function standardRunner() {
 	return builder;
 }
 
-export { Runner, TestAssertionError, TestAssumptionError, matchers, index$1 as plugins, index as reporters, standardRunner };
+export { Runner, TestAssertionError, TestAssumptionError, matchers, index$1 as outputs, index$2 as plugins, index as reporters, standardRunner };

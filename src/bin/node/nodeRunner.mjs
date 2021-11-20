@@ -1,6 +1,6 @@
 import { standardRunner } from '../../index.mjs';
 
-export default async function nodeRunner(config, paths) {
+export default async function nodeRunner(config, paths, listener) {
 	const builder = standardRunner()
 		.useParallelDiscovery(config.parallelDiscovery)
 		.useParallelSuites(config.parallelSuites);
@@ -14,5 +14,5 @@ export default async function nodeRunner(config, paths) {
 	}
 
 	const runner = await builder.build();
-	return runner.run();
+	return runner.run(listener);
 }

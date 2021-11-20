@@ -3,15 +3,25 @@ import { dirname, resolve, relative } from 'path';
 import process from 'process';
 import Server from './Server.mjs';
 
-export default async function browserRunner(config, paths) {
+export default async function browserRunner(config, paths, listener) {
 	const index = await buildIndex(config, paths);
 	const leanTestPath = resolve(dirname(process.argv[1]), '../../build/lean-test.mjs');
 	const server = new Server(process.cwd(), index, leanTestPath);
-	const resultPromise = new Promise((res) => { server.callback = res; });
+	const resultPromise = new Promise((res) => {
+		server.callback = ({ events }) => {
+			for (const event of events) {
+				if (event.type === 'browser-end') {
+					res(event.result);
+				} else {
+					listener?.(event);
+				}
+			}
+		};
+	});
 	await server.listen(Number(config.port), config.host);
 
 	const url = server.baseurl();
-	const { result } = await run(launchBrowser(config.browser, url), () => resultPromise);
+	const result = await run(launchBrowser(config.browser, url), () => resultPromise);
 	server.close();
 
 	return result;
@@ -92,6 +102,54 @@ const INDEX = `<!DOCTYPE html>
 <script type="module">
 import { standardRunner } from '/lean-test.mjs';
 
+class Aggregator {
+	constructor(next) {
+		this.queue = [];
+		this.timer = null;
+		this.next = next;
+		this.emptyCallback = null;
+		this.invoke = this.invoke.bind(this);
+		this._invoke = this._invoke.bind(this);
+	}
+
+	invoke(value) {
+		this.queue.push(value);
+		if (this.timer === null) {
+			this.timer = setTimeout(this._invoke, 0);
+		}
+	}
+
+	wait() {
+		if (!this.timer) {
+			return Promise.resolve();
+		}
+		return new Promise((resolve) => {
+			this.emptyCallback = resolve;
+		});
+	}
+
+	async _invoke() {
+		const current = this.queue.slice();
+		this.queue.length = 0;
+		try {
+			await this.next(current);
+		} catch (e) {
+			console.error('error during throttled call', e);
+		}
+		if (this.queue.length) {
+			this.timer = setTimeout(this._invoke, 0);
+		} else {
+			this.timer = null;
+			this.emptyCallback?.();
+		}
+	}
+}
+
+const eventDispatcher = new Aggregator((events) => fetch('/', {
+	method: 'POST',
+	body: JSON.stringify({ events }),
+}));
+
 const builder = standardRunner()
 	.useParallelDiscovery(false)
 	.useParallelSuites(/*USE_PARALLEL_SUITES*/);
@@ -99,10 +157,11 @@ const builder = standardRunner()
 /*SUITES*/
 
 const runner = await builder.build();
-const result = await runner.run();
+const result = await runner.run(eventDispatcher.invoke);
 
-await fetch('/', { method: 'POST', body: JSON.stringify({ result }) });
-document.body.innerText = 'Test complete.';
+document.body.innerText = 'Test run complete.';
+eventDispatcher.invoke({ type: 'browser-end', result });
+await eventDispatcher.wait();
 window.close();
 </script>
 </head>

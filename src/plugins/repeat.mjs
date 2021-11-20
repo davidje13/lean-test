@@ -20,7 +20,7 @@ export default ({ order = -3 } = {}) => (builder) => {
 				`repetition ${repetition + 1} of ${total}`,
 				(subResult) => next(context, subResult),
 			);
-			const subSummary = subResult.getSummary();
+			const subSummary = subResult.summary;
 			if (subSummary.error || subSummary.fail || !subSummary.pass) {
 				failureCount++;
 				if (!bestFailSummary || subSummary.pass > bestFailSummary.pass) {

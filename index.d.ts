@@ -86,5 +86,5 @@ export interface Reporter {
 }
 
 export const reporters: {
-	TextReporter: Reporter,
+	Full: Reporter,
 };

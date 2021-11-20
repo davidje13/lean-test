@@ -10,7 +10,7 @@ export default ({ order = -2 } = {}) => (builder) => {
 				`attempt ${attempt + 1} of ${maxAttempts}`,
 				(subResult) => next(context, subResult),
 			);
-			const subSummary = subResult.getSummary();
+			const subSummary = subResult.summary;
 			result.overrideChildSummary(subSummary);
 			if (!subSummary.error && !subSummary.fail) {
 				break;
