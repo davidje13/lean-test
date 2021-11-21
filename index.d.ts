@@ -1,90 +1,316 @@
-export class TestAssertionError extends Error {
-	constructor(message: string);
+type MaybeAsync<T> = Promise<T> | T;
+type AsyncChain<A, T> = (A extends Promise<any> ? Promise<T> : T);
+type LengthHaver = { length: number } | { size: number };
+
+interface WriteStream {
+	write: (value: string) => void;
+	isTTY: boolean;
 }
-
-export class TestAssumptionError extends Error {
-	constructor(message: string);
-}
-
-export class Runner {
-	run(): Promise<Result>;
-}
-
-export type Plugin = (builder: RunnerBuilder) => void;
-
-declare interface DiscoveryGlobals {
-}
-
-type RunInterceptor = () => (Promise<void> | void);
-type RunCondition = () => (Promise<boolean> | boolean);
-
-Runner.Builder = class RunnerBuilder {
-	constructor();
-	addPlugin(...plugins: Plugin): RunnerBuilder;
-	extend(key: string | Symbol, ...values: unknown): RunnerBuilder;
-	addRunInterceptor(fn: RunInterceptor, options?: { order?: number }): RunnerBuilder;
-	addRunCondition(fn: RunCondition): RunnerBuilder;
-	addSuite(name: string, content: (globals: DiscoveryGlobals) => (Promise<void> | void), options?: Record<string, unknown>): RunnerBuilder;
-	addSuite(suites: Record<string, (globals: DiscoveryGlobals) => (Promise<void> | void)>): RunnerBuilder;
-	addScope(defaults: { node?: unknown, context?: unknown }): Symbol;
-	addNodeType(key: string | Symbol, optionsFactory: (...args: unknown) => unknown, config: Record<string, unknown>): RunnerBuilder;
-	addNodeOption(name: string, options: Record<string, unknown>): RunnerBuilder;
-	addGlobals(globals: Record<string, unknown>): RunnerBuilder;
-	addMethods(methods: Record<string, (...args: unknown) => unknown>): RunnerBuilder;
-	build(): Promise<Runner>;
-};
 
 export interface MatcherResult {
 	success: boolean;
 	message: (() => string) | string;
 }
 
-export type Matcher<T> = (actual: T) => MatcherResult;
+export type SyncMatcher<T> = (actual: T) => MatcherResult;
+export type AsyncMatcher<T> = (actual: T) => Promise<MatcherResult>;
+export type Matcher<T> = (actual: T) => MaybeAsync<MatcherResult>;
 
-export const matchers: {
-	core: {
-		not: <T>(sub: Matcher<T>) => Matcher<T>,
-		withMessage: <T>(message: string, sub: Matcher<T>) => Matcher<T>,
-		equals: <T>(value: T) => Matcher<T>,
-		same: <T>(value: T) => Matcher<T>,
-		resolves: <T>(value?: T | Matcher<T>) => Matcher<(() => (T | Promise<T>)) | T | Promise<T>>,
-		throws: (value?: unknown | Matcher<unknown>) => Matcher<() => unknown>,
-	},
+type FluentExpect<T> = {
+	[K in keyof matchers]: (
+		ReturnType<matchers[K]> extends Matcher<T>
+		? ((...args: Parameters<matchers[K]>) => AsyncChain<ReturnType<ReturnType<matchers[K]>>, void>)
+		: never
+	);
 };
 
-type expect = () => Plugin;
-declare namespace expect {
-	function matchers(m: Record<string, (...args: unknown) => Matcher>): Plugin;
-}
+type Expect = (
+	(<T, M extends Matcher<T>>(actual: T, matcher: M) => AsyncChain<ReturnType<M>, void>) &
+	(<T>(actual: T) => FluentExpect<T>)
+);
 
-export const plugins: {
-	describe: (fnName?: string | Symbol, options?: { display?: string, testFn?: string | Symbol, subFn?: string | Symbol }) => Plugin,
-	expect: expect,
-	fail: () => Plugin,
-	fail: () => Plugin,
-	focus: () => Plugin,
-	ignore: () => Plugin,
-	lifecycle: () => Plugin,
-	repeat: () => Plugin,
-	retry: () => Plugin,
-	stopAtFirstFailure: () => Plugin,
-	test: () => Plugin,
-	timeout: () => Plugin,
-};
+export type Plugin = (builder: Runner.Builder) => void;
 
-export interface Node {
-}
+type ColourFn = (value: string, fallback: string) => string;
 
-export interface Result {
-	node: Node;
-	parent: Result | null;
-	children: Result[];
+export interface Output {
+	write(value: string, linePrefix?: string, continuationPrefix?: string): void;
+	writeRaw(value: string): void;
+
+	bold: ColourFn;
+	faint: ColourFn;
 }
 
 export interface Reporter {
 	report(result: Result): void;
 }
 
-export const reporters: {
-	Full: Reporter,
+export interface LiveReporter {
+	eventListener: TestEventHandler;
+}
+
+export interface ResultInfo {
+	id: string | number;
+	parent: string | number | null;
+	label: string | null;
+}
+
+export interface ResultSummary {
+	count: number;
+	run: number;
+	error: number;
+	fail: number;
+	skip: number;
+	pass: number;
+	duration: number;
+}
+
+export interface StackItem {
+	name: string;
+	location: string;
+}
+
+export interface ResultError {
+	message: string;
+	stackList: StackItem[];
+}
+
+export interface Result extends ResultInfo {
+	summary: ResultSummary;
+	errors: ResultError[],
+	failures: ResultError[],
+	output: string,
+	children: Result[],
+}
+
+export interface TestBeginEvent extends ResultInfo {
+	type: 'begin';
+	time: number;
+	isBlock: boolean;
+}
+
+export interface TestCompleteEvent extends Result {
+	type: 'complete';
+	time: number;
+	isBlock: boolean;
+}
+
+interface NodeOptions {
+	ignore?: boolean;
+	focus?: boolean;
+	repeat?: number | {
+		total: number;
+		failFast?: boolean;
+		maxFailures?: number;
+	};
+	retry?: number;
+	stopAtFirstFailure?: boolean;
+	timeout?: number;
+	[K: string]: unknown;
+}
+
+type TestImplementation = () => MaybeAsync<void>;
+interface DescribeObject {
+	[K: string]: DescribeObject | TestImplementation;
+}
+type DescribeImplementation = ((globals: DiscoveryGlobals) => MaybeAsync<DescribeImplementation | void>) | DescribeObject;
+type WithOptions<T> = T & {
+	ignore: T;
+	focus: T;
 };
+type Describe = WithOptions<(name: string, fn: DescribeImplementation, options?: NodeOptions) => void>;
+type Test = WithOptions<(name: string, fn: TestImplementation, options?: NodeOptions) => void>;
+
+type LifecycleHookAfter = () => MaybeAsync<void>;
+type LifecycleHookBefore = () => MaybeAsync<void | LifecycleHookAfter>;
+type GetOutput = ((binary?: false) => string) & ((binary: true) => unknown); // unknown = Buffer
+type LifecycleFunc<Fn> = ((name: string, fn: Fn) => void) & ((fn: Fn) => void);
+
+export interface DiscoveryGlobals extends matchers {
+	describe: Describe;
+	test: Test;
+	it: Test;
+	expect: Expect;
+	fail: (message?: string) => void;
+	skip: (message?: string) => void;
+	beforeAll: LifecycleFunc<LifecycleHookBefore>;
+	beforeEach: LifecycleFunc<LifecycleHookBefore>;
+	afterEach: LifecycleFunc<LifecycleHookAfter>;
+	afterAll: LifecycleFunc<LifecycleHookAfter>;
+	getStdout: GetOutput;
+	getStderr: GetOutput;
+}
+
+export type TestEvent = TestBeginEvent | TestCompleteEvent;
+export type TestEventHandler = (e: TestEvent) => void;
+
+interface NodeConfig {
+	display: string | null;
+	isBlock?: boolean;
+	discovery?: (node: Node, methods: DiscoveryGlobals) => MaybeAsync<void>;
+	discoveryFrames?: number;
+	[K: string]: unknown;
+}
+
+type ExtensionKey = string | Symbol;
+
+interface MethodThis {
+	getCurrentNodeScope: (scope: string | Symbol) => unknown;
+	extend: (key: ExtensionKey, ...values: unknown[]) => void;
+	get: (key: ExtensionKey) => unknown[];
+}
+
+type RunInterceptor = () => MaybeAsync<void>;
+type RunCondition = () => MaybeAsync<boolean>;
+
+export class TestAssertionError extends Error {
+	constructor(message: string, skipFrames?: number);
+}
+
+export class TestAssumptionError extends Error {
+	constructor(message: string, skipFrames?: number);
+}
+
+interface Runner {
+	run(listener?: TestEventHandler | null | undefined): Promise<Result>;
+}
+declare namespace Runner {
+	class Builder {
+		constructor();
+		useParallelDiscovery(enabled?: boolean): Builder;
+		useParallelSuites(enabled?: boolean): Builder;
+		addPlugin(...plugins: Plugin[]): Builder;
+		extend(key: ExtensionKey, ...values: unknown[]): Builder;
+		addRunInterceptor(fn: RunInterceptor, options?: { order?: number, id?: unknown }): Builder;
+		addRunCondition(fn: RunCondition, options?: { id?: unknown }): Builder;
+		addSuite(name: string, fn: DescribeImplementation, options?: NodeOptions): Builder;
+		addSuites(suites: Record<string, DescribeImplementation>): Builder;
+		addScope(defaults: { node?: () => unknown, context?: () => unknown }): Symbol;
+		addNodeType(key: string | Symbol, optionsFactory: (...args: unknown[]) => NodeOptions, config: NodeConfig): Builder;
+		addNodeOption(name: string, options: NodeOptions): Builder;
+		addGlobals(globals: Record<string, unknown>): Builder;
+		addMethods(methods: Record<string, (this: MethodThis, ...args: unknown[]) => unknown>): Builder;
+		build(): Promise<Runner>;
+	}
+}
+export { Runner };
+
+export namespace outputs {
+	class Writer implements Output {
+		constructor(writer: WriteStream, forceTTY?: boolean);
+		write(value: string, linePrefix?: string, continuationPrefix?: string): void;
+		writeRaw(value: string): void;
+		bold: ColourFn;
+		faint: ColourFn;
+	}
+}
+
+export namespace reporters {
+	class Full implements Reporter {
+		constructor(output: Output);
+		report(result: Result): void;
+	}
+	class Summary implements Reporter {
+		constructor(output: Output);
+		report(result: Result): void;
+	}
+	class Dots implements LiveReporter {
+		constructor(output: Output);
+		eventListener: TestEventHandler;
+	}
+}
+
+interface matchers {
+	equals: <T>(expected: T) => SyncMatcher<T>;
+	same: <T>(expected: T) => SyncMatcher<T>;
+	not: <M extends Matcher<any>>(matcher: M) => M;
+	withMessage: <M extends Matcher<any>>(message: string, matcher: M) => M;
+	isTrue: () => SyncMatcher<boolean>;
+	isFalse: () => SyncMatcher<boolean>;
+	isTruthy: () => SyncMatcher<unknown>;
+	isFalsy: () => SyncMatcher<unknown>;
+	isNull: () => SyncMatcher<unknown>;
+	isUndefined: () => SyncMatcher<unknown>;
+	isNullish: () => SyncMatcher<unknown>;
+	isGreaterThan: (value: number) => SyncMatcher<number>;
+	isLessThan: (value: number) => SyncMatcher<number>;
+	isGreaterThanOrEqual: (value: number) => SyncMatcher<number>;
+	isLessThanOrEqual: (value: number) => SyncMatcher<number>;
+	resolves: <T>(expectation?: SyncMatcher<T> | T) => (
+		SyncMatcher<() => T> &
+		AsyncMatcher<Promise<T> | (() => Promise<T>)>
+	);
+	rejects: (expectation?: SyncMatcher<unknown> | string) => (
+		SyncMatcher<() => unknown> &
+		AsyncMatcher<Promise<unknown> | (() => Promise<unknown>)>
+	);
+	hasLength: (expectation?: SyncMatcher<number> | number) => SyncMatcher<LengthHaver>;
+	isEmpty: () => SyncMatcher<LengthHaver>;
+}
+export const matchers: matchers;
+
+interface plugins {
+	describe: (fnName?: string | Symbol, options?: {
+		display?: string;
+		testFn?: string | Symbol;
+		subFn?: string | Symbol;
+	}) => Plugin;
+
+	expect: (() => Plugin) & {
+		matchers: (matchers: Record<string, (...args: unknown[]) => Matcher<unknown>>) => Plugin;
+	};
+	fail: () => Plugin;
+	focus: () => Plugin;
+	ignore: () => Plugin;
+	lifecycle: (options?: { order?: number }) => Plugin;
+	outputCaptor: (options?: { order?: number }) => Plugin;
+	repeat: (options?: { order?: number }) => Plugin;
+	retry: (options?: { order?: number }) => Plugin;
+	stopAtFirstFailure: () => Plugin;
+	test: (fnName?: string | Symbol) => Plugin;
+	timeout: (options?: { order?: number }) => Plugin;
+}
+export const plugins: plugins;
+
+export function standardRunner(): Runner.Builder;
+
+declare global { // same as DiscoveryGlobals + matchers
+	const describe: Describe;
+	const test: Test;
+	const it: Test;
+	const expect: Expect;
+	const fail: (message?: string) => void;
+	const skip: (message?: string) => void;
+	const beforeAll: LifecycleFunc<LifecycleHookBefore>;
+	const beforeEach: LifecycleFunc<LifecycleHookBefore>;
+	const afterEach: LifecycleFunc<LifecycleHookAfter>;
+	const afterAll: LifecycleFunc<LifecycleHookAfter>;
+	const getStdout: GetOutput;
+	const getStderr: GetOutput;
+
+	const equals: <T>(expected: T) => SyncMatcher<T>;
+	const same: <T>(expected: T) => SyncMatcher<T>;
+	const not: <M extends Matcher<any>>(matcher: M) => M;
+	const withMessage: <M extends Matcher<any>>(message: string, matcher: M) => M;
+	const isTrue: () => SyncMatcher<boolean>;
+	const isFalse: () => SyncMatcher<boolean>;
+	const isTruthy: () => SyncMatcher<unknown>;
+	const isFalsy: () => SyncMatcher<unknown>;
+	const isNull: () => SyncMatcher<unknown>;
+	const isUndefined: () => SyncMatcher<unknown>;
+	const isNullish: () => SyncMatcher<unknown>;
+	const isGreaterThan: (value: number) => SyncMatcher<number>;
+	const isLessThan: (value: number) => SyncMatcher<number>;
+	const isGreaterThanOrEqual: (value: number) => SyncMatcher<number>;
+	const isLessThanOrEqual: (value: number) => SyncMatcher<number>;
+	const resolves: <T>(expectation?: SyncMatcher<T> | T) => (
+		SyncMatcher<() => T> &
+		AsyncMatcher<Promise<T> | (() => Promise<T>)>
+	);
+	const rejects: (expectation?: SyncMatcher<unknown> | string) => (
+		SyncMatcher<() => unknown> &
+		AsyncMatcher<Promise<unknown> | (() => Promise<unknown>)>
+	);
+	const hasLength: (expectation?: SyncMatcher<number> | number) => SyncMatcher<LengthHaver>;
+	const isEmpty: () => SyncMatcher<LengthHaver>;
+}
