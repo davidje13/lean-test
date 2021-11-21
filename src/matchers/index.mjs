@@ -1,3 +1,3 @@
-export * as core from './core.mjs';
-export * as inequality from './inequality.mjs';
-export * as collections from './collections.mjs';
+export * from './core.mjs';
+export * from './inequality.mjs';
+export * from './collections.mjs';

@@ -1,13 +1,19 @@
 import { dirname, resolve, relative } from 'path';
+import { realpath } from 'fs/promises';
 import process from 'process';
 import launchBrowser from './launchBrowser.mjs';
 import Server from './Server.mjs';
 
 export default async function browserRunner(config, paths, listener) {
+	// must use realpath because npm will install the binary as a symlink in a different folder (.bin)
+	const selfPath = dirname(await realpath(process.argv[1]));
 	const basePath = process.cwd();
+
 	const index = await buildIndex(config, paths, basePath);
-	const leanTestBaseDir = resolve(dirname(process.argv[1]), '..');
-	const server = new Server(index, [['/.lean-test/', leanTestBaseDir], ['/', basePath]]);
+	const server = new Server(index, [
+		['/.lean-test/', resolve(selfPath, '..')],
+		['/', basePath],
+	]);
 	const resultPromise = new Promise((res) => {
 		server.callback = ({ events }) => {
 			for (const event of events) {

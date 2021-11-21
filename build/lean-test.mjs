@@ -961,23 +961,6 @@ const throws = (expected = ANY) => (input) => {
 	}
 };
 
-var core = /*#__PURE__*/Object.freeze({
-	__proto__: null,
-	not: not,
-	withMessage: withMessage,
-	equals: equals,
-	same: same,
-	isTrue: isTrue,
-	isTruthy: isTruthy,
-	isFalse: isFalse,
-	isFalsy: isFalsy,
-	isNull: isNull,
-	isUndefined: isUndefined,
-	isNullish: isNullish,
-	resolves: resolves,
-	throws: throws
-});
-
 const isGreaterThan = (expected) => (actual) => {
 	if (actual > expected) {
 		return { success: true, message: `Expected a value not greater than ${expected}, but got ${actual}.` };
@@ -1010,14 +993,6 @@ const isLessThanOrEqual = (expected) => (actual) => {
 	}
 };
 
-var inequality = /*#__PURE__*/Object.freeze({
-	__proto__: null,
-	isGreaterThan: isGreaterThan,
-	isLessThan: isLessThan,
-	isGreaterThanOrEqual: isGreaterThanOrEqual,
-	isLessThanOrEqual: isLessThanOrEqual
-});
-
 const getLength = (o) => (
 	((typeof o !== 'object' && typeof o !== 'string') || o === null) ? null :
 	typeof o.length === 'number' ? o.length :
@@ -1048,17 +1023,27 @@ const isEmpty = () => (actual) => {
 	}
 };
 
-var collections = /*#__PURE__*/Object.freeze({
-	__proto__: null,
-	hasLength: hasLength,
-	isEmpty: isEmpty
-});
-
 var matchers = /*#__PURE__*/Object.freeze({
 	__proto__: null,
-	core: core,
-	inequality: inequality,
-	collections: collections
+	not: not,
+	withMessage: withMessage,
+	equals: equals,
+	same: same,
+	isTrue: isTrue,
+	isTruthy: isTruthy,
+	isFalse: isFalse,
+	isFalsy: isFalsy,
+	isNull: isNull,
+	isUndefined: isUndefined,
+	isNullish: isNullish,
+	resolves: resolves,
+	throws: throws,
+	isGreaterThan: isGreaterThan,
+	isLessThan: isLessThan,
+	isGreaterThanOrEqual: isGreaterThanOrEqual,
+	isLessThanOrEqual: isLessThanOrEqual,
+	hasLength: hasLength,
+	isEmpty: isEmpty
 });
 
 const FLUENT_MATCHERS = Symbol();
@@ -1686,9 +1671,10 @@ var index = /*#__PURE__*/Object.freeze({
 });
 
 function standardRunner() {
-	const builder = new Runner.Builder()
+	return new Runner.Builder()
 		.addPlugin(describe())
 		.addPlugin(expect())
+		.addPlugin(expect.matchers(matchers))
 		.addPlugin(fail())
 		.addPlugin(focus())
 		.addPlugin(ignore())
@@ -1700,12 +1686,6 @@ function standardRunner() {
 		.addPlugin(test())
 		.addPlugin(test('it'))
 		.addPlugin(timeout());
-
-	for (const matcher of Object.values(matchers)) {
-		builder.addPlugin(expect.matchers(matcher));
-	}
-
-	return builder;
 }
 
 export { Runner, TestAssertionError, TestAssumptionError, matchers, index$1 as outputs, index$2 as plugins, index as reporters, standardRunner };

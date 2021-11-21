@@ -14,9 +14,10 @@ export {
 };
 
 export function standardRunner() {
-	const builder = new Runner.Builder()
+	return new Runner.Builder()
 		.addPlugin(plugins.describe())
 		.addPlugin(plugins.expect())
+		.addPlugin(plugins.expect.matchers(matchers))
 		.addPlugin(plugins.fail())
 		.addPlugin(plugins.focus())
 		.addPlugin(plugins.ignore())
@@ -28,10 +29,4 @@ export function standardRunner() {
 		.addPlugin(plugins.test())
 		.addPlugin(plugins.test('it'))
 		.addPlugin(plugins.timeout());
-
-	for (const matcher of Object.values(matchers)) {
-		builder.addPlugin(plugins.expect.matchers(matcher))
-	}
-
-	return builder;
 }

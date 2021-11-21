@@ -34,6 +34,7 @@ export default [
 			'child_process',
 			'http',
 			'../lean-test.mjs',
+			'../../lean-test.mjs', // duplicated because this must exactly match import lines in all files
 		],
 		output: {
 			file: 'build/bin/run.mjs',

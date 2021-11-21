@@ -1,0 +1,10 @@
+{
+  "name": "lean-test-package-test",
+  "private": true,
+  "scripts": {
+    "test": "lean-test && lean-test --browser=chrome"
+  },
+  "devDependencies": {
+    "lean-test": "file:lean-test-1.0.0.tgz"
+  }
+}
