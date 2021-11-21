@@ -318,7 +318,6 @@ describe('throws', {
 
 		const rFail = await matchers.throws(1)(Promise.reject(2));
 		expect(rFail.success, equals(false));
-
 	},
 
 	'resolves a function synchronously'() {
@@ -353,6 +352,17 @@ describe('throws', {
 
 		const rFail = await matchers.throws(1)(() => Promise.reject(2));
 		expect(rFail.success, equals(false));
+	},
+
+	'checks partial error message matches if given a string'() {
+		const rThrow = matchers.throws('long')(() => { throw new Error('long message'); });
+		expect(rThrow.success, equals(true));
+
+		const rMismatch = matchers.throws('nope')(() => { throw new Error('long message'); });
+		expect(rMismatch.success, equals(false));
+
+		const rResolve = matchers.throws('anything')(() => 1);
+		expect(rResolve.success, equals(false));
 	},
 
 	async 'can delegate to another matcher to check the value'() {

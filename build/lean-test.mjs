@@ -942,7 +942,9 @@ const throws = (expected = ANY) => (input) => {
 	}
 	function reject(actual) {
 		if (typeof expected === 'string' && actual instanceof Error) {
-			if (!actual.message.includes(expected)) {
+			if (actual.message.includes(expected)) {
+				return { success: true, message: `Expected ${input} not to throw error containing ${expected} (threw ${actual}).` };
+			} else {
 				return { success: false, message: `Expected ${input} to throw ${expected}, but threw ${actual}.` };
 			}
 		}
