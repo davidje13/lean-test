@@ -95,3 +95,38 @@ describe('isEmpty', {
 		expect(matchers.isEmpty()(3).success, isFalse());
 	},
 });
+
+describe('contains', {
+	'checks strings'() {
+		const resultPass = matchers.contains('foo')('abcfoodef');
+		expect(resultPass.success, isTrue());
+
+		const resultFail = matchers.contains('foo')('abcdef');
+		expect(resultFail.success, isFalse());
+	},
+
+	'errors if asked to check if a string contains a non-string'() {
+		expect(() => matchers.contains(7)('abcfoodef'), throws('cannot check'));
+	},
+
+	'checks arrays'() {
+		const resultPass = matchers.contains('foo')(['abc', 'foo', 'def']);
+		expect(resultPass.success, isTrue());
+
+		const resultFail = matchers.contains('foo')(['abc', 'abcfoodef', 'def']);
+		expect(resultFail.success, isFalse());
+	},
+
+	'checks sets'() {
+		const resultPass = matchers.contains('foo')(new Set(['abc', 'foo', 'def']));
+		expect(resultPass.success, isTrue());
+
+		const resultFail = matchers.contains('foo')(new Set(['abc', 'abcfoodef', 'def']));
+		expect(resultFail.success, isFalse());
+	},
+
+	'rejects other types'() {
+		const resultInvalid = matchers.contains('foo')(7);
+		expect(resultInvalid.success, isFalse());
+	},
+});

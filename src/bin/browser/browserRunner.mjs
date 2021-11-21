@@ -28,7 +28,8 @@ export default async function browserRunner(config, paths, listener) {
 	await server.listen(Number(config.port), config.host);
 
 	const url = server.baseurl();
-	const result = await run(launchBrowser(config.browser, url), () => resultPromise);
+	const proc = await launchBrowser(config.browser, url);
+	const result = await run(proc, () => resultPromise);
 	server.close();
 
 	return result;

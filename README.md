@@ -404,6 +404,10 @@ describe('lifecycle', () => {
 - `isEmpty()`:<br>
 	Checks if the value (an array, `Set`, `Map`, etc.) has no items.
 
+- `contains(sub)`:<br>
+	Checks if the value (a string, array, or `Set`) contains the given substring or
+	sub-element.
+
 ## CLI flags
 
 The `lean-test` executable can be configured in various ways:

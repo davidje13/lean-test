@@ -1,9 +1,9 @@
-import fs from 'fs/promises';
+import { readdir } from 'fs/promises';
 import { join } from 'path';
 import PathMatcher from './PathMatcher.mjs';
 
 async function* scan(dir, relative, test) {
-	for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+	for (const entry of await readdir(dir, { withFileTypes: true })) {
 		const sub = join(dir, entry.name);
 		const subRelative = relative + entry.name + '/'; // always use '/' for matching
 		if (entry.isDirectory() && test(subRelative, false)) {

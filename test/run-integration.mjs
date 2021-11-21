@@ -32,13 +32,18 @@ async function runIntegrationTest(dir, expectedFile = 'expected.txt', ...opts) {
 	const expected = await readFile(resolve(baseDir, 'test', dir, expectedFile));
 	const expectedStr = expected.toString('utf-8');
 
-	const { stdout, exitCode } = await asyncSpawn(
+	const { exitCode, stdout } = await invoke(
 		resolve(baseDir, 'build', 'bin', 'run.mjs'),
 		['--parallel', ...opts],
 		{ cwd: resolve(baseDir, 'test', dir) },
 	);
 
-	const output = stdout + `EXIT: ${exitCode}\n`;
+	const output = (
+		stdout
+			.replace(/\d+ms/g, 'xx')
+			.replace(/ +\n/g, '\n') +
+		`EXIT: ${exitCode}\n`
+	);
 
 	const match = (output === expectedStr);
 	const marker = match ? green('[PASS]') : red('[FAIL]');
@@ -51,27 +56,20 @@ async function runIntegrationTest(dir, expectedFile = 'expected.txt', ...opts) {
 	return match;
 }
 
-async function asyncSpawn(path, args, opts) {
-	const stdout = [];
-	const stderr = [];
-	const exitCode = await new Promise((res, rej) => {
-		const proc = spawn(path, args, {
-			...opts,
-			stdio: ['ignore', 'pipe', 'pipe'],
-		});
-		proc.addListener('error', rej);
-		proc.stdout.addListener('data', (data) => stdout.push(data));
-		proc.stderr.addListener('data', (data) => stderr.push(data));
-		proc.addListener('close', res);
+function invoke(exec, args, opts = {}) {
+	return new Promise((res, reject) => {
+		const stdout = [];
+		const stderr = [];
+		const proc = spawn(exec, args, { ...opts, stdio: ['ignore', 'pipe', 'pipe'] });
+		proc.stdout.addListener('data', (d) => stdout.push(d));
+		proc.stderr.addListener('data', (d) => stderr.push(d));
+		proc.addListener('error', reject);
+		proc.addListener('close', (exitCode) => res({
+			exitCode,
+			stdout: Buffer.concat(stdout).toString('utf-8'),
+			stderr: Buffer.concat(stderr).toString('utf-8'),
+		}));
 	});
-	return { stdout: parseOutput(stdout), stderr: parseOutput(stderr), exitCode };
-}
-
-function parseOutput(out) {
-	return Buffer.concat(out)
-		.toString('utf-8')
-		.replace(/\d+ms/g, 'xx')
-		.replace(/ +\n/g, '\n');
 }
 
 function makeColours(target, ...colours) {

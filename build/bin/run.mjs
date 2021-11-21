@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-import process, { stderr as stderr$1 } from 'process';
+import process, { platform, stderr as stderr$1, env } from 'process';
 import { join, resolve, dirname, relative } from 'path';
 import { standardRunner, outputs, reporters } from '../lean-test.mjs';
-import fs, { readFile, realpath } from 'fs/promises';
+import { readdir, access, readFile, realpath } from 'fs/promises';
+import { constants } from 'fs';
 import { spawn } from 'child_process';
 import { createServer } from 'http';
 
@@ -45,7 +46,7 @@ class PathMatcher {
 }
 
 async function* scan(dir, relative, test) {
-	for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+	for (const entry of await readdir(dir, { withFileTypes: true })) {
 		const sub = join(dir, entry.name);
 		const subRelative = relative + entry.name + '/'; // always use '/' for matching
 		if (entry.isDirectory() && test(subRelative, false)) {
@@ -168,6 +169,46 @@ function split2(v, s) {
 	}
 }
 
+const invoke = (exec, args, opts = {}) => new Promise((resolve, reject) => {
+	const stdout = [];
+	const stderr = [];
+	const proc = spawn(exec, args, { ...opts, stdio: ['ignore', 'pipe', 'pipe'] });
+	proc.stdout.addListener('data', (d) => stdout.push(d));
+	proc.stderr.addListener('data', (d) => stderr.push(d));
+	proc.addListener('error', reject);
+	proc.addListener('close', (exitCode) => resolve({
+		exitCode,
+		stdout: Buffer.concat(stdout).toString('utf-8'),
+		stderr: Buffer.concat(stderr).toString('utf-8'),
+	}));
+});
+
+const canExec = (path) => access(path, constants.X_OK).then(() => true, () => false);
+
+async function which(exec) {
+	const { exitCode, stdout } = await invoke('which', [exec]);
+	if (exitCode === 0) {
+		return stdout.trim();
+	} else {
+		return null;
+	}
+}
+
+async function findExecutable(options) {
+	for (let { path, ifPlatform } of options) {
+		if (!path || (ifPlatform && ifPlatform !== platform)) {
+			continue;
+		}
+		if (!path.includes('/') && !path.includes('\\')) {
+			path = await which(path);
+		}
+		if (path && await canExec(path)) {
+			return path;
+		}
+	}
+	throw new Error('Unable to launch browser; executable not found');
+}
+
 const CHROME_ARGS = [
 	// flag list from chrome-launcher: https://github.com/GoogleChrome/chrome-launcher/blob/master/src/flags.ts
 	'--disable-features=Translate',
@@ -191,22 +232,20 @@ const CHROME_ARGS = [
 	'--force-fieldtrials=*BackgroundTracing/default/',
 ];
 
-function launchBrowser(name, url) {
-	// TODO: this is mac-only and relies on standard installation location
-	// could use https://github.com/GoogleChrome/chrome-launcher to be cross-platform, but pulls in a few dependencies
+async function launchBrowser(name, url) {
 	switch (name) {
 		case 'manual':
 			stderr$1.write(`Ready to run test: ${url}\n`);
 			return null;
 		case 'chrome':
-			return spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', [
+			return spawn(await getChromePath(), [
 				...CHROME_ARGS,
 				'--headless',
 				'--remote-debugging-port=0', // required to avoid immediate termination, but not actually used
 				url,
 			], { stdio: 'ignore' });
 		case 'firefox':
-			return spawn('/Applications/Firefox.app/Contents/MacOS/firefox', [
+			return spawn(await getFirefoxPath(), [
 				'--no-remote',
 				'--new-instance',
 				'--headless',
@@ -217,6 +256,26 @@ function launchBrowser(name, url) {
 			stderr$1.write(`Open this URL to run tests: ${url}\n`);
 			return null;
 	}
+}
+
+function getChromePath() {
+	return findExecutable([
+		{ path: env.CHROME_PATH },
+		{ ifPlatform: 'darwin', path: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' },
+		{ path: 'google-chrome-stable' },
+		{ path: 'google-chrome' },
+		{ path: 'chromium-browser' },
+		{ path: 'chromium' },
+	]);
+}
+
+function getFirefoxPath() {
+	return findExecutable([
+		{ path: env.FIREFOX_PATH },
+		{ ifPlatform: 'darwin', path: '/Applications/Firefox.app/Contents/MacOS/firefox' },
+		{ path: 'firefox' },
+		{ path: 'iceweasel' },
+	]);
 }
 
 const CHARSET = '; charset=utf-8';
@@ -359,7 +418,8 @@ async function browserRunner(config, paths, listener) {
 	await server.listen(Number(config.port), config.host);
 
 	const url = server.baseurl();
-	const result = await run(launchBrowser(config.browser, url), () => resultPromise);
+	const proc = await launchBrowser(config.browser, url);
+	const result = await run(proc, () => resultPromise);
 	server.close();
 
 	return result;

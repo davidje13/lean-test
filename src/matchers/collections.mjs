@@ -29,3 +29,24 @@ export const isEmpty = () => (actual) => {
 		return { success: true, message: `Expected a non-empty value, but got ${actual}.` };
 	}
 };
+
+export const contains = (sub) => (actual) => {
+	let pass;
+	if (typeof actual === 'string') {
+		if (typeof sub !== 'string') {
+			throw new Error(`cannot check for ${typeof sub} in string.`);
+		}
+		pass = actual.includes(sub);
+	} else if (Array.isArray(actual)) {
+		pass = actual.includes(sub);
+	} else if (actual instanceof Set) {
+		pass = actual.has(sub);
+	} else {
+		return { success: false, message: `Expected to contain ${sub}, but got non-collection type ${actual}.` };
+	}
+	if (pass) {
+		return { success: true, message: `Expected not to contain ${sub}, but got ${actual}.` };
+	} else {
+		return { success: false, message: `Expected to contain ${sub}, but got ${actual}.` };
+	}
+};
