@@ -20,8 +20,7 @@ jobs:
         run: |
           echo "install" && npm install
           echo "A" && ./src/bin/run.mjs src
-          echo "B" && node ./src/bin/run.mjs src
-          echo "C" && node ./src/build/run.mjs src
+          echo "B" && ./build/bin/run.mjs src
           echo "package" && ./test/run-package.sh
           echo "test" && npm test
 
