@@ -404,8 +404,21 @@ async function browserRunner(config, paths, listener) {
 		['/.lean-test/', resolve(selfPath, '..')],
 		['/', basePath],
 	]);
-	const resultPromise = new Promise((res) => {
+	let beginTimeout;
+	const resultPromise = new Promise((res, rej) => {
+		let timeout = null;
+		let hasSeenEvent = false;
+		beginTimeout = (millis) => {
+			if (!hasSeenEvent) {
+				timeout = setTimeout(() => rej(new Error('browser launch timed out')), millis);
+			}
+		};
 		server.callback = ({ events }) => {
+			hasSeenEvent = true;
+			if (timeout) {
+				clearTimeout(timeout);
+				timeout = null;
+			}
 			for (const event of events) {
 				if (event.type === 'browser-end') {
 					res(event.result);
@@ -419,7 +432,10 @@ async function browserRunner(config, paths, listener) {
 
 	const url = server.baseurl();
 	const proc = await launchBrowser(config.browser, url);
-	const result = await run(proc, () => resultPromise);
+	const result = await run(proc, () => {
+		beginTimeout(30000);
+		return resultPromise;
+	});
 	server.close();
 
 	return result;
