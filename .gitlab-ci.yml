@@ -1,0 +1,20 @@
+before_script:
+- apt-get update
+- wget --no-verbose https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+- apt-get install -y ./google-chrome-stable_current_amd64.deb
+- apt-get install -y iceweasel
+
+node:14:
+  image: node:14
+  script:
+  - npm install-test
+
+node:16:
+  image: node:16
+  script:
+  - npm install-test
+
+node:17:
+  image: node:17
+  script:
+  - npm install-test
