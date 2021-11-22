@@ -11,6 +11,7 @@ node:14:
   - echo "A" && ./src/bin/run.mjs src
   - echo "B" && ./build/bin/run.mjs src
   - echo "package" && ./test/run-package.sh
+  - ./src/bin/run.mjs --parallel src && rollup --config rollup.config.js && ./test/run-integration.mjs && ./test/run-package.sh
   - echo "test" && npm test
 
 node:16:
