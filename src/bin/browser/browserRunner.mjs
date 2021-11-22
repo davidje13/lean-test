@@ -42,8 +42,8 @@ export default async function browserRunner(config, paths, listener) {
 	await server.listen(Number(config.port), config.host);
 	try {
 		const url = server.baseurl();
-		const proc = await launchBrowser(config.browser, url, { stdio: ['ignore', 'pipe', 'pipe'] });
-		return await run(proc, () => {
+		const launched = await launchBrowser(config.browser, url, { stdio: ['ignore', 'pipe', 'pipe'] });
+		return await run(launched, () => {
 			beginTimeout(30000);
 			return resultPromise;
 		});
@@ -52,10 +52,12 @@ export default async function browserRunner(config, paths, listener) {
 	}
 }
 
-async function run(proc, fn) {
-	if (!proc) {
+async function run(launched, fn) {
+	if (!launched) {
 		return fn();
 	}
+
+	const { proc, teardown } = launched;
 
 	const stdout = [];
 	const stderr = [];
@@ -76,6 +78,7 @@ async function run(proc, fn) {
 	} finally {
 		proc.kill();
 		process.removeListener('exit', end);
+		await teardown?.();
 	}
 }
 

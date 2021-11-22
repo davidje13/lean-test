@@ -2,9 +2,10 @@
 import process, { platform, getuid, stderr, env } from 'process';
 import { join, resolve, dirname, relative } from 'path';
 import { standardRunner, outputs, reporters } from '../lean-test.mjs';
-import { readdir, access, readFile, realpath } from 'fs/promises';
+import { readdir, access, mkdtemp, rm, writeFile, readFile, realpath } from 'fs/promises';
 import { constants } from 'fs';
 import { spawn } from 'child_process';
+import { tmpdir } from 'os';
 import { createServer } from 'http';
 
 const SPECIAL = /[^-a-zA-Z0-9 _]/g;
@@ -209,6 +210,22 @@ async function findExecutable(options) {
 	throw new Error('browser executable not found');
 }
 
+const TEMP_BASE = join(tmpdir(), 'lean-test-');
+
+function makeTempDir() {
+	return mkdtemp(TEMP_BASE);
+}
+
+function removeTempDir(path) {
+	if (!path || !path.startsWith(TEMP_BASE)) {
+		// safety check
+		throw new Error('Attempted to delete non-temp directory');
+	}
+	return rm(path, { maxRetries: 2, recursive: true });
+}
+
+const IS_ROOT = (platform === 'linux' && getuid() === 0);
+
 const CHROME_ARGS = [
 	// flag list from chrome-launcher: https://github.com/GoogleChrome/chrome-launcher/blob/master/src/flags.ts
 	'--disable-features=Translate',
@@ -232,43 +249,39 @@ const CHROME_ARGS = [
 	'--force-fieldtrials=*BackgroundTracing/default/',
 ];
 
-async function launchBrowser(name, url, opts = {}) {
-	const isRoot = (platform === 'linux' && getuid() === 0);
-	const extraArgs = [];
+const FIREFOX_PREFS = [
+	// options list from karma-firefox-launcher: https://github.com/karma-runner/karma-firefox-launcher/blob/master/index.js
+	// (some options have been removed which are obsolete or do not make sense here)
+	'user_pref("browser.shell.checkDefaultBrowser", false);',
+	'user_pref("browser.bookmarks.restore_default_bookmarks", false);',
+	'user_pref("dom.disable_open_during_load", false);', // disable popup blocker
+	'user_pref("dom.min_background_timeout_value", 10);', // behave like foreground
+	'user_pref("browser.tabs.remote.autostart", false);', // disable multi-process
+].join('\n');
 
-	switch (name) {
-		case 'manual':
-			stderr.write(`Ready to run test: ${url}\n`);
-			return null;
-		case 'chrome':
-			if (isRoot) { // required to prevent "Running as root without --no-sandbox is not supported"
-				extraArgs.push('--no-sandbox', '--disable-setuid-sandbox');
-			}
-			return spawn(await getChromePath(), [
-				...CHROME_ARGS,
-				...extraArgs,
-				'--headless',
-				'--remote-debugging-port=0', // required to avoid immediate termination, but not actually used
-				url,
-			], opts);
-		case 'firefox':
-			if (!isRoot) {
-				extraArgs.push('--no-remote', '--new-instance');
-			}
-			return spawn(await getFirefoxPath(), [
-				...extraArgs,
-				'--headless',
-				url,
-			], { ...opts, env: { MOZ_DISABLE_AUTO_SAFE_MODE: 'true' } });
-		default:
-			stderr.write(`Unknown browser: ${name}\n`);
-			stderr.write(`Open this URL to run tests: ${url}\n`);
-			return null;
+const LAUNCHERS = new Map([
+	['manual', launchManual],
+	['chrome', launchChrome],
+	['firefox', launchFirefox],
+]);
+
+function launchBrowser(name, url, opts = {}) {
+	const launcher = LAUNCHERS.get(name);
+	if (!launcher) {
+		stderr.write(`Unknown browser: ${name}\n`);
+		stderr.write(`Open this URL to run tests: ${url}\n`);
+		return null;
 	}
+	return launcher(url, opts);
 }
 
-function getChromePath() {
-	return findExecutable([
+async function launchManual(url) {
+	stderr.write(`Ready to run test: ${url}\n`);
+	return null;
+}
+
+async function launchChrome(url, opts) {
+	const executable = await findExecutable([
 		{ path: env.CHROME_PATH },
 		{ ifPlatform: 'darwin', path: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' },
 		{ path: 'google-chrome-stable' },
@@ -276,15 +289,43 @@ function getChromePath() {
 		{ path: 'chromium-browser' },
 		{ path: 'chromium' },
 	]);
+	const extraArgs = [];
+	if (IS_ROOT) { // required to prevent "Running as root without --no-sandbox is not supported"
+		extraArgs.push('--no-sandbox', '--disable-setuid-sandbox');
+	}
+	const proc = spawn(executable, [
+		...CHROME_ARGS,
+		...extraArgs,
+		'--headless',
+		'--remote-debugging-port=0', // required to avoid immediate termination, but not actually used
+		url,
+	], opts);
+	return { proc };
 }
 
-function getFirefoxPath() {
-	return findExecutable([
+async function launchFirefox(url, opts) {
+	const executable = await findExecutable([
 		{ path: env.FIREFOX_PATH },
 		{ ifPlatform: 'darwin', path: '/Applications/Firefox.app/Contents/MacOS/firefox' },
 		{ path: 'firefox' },
 		{ path: 'iceweasel' },
 	]);
+
+	const profileDir = await makeTempDir();
+	await writeFile(join(profileDir, 'prefs.js'), FIREFOX_PREFS);
+
+	const proc = spawn(executable, [
+		'--profile',
+		profileDir,
+		'--headless',
+		'--no-remote',
+		'--new-instance',
+		url,
+	], { ...opts, env: { MOZ_DISABLE_AUTO_SAFE_MODE: 'true' } });
+	return {
+		proc,
+		teardown: () => removeTempDir(profileDir),
+	};
 }
 
 const CHARSET = '; charset=utf-8';
@@ -441,8 +482,8 @@ async function browserRunner(config, paths, listener) {
 	await server.listen(Number(config.port), config.host);
 	try {
 		const url = server.baseurl();
-		const proc = await launchBrowser(config.browser, url, { stdio: ['ignore', 'pipe', 'pipe'] });
-		return await run(proc, () => {
+		const launched = await launchBrowser(config.browser, url, { stdio: ['ignore', 'pipe', 'pipe'] });
+		return await run(launched, () => {
 			beginTimeout(30000);
 			return resultPromise;
 		});
@@ -451,10 +492,12 @@ async function browserRunner(config, paths, listener) {
 	}
 }
 
-async function run(proc, fn) {
-	if (!proc) {
+async function run(launched, fn) {
+	if (!launched) {
 		return fn();
 	}
+
+	const { proc, teardown } = launched;
 
 	const stdout = [];
 	const stderr = [];
@@ -475,6 +518,7 @@ async function run(proc, fn) {
 	} finally {
 		proc.kill();
 		process.removeListener('exit', end);
+		await teardown?.();
 	}
 }
 

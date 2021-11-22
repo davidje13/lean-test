@@ -32,6 +32,7 @@ export default [
 			'path',
 			'fs/promises',
 			'fs',
+			'os',
 			'child_process',
 			'http',
 			'../lean-test.mjs',
