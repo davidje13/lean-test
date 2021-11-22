@@ -46,10 +46,10 @@ export default async function launchBrowser(name, url, opts = {}) {
 			], opts);
 		case 'firefox':
 			if (!isRoot) {
-				extraArgs.push('--no-remote');
+				extraArgs.push('--no-remote', '--new-instance');
 			}
 			return spawn(await getFirefoxPath(), [
-				'--new-instance',
+				...extraArgs,
 				'--headless',
 				url,
 			], { ...opts, env: { MOZ_DISABLE_AUTO_SAFE_MODE: 'true' } });
