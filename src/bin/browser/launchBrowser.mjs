@@ -25,7 +25,7 @@ const CHROME_ARGS = [
 	'--force-fieldtrials=*BackgroundTracing/default/',
 ];
 
-export default async function launchBrowser(name, url) {
+export default async function launchBrowser(name, url, opts = {}) {
 	switch (name) {
 		case 'manual':
 			stderr.write(`Ready to run test: ${url}\n`);
@@ -36,14 +36,14 @@ export default async function launchBrowser(name, url) {
 				'--headless',
 				'--remote-debugging-port=0', // required to avoid immediate termination, but not actually used
 				url,
-			], { stdio: 'ignore' });
+			], opts);
 		case 'firefox':
 			return spawn(await getFirefoxPath(), [
 				'--no-remote',
 				'--new-instance',
 				'--headless',
 				url,
-			], { stdio: 'ignore', env: { MOZ_DISABLE_AUTO_SAFE_MODE: 'true' } });
+			], { ...opts, env: { MOZ_DISABLE_AUTO_SAFE_MODE: 'true' } });
 		default:
 			stderr.write(`Unknown browser: ${name}\n`);
 			stderr.write(`Open this URL to run tests: ${url}\n`);

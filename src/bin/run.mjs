@@ -20,31 +20,39 @@ const argparse = new ArgumentParser({
 	rest: { names: ['scan', null], type: 'array', default: ['.'] }
 });
 
-const config = argparse.parse(process.argv);
+try {
+	const config = argparse.parse(process.argv);
 
-const scanDirs = config.rest.map((path) => resolve(process.cwd(), path));
-const paths = findPathsMatching(scanDirs, config.pathsInclude, config.pathsExclude);
+	const scanDirs = config.rest.map((path) => resolve(process.cwd(), path));
+	const paths = findPathsMatching(scanDirs, config.pathsInclude, config.pathsExclude);
 
-const forceTTY = (
-	config.colour ??
-	(Boolean(process.env.CI || process.env.CONTINUOUS_INTEGRATION) || null)
-);
-const stdout = new outputs.Writer(process.stdout, forceTTY);
-const stderr = new outputs.Writer(process.stderr, forceTTY);
-const liveReporter = new reporters.Dots(stderr);
-const finalReporters = [
-	new reporters.Full(stdout),
-	new reporters.Summary(stdout),
-];
+	const forceTTY = (
+		config.colour ??
+		(Boolean(process.env.CI || process.env.CONTINUOUS_INTEGRATION) || null)
+	);
+	const stdout = new outputs.Writer(process.stdout, forceTTY);
+	const stderr = new outputs.Writer(process.stderr, forceTTY);
+	const liveReporter = new reporters.Dots(stderr);
+	const finalReporters = [
+		new reporters.Full(stdout),
+		new reporters.Summary(stdout),
+	];
 
-const runner = config.browser ? browserRunner : nodeRunner;
-const result = await runner(config, paths, liveReporter.eventListener);
-finalReporters.forEach((reporter) => reporter.report(result));
+	const runner = config.browser ? browserRunner : nodeRunner;
+	const result = await runner(config, paths, liveReporter.eventListener);
+	finalReporters.forEach((reporter) => reporter.report(result));
 
-// TODO: warn or error if any node contains 0 tests
+	// TODO: warn or error if any node contains 0 tests
 
-if (result.summary.error || result.summary.fail || !result.summary.pass) {
+	if (result.summary.error || result.summary.fail || !result.summary.pass) {
+		process.exit(1);
+	} else {
+		process.exit(0); // explicitly exit to avoid hanging on dangling promises
+	}
+} catch (e) {
+	if (!(e instanceof Error)) {
+		throw e;
+	}
+	process.stderr.write(`${e.message}\n`);
 	process.exit(1);
-} else {
-	process.exit(0); // explicitly exit to avoid hanging on dangling promises
 }

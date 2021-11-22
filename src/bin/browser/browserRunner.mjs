@@ -38,17 +38,18 @@ export default async function browserRunner(config, paths, listener) {
 			}
 		};
 	});
+
 	await server.listen(Number(config.port), config.host);
-
-	const url = server.baseurl();
-	const proc = await launchBrowser(config.browser, url);
-	const result = await run(proc, () => {
-		beginTimeout(30000);
-		return resultPromise;
-	});
-	server.close();
-
-	return result;
+	try {
+		const url = server.baseurl();
+		const proc = await launchBrowser(config.browser, url, { stdio: ['ignore', 'pipe', 'pipe'] });
+		return await run(proc, () => {
+			beginTimeout(30000);
+			return resultPromise;
+		});
+	} finally {
+		server.close();
+	}
 }
 
 async function run(proc, fn) {
@@ -56,13 +57,22 @@ async function run(proc, fn) {
 		return fn();
 	}
 
+	const stdout = [];
+	const stderr = [];
 	const end = () => proc.kill();
 	try {
 		process.addListener('exit', end);
+		proc.stdout.addListener('data', (d) => stdout.push(d));
+		proc.stderr.addListener('data', (d) => stderr.push(d));
 		return await Promise.race([
 			new Promise((_, reject) => proc.once('error', (err) => reject(err))),
 			fn(),
 		]);
+	} catch (e) {
+		throw new Error(
+			`failed to launch browser: ${e.message}\n` +
+			`stderr:\n${Buffer.concat(stderr).toString('utf-8')}\n` +
+			`stdout:\n${Buffer.concat(stdout).toString('utf-8')}\n`);
 	} finally {
 		proc.kill();
 		process.removeListener('exit', end);

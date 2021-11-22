@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import process, { platform, stderr as stderr$1, env } from 'process';
+import process, { platform, stderr, env } from 'process';
 import { join, resolve, dirname, relative } from 'path';
 import { standardRunner, outputs, reporters } from '../lean-test.mjs';
 import { readdir, access, readFile, realpath } from 'fs/promises';
@@ -206,7 +206,7 @@ async function findExecutable(options) {
 			return path;
 		}
 	}
-	throw new Error('Unable to launch browser; executable not found');
+	throw new Error('browser executable not found');
 }
 
 const CHROME_ARGS = [
@@ -232,10 +232,10 @@ const CHROME_ARGS = [
 	'--force-fieldtrials=*BackgroundTracing/default/',
 ];
 
-async function launchBrowser(name, url) {
+async function launchBrowser(name, url, opts = {}) {
 	switch (name) {
 		case 'manual':
-			stderr$1.write(`Ready to run test: ${url}\n`);
+			stderr.write(`Ready to run test: ${url}\n`);
 			return null;
 		case 'chrome':
 			return spawn(await getChromePath(), [
@@ -243,17 +243,17 @@ async function launchBrowser(name, url) {
 				'--headless',
 				'--remote-debugging-port=0', // required to avoid immediate termination, but not actually used
 				url,
-			], { stdio: 'ignore' });
+			], opts);
 		case 'firefox':
 			return spawn(await getFirefoxPath(), [
 				'--no-remote',
 				'--new-instance',
 				'--headless',
 				url,
-			], { stdio: 'ignore', env: { MOZ_DISABLE_AUTO_SAFE_MODE: 'true' } });
+			], { ...opts, env: { MOZ_DISABLE_AUTO_SAFE_MODE: 'true' } });
 		default:
-			stderr$1.write(`Unknown browser: ${name}\n`);
-			stderr$1.write(`Open this URL to run tests: ${url}\n`);
+			stderr.write(`Unknown browser: ${name}\n`);
+			stderr.write(`Open this URL to run tests: ${url}\n`);
 			return null;
 	}
 }
@@ -428,17 +428,18 @@ async function browserRunner(config, paths, listener) {
 			}
 		};
 	});
+
 	await server.listen(Number(config.port), config.host);
-
-	const url = server.baseurl();
-	const proc = await launchBrowser(config.browser, url);
-	const result = await run(proc, () => {
-		beginTimeout(30000);
-		return resultPromise;
-	});
-	server.close();
-
-	return result;
+	try {
+		const url = server.baseurl();
+		const proc = await launchBrowser(config.browser, url, { stdio: ['ignore', 'pipe', 'pipe'] });
+		return await run(proc, () => {
+			beginTimeout(30000);
+			return resultPromise;
+		});
+	} finally {
+		server.close();
+	}
 }
 
 async function run(proc, fn) {
@@ -446,13 +447,22 @@ async function run(proc, fn) {
 		return fn();
 	}
 
+	const stdout = [];
+	const stderr = [];
 	const end = () => proc.kill();
 	try {
 		process.addListener('exit', end);
+		proc.stdout.addListener('data', (d) => stdout.push(d));
+		proc.stderr.addListener('data', (d) => stderr.push(d));
 		return await Promise.race([
 			new Promise((_, reject) => proc.once('error', (err) => reject(err))),
 			fn(),
 		]);
+	} catch (e) {
+		throw new Error(
+			`failed to launch browser: ${e.message}\n` +
+			`stderr:\n${Buffer.concat(stderr).toString('utf-8')}\n` +
+			`stdout:\n${Buffer.concat(stdout).toString('utf-8')}\n`);
 	} finally {
 		proc.kill();
 		process.removeListener('exit', end);
@@ -510,31 +520,39 @@ const argparse = new ArgumentParser({
 	rest: { names: ['scan', null], type: 'array', default: ['.'] }
 });
 
-const config = argparse.parse(process.argv);
+try {
+	const config = argparse.parse(process.argv);
 
-const scanDirs = config.rest.map((path) => resolve(process.cwd(), path));
-const paths = findPathsMatching(scanDirs, config.pathsInclude, config.pathsExclude);
+	const scanDirs = config.rest.map((path) => resolve(process.cwd(), path));
+	const paths = findPathsMatching(scanDirs, config.pathsInclude, config.pathsExclude);
 
-const forceTTY = (
-	config.colour ??
-	(Boolean(process.env.CI || process.env.CONTINUOUS_INTEGRATION) || null)
-);
-const stdout = new outputs.Writer(process.stdout, forceTTY);
-const stderr = new outputs.Writer(process.stderr, forceTTY);
-const liveReporter = new reporters.Dots(stderr);
-const finalReporters = [
-	new reporters.Full(stdout),
-	new reporters.Summary(stdout),
-];
+	const forceTTY = (
+		config.colour ??
+		(Boolean(process.env.CI || process.env.CONTINUOUS_INTEGRATION) || null)
+	);
+	const stdout = new outputs.Writer(process.stdout, forceTTY);
+	const stderr = new outputs.Writer(process.stderr, forceTTY);
+	const liveReporter = new reporters.Dots(stderr);
+	const finalReporters = [
+		new reporters.Full(stdout),
+		new reporters.Summary(stdout),
+	];
 
-const runner = config.browser ? browserRunner : nodeRunner;
-const result = await runner(config, paths, liveReporter.eventListener);
-finalReporters.forEach((reporter) => reporter.report(result));
+	const runner = config.browser ? browserRunner : nodeRunner;
+	const result = await runner(config, paths, liveReporter.eventListener);
+	finalReporters.forEach((reporter) => reporter.report(result));
 
-// TODO: warn or error if any node contains 0 tests
+	// TODO: warn or error if any node contains 0 tests
 
-if (result.summary.error || result.summary.fail || !result.summary.pass) {
+	if (result.summary.error || result.summary.fail || !result.summary.pass) {
+		process.exit(1);
+	} else {
+		process.exit(0); // explicitly exit to avoid hanging on dangling promises
+	}
+} catch (e) {
+	if (!(e instanceof Error)) {
+		throw e;
+	}
+	process.stderr.write(`${e.message}\n`);
 	process.exit(1);
-} else {
-	process.exit(0); // explicitly exit to avoid hanging on dangling promises
 }
