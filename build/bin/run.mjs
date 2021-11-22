@@ -488,6 +488,7 @@ const argparse = new ArgumentParser({
 	pathsInclude: { names: ['include', 'i'], type: 'array', default: ['**/*.{spec|test}.{js|mjs|jsx}'] },
 	pathsExclude: { names: ['exclude', 'x'], type: 'array', default: ['**/node_modules', '**/.*'] },
 	browser: { names: ['browser', 'b'], type: 'string', default: null },
+	colour: { names: ['colour', 'color'], type: 'boolean', default: null },
 	port: { names: ['port'], type: 'int', default: 0 },
 	host: { names: ['host'], type: 'string', default: '127.0.0.1' },
 	rest: { names: ['scan', null], type: 'array', default: ['.'] }
@@ -498,9 +499,12 @@ const config = argparse.parse(process.argv);
 const scanDirs = config.rest.map((path) => resolve(process.cwd(), path));
 const paths = findPathsMatching(scanDirs, config.pathsInclude, config.pathsExclude);
 
-const isCI = Boolean(process.env.CI || process.env.CONTINUOUS_INTEGRATION);
-const stdout = new outputs.Writer(process.stdout, isCI ? true : null);
-const stderr = new outputs.Writer(process.stderr, isCI ? true : null);
+const forceTTY = (
+	config.colour ??
+	(Boolean(process.env.CI || process.env.CONTINUOUS_INTEGRATION) || null)
+);
+const stdout = new outputs.Writer(process.stdout, forceTTY);
+const stderr = new outputs.Writer(process.stderr, forceTTY);
 const liveReporter = new reporters.Dots(stderr);
 const finalReporters = [
 	new reporters.Full(stdout),

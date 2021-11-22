@@ -34,7 +34,7 @@ async function runIntegrationTest(dir, expectedFile = 'expected.txt', ...opts) {
 
 	const { exitCode, stdout } = await invoke(
 		resolve(baseDir, 'build', 'bin', 'run.mjs'),
-		['--parallel', ...opts],
+		['--parallel', '--colour=false', ...opts],
 		{ cwd: resolve(baseDir, 'test', dir) },
 	);
 
