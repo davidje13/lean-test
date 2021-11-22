@@ -18,9 +18,11 @@ jobs:
           node-version: "14"
       - name: Test
         run: |
+          pwd
           npm install
           ./src/bin/run.mjs --parallel src && ./test/run-integration.mjs && ./test/run-package.sh
           npm test
+          echo "test over: $?"
 
   build_and_test:
     runs-on: ubuntu-latest

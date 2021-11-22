@@ -7,9 +7,11 @@ before_script:
 node:14:
   image: node:14
   script:
+  - pwd
   - npm install
   - ./src/bin/run.mjs --parallel src && ./test/run-integration.mjs && ./test/run-package.sh
   - npm test
+  - 'echo "test over: $?"'
 
 node:16:
   image: node:16

@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --disable-proto delete --disallow-code-generation-from-strings
+#!/usr/bin/env node
 
 import process from 'process';
 import { dirname, resolve } from 'path';
