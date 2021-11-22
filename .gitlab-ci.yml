@@ -7,7 +7,12 @@ before_script:
 node:14:
   image: node:14
   script:
-  - npm install && npm test
+  - echo "install" && npm install
+  - echo "A" && ./src/bin/run.mjs src
+  - echo "B" && node ./src/bin/run.mjs src
+  - echo "C" && node ./src/build/run.mjs src
+  - echo "package" && ./test/run-package.sh
+  - echo "test" && npm test
 
 node:16:
   image: node:16
