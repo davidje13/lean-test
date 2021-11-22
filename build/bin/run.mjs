@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import process, { platform, stderr, env } from 'process';
+import process, { platform, getuid, stderr, env } from 'process';
 import { join, resolve, dirname, relative } from 'path';
 import { standardRunner, outputs, reporters } from '../lean-test.mjs';
 import { readdir, access, readFile, realpath } from 'fs/promises';
@@ -233,20 +233,29 @@ const CHROME_ARGS = [
 ];
 
 async function launchBrowser(name, url, opts = {}) {
+	const isRoot = (platform === 'linux' && getuid() === 0);
+	const extraArgs = [];
+
 	switch (name) {
 		case 'manual':
 			stderr.write(`Ready to run test: ${url}\n`);
 			return null;
 		case 'chrome':
+			if (isRoot) { // required to prevent "Running as root without --no-sandbox is not supported"
+				extraArgs.push('--no-sandbox', '--disable-setuid-sandbox');
+			}
 			return spawn(await getChromePath(), [
 				...CHROME_ARGS,
+				...extraArgs,
 				'--headless',
 				'--remote-debugging-port=0', // required to avoid immediate termination, but not actually used
 				url,
 			], opts);
 		case 'firefox':
+			if (!isRoot) {
+				extraArgs.push('--no-remote');
+			}
 			return spawn(await getFirefoxPath(), [
-				'--no-remote',
 				'--new-instance',
 				'--headless',
 				url,

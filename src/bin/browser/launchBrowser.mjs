@@ -1,5 +1,5 @@
 import findExecutable from '../filesystem/findExecutable.mjs';
-import { stderr, env } from 'process';
+import { stderr, env, platform, getuid } from 'process';
 import { spawn } from 'child_process';
 
 const CHROME_ARGS = [
@@ -26,20 +26,29 @@ const CHROME_ARGS = [
 ];
 
 export default async function launchBrowser(name, url, opts = {}) {
+	const isRoot = (platform === 'linux' && getuid() === 0);
+	const extraArgs = [];
+
 	switch (name) {
 		case 'manual':
 			stderr.write(`Ready to run test: ${url}\n`);
 			return null;
 		case 'chrome':
+			if (isRoot) { // required to prevent "Running as root without --no-sandbox is not supported"
+				extraArgs.push('--no-sandbox', '--disable-setuid-sandbox');
+			}
 			return spawn(await getChromePath(), [
 				...CHROME_ARGS,
+				...extraArgs,
 				'--headless',
 				'--remote-debugging-port=0', // required to avoid immediate termination, but not actually used
 				url,
 			], opts);
 		case 'firefox':
+			if (!isRoot) {
+				extraArgs.push('--no-remote');
+			}
 			return spawn(await getFirefoxPath(), [
-				'--no-remote',
 				'--new-instance',
 				'--headless',
 				url,
