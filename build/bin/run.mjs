@@ -498,8 +498,9 @@ const config = argparse.parse(process.argv);
 const scanDirs = config.rest.map((path) => resolve(process.cwd(), path));
 const paths = findPathsMatching(scanDirs, config.pathsInclude, config.pathsExclude);
 
-const stdout = new outputs.Writer(process.stdout);
-const stderr = new outputs.Writer(process.stderr);
+const isCI = Boolean(process.env.CI || process.env.CONTINUOUS_INTEGRATION);
+const stdout = new outputs.Writer(process.stdout, isCI ? true : null);
+const stderr = new outputs.Writer(process.stderr, isCI ? true : null);
 const liveReporter = new reporters.Dots(stderr);
 const finalReporters = [
 	new reporters.Full(stdout),
