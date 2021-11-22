@@ -21,6 +21,8 @@ jobs:
           pwd
           npm install
           ./src/bin/run.mjs --parallel src && ./test/run-integration.mjs && ./test/run-package.sh
+          npm run other
+          npm run test
           npm test
           echo "test over: $?"
 

@@ -11,6 +11,7 @@
     "index.d.ts"
   ],
   "scripts": {
+    "other": "echo 'hello?'",
     "test": "echo 'running tests...' && ./src/bin/run.mjs --parallel src && rollup --config rollup.config.js && ./test/run-integration.mjs && ./test/run-package.sh"
   },
   "repository": {
