@@ -32,7 +32,7 @@ async function runIntegrationTest(dir, expectedFile = 'expected.txt', ...opts) {
 	const expected = await readFile(resolve(baseDir, 'test', dir, expectedFile));
 	const expectedStr = expected.toString('utf-8');
 
-	const { exitCode, stdout } = await invoke(
+	const { exitCode, stdout, stderr } = await invoke(
 		resolve(baseDir, 'build', 'bin', 'run.mjs'),
 		['--parallel', '--colour=false', ...opts],
 		{ cwd: resolve(baseDir, 'test', dir) },
@@ -50,7 +50,8 @@ async function runIntegrationTest(dir, expectedFile = 'expected.txt', ...opts) {
 	process.stdout.write(`${marker} ${dir} ${opts.join(' ')}\n`);
 
 	if (!match) {
-		process.stdout.write(`${red(output)}\n`);
+		process.stdout.write(`stderr:\n${red(stderr)}\n`);
+		process.stdout.write(`stdout:\n${red(output)}\n`);
 		process.stdout.write(`Output did not match expectation in ${dir}/${expectedFile}.\n`);
 	}
 	return match;
