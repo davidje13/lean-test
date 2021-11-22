@@ -6,8 +6,10 @@ echo;
 
 BASE_DIR="$(cd "$(dirname "$0")/.."; pwd)";
 cd "$BASE_DIR";
+rm /lean-test-*.tgz 2>/dev/null || true;
+npm pack;
 rm test/package/lean-test-*.tgz 2>/dev/null || true;
-npm pack --pack-destination=test/package;
+mv lean-test-*.tgz test/package/;
 cd - >/dev/null;
 
 cd "$BASE_DIR/test/package";
