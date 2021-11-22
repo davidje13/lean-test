@@ -4,12 +4,14 @@ import timeout from './timeout.mjs';
 
 describe('timeout', {
 	async 'aborts tests after the specified time has elapsed'() {
-		const result = await testRunner([timeout()], { count: 1, pass: 0, error: 1 }, (g) => {
+		const beginTime = Date.now();
+		await testRunner([timeout()], { count: 1, pass: 0, error: 1 }, (g) => {
 			g.test('test 1', async () => {
 				await forever();
 			}, { timeout: 10 });
 		});
-		expect(result.summary.duration, isGreaterThanOrEqual(10));
+		const duration = Date.now() - beginTime;
+		expect(duration, isGreaterThanOrEqual(10));
 	},
 
 	async 'ignores success after the specified time has elapsed'() {

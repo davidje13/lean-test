@@ -18,12 +18,9 @@ jobs:
           node-version: "14"
       - name: Test
         run: |
-          echo "install" && npm install
-          echo "A" && ./src/bin/run.mjs src
-          echo "B" && ./build/bin/run.mjs src
-          echo "package" && ./test/run-package.sh
-          ./src/bin/run.mjs --parallel src && rollup --config rollup.config.js && ./test/run-integration.mjs && ./test/run-package.sh
-          echo "test" && npm test
+          npm install
+          ./src/bin/run.mjs --parallel src && ./test/run-integration.mjs && ./test/run-package.sh
+          npm test
 
   build_and_test:
     runs-on: ubuntu-latest
