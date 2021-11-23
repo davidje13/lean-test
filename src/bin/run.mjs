@@ -9,19 +9,19 @@ import browserRunner from './browser/browserRunner.mjs';
 import nodeRunner from './node/nodeRunner.mjs';
 
 const argparse = new ArgumentParser({
-	parallelDiscovery: { names: ['parallel-discovery', 'P'], type: 'boolean', default: false },
-	parallelSuites: { names: ['parallel-suites', 'parallel', 'p'], type: 'boolean', default: false },
+	parallelDiscovery: { names: ['parallel-discovery', 'P'], env: 'PARALLEL_DISCOVERY', type: 'boolean', default: false },
+	parallelSuites: { names: ['parallel-suites', 'parallel', 'p'], env: 'PARALLEL_SUITES', type: 'boolean', default: false },
 	pathsInclude: { names: ['include', 'i'], type: 'array', default: ['**/*.{spec|test}.{js|mjs|jsx}'] },
 	pathsExclude: { names: ['exclude', 'x'], type: 'array', default: ['**/node_modules', '**/.*'] },
-	browser: { names: ['browser', 'b'], type: 'string', default: null },
-	colour: { names: ['colour', 'color'], type: 'boolean', default: null },
-	port: { names: ['port'], type: 'int', default: 0 },
-	host: { names: ['host'], type: 'string', default: '127.0.0.1' },
+	browser: { names: ['browser', 'b'], env: 'BROWSER', type: 'string', default: null },
+	colour: { names: ['colour', 'color'], env: 'OUTPUT_COLOUR', type: 'boolean', default: null },
+	port: { names: ['port'], env: 'TESTRUNNER_PORT', type: 'int', default: 0 },
+	host: { names: ['host'], env: 'TESTRUNNER_HOST', type: 'string', default: '127.0.0.1' },
 	rest: { names: ['scan', null], type: 'array', default: ['.'] }
 });
 
 try {
-	const config = argparse.parse(process.argv);
+	const config = argparse.parse(process.env, process.argv);
 
 	const scanDirs = config.rest.map((path) => resolve(process.cwd(), path));
 	const paths = findPathsMatching(scanDirs, config.pathsInclude, config.pathsExclude);

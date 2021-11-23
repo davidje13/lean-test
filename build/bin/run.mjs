@@ -80,17 +80,57 @@ const NO = ['false', 'no', '0', 'off'];
 class ArgumentParser {
 	constructor(opts) {
 		this.names = new Map();
+		this.envs = [];
 		this.defaults = {};
 		Object.entries(opts).forEach(([id, v]) => {
 			this.defaults[id] = v.default;
 			const config = { id, type: v.type || 'boolean' };
 			v.names.forEach((name) => this.names.set(name, config));
+			if (v.env) {
+				this.envs.push({ env: v.env, config });
+			}
 		});
 	}
 
+	parseOpt(name, target, config, value, getValue) {
+		const { id, type } = config;
+		switch (type) {
+			case 'boolean':
+				if (id in target) {
+					throw new Error(`Multiple values for ${name} not supported`);
+				}
+				if (value === null || YES.includes(value)) {
+					target[id] = true;
+				} else if (NO.includes(value)) {
+					target[id] = false;
+				} else {
+					throw new Error(`Unknown boolean value for ${name}: ${value}`);
+				}
+				break;
+			case 'string':
+			case 'int':
+				if (id in target) {
+					throw new Error(`Multiple values for ${name} not supported`);
+				}
+				let v = value ?? getValue();
+				if (type === 'int') {
+					v = Number.parseInt(v, 10);
+				}
+				target[id] = v;
+				break;
+			case 'array':
+				const list = target[id] || [];
+				list.push(value ?? getValue());
+				target[id] = list;
+				break;
+			default:
+				throw new Error(`Unknown argument type for ${name}: ${type}`);
+		}
+	}
+
 	loadOpt(target, name, value, extra) {
-		const opt = this.names.get(name);
-		if (!opt) {
+		const config = this.names.get(name);
+		if (!config) {
 			throw new Error(`Unknown flag: ${name}`);
 		}
 		let inc = 0;
@@ -100,43 +140,18 @@ class ArgumentParser {
 			}
 			return extra[inc++];
 		};
-		switch (opt.type) {
-			case 'boolean':
-				if (opt.id in target) {
-					throw new Error(`Multiple values for ${name} not supported`);
-				}
-				if (value === null || YES.includes(value)) {
-					target[opt.id] = true;
-				} else if (NO.includes(value)) {
-					target[opt.id] = false;
-				} else {
-					throw new Error(`Unknown boolean value for ${name}: ${value}`);
-				}
-				break;
-			case 'string':
-			case 'int':
-				if (opt.id in target) {
-					throw new Error(`Multiple values for ${name} not supported`);
-				}
-				let v = value ?? getNext();
-				if (opt.type === 'int') {
-					v = Number.parseInt(v, 10);
-				}
-				target[opt.id] = v;
-				break;
-			case 'array':
-				const list = target[opt.id] || [];
-				list.push(value ?? getNext());
-				target[opt.id] = list;
-				break;
-			default:
-				throw new Error(`Unknown argument type for ${name}: ${opt.type}`);
-		}
+		this.parseOpt(name, target, config, value, getNext);
 		return inc;
 	}
 
-	parse(argv, begin = 2) {
+	parse(environment, argv, begin = 2) {
 		let rest = false;
+		const envResult = {};
+		this.envs.forEach(({ env, config }) => {
+			if (environment[env] !== undefined) {
+				this.parseOpt(env, envResult, config, environment[env]);
+			}
+		});
 		const result = {};
 		for (let i = begin; i < argv.length; ++i) {
 			const arg = argv[i];
@@ -157,7 +172,7 @@ class ArgumentParser {
 				this.loadOpt(result, null, arg, []);
 			}
 		}
-		return { ...this.defaults, ...result };
+		return { ...this.defaults, ...envResult, ...result };
 	}
 }
 
@@ -349,15 +364,14 @@ async function loadSessionURL(sessionBase, url) {
 	try {
 		await sendJSON('POST', `${sessionBase}/url`, { url });
 	} catch (e) {
-		if (!url.includes('127.0.0.1')) {
-			throw e;
-		}
 		// fall-back: try using special docker host URL, since target might be in docker container
 		// See https://stackoverflow.com/a/43541732/1180785
+		const altUrl = url.replace(/:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1?\])\//, '://host.docker.internal/');
+		if (altUrl === url) {
+			throw e;
+		}
 		try {
-			await sendJSON('POST', `${sessionBase}/url`, {
-				url: url.replace('127.0.0.1', 'host.docker.internal'),
-			});
+			await sendJSON('POST', `${sessionBase}/url`, { url: altUrl });
 		} catch (ignore) {
 			throw e;
 		}
@@ -499,7 +513,7 @@ class Server {
 			await this.close();
 			throw new Exception(`Server.address unexpectedly returned ${addr}; aborting`);
 		}
-		this.hostname = addr.address;
+		this.hostname = (addr.family.toLowerCase() === 'ipv6') ? `[${addr.address}]` : addr.address;
 		this.port = addr.port;
 		process.addListener('SIGINT', this.close);
 	}
@@ -561,11 +575,12 @@ async function browserRunner(config, paths, listener) {
 		return resultPromise;
 	};
 
+	const webdriverEnv = config.browser.toUpperCase().replace(/[^A-Z]+/g, '_');
+	const webdriver = process.env[`WEBDRIVER_HOST_${webdriverEnv}`] || process.env.WEBDRIVER_HOST;
+
 	await server.listen(Number(config.port), config.host);
 	try {
 		const url = server.baseurl();
-		const webdriverEnv = config.browser.toUpperCase().replace(/[^A-Z]+/g, '_');
-		const webdriver = process.env[`WEBDRIVER_HOST_${webdriverEnv}`] || process.env.WEBDRIVER_HOST;
 		if (webdriver) {
 			const close = await beginWebdriverSession(webdriver, config.browser, url);
 			return await runWithSession(close, runner);
@@ -669,19 +684,19 @@ async function nodeRunner(config, paths, listener) {
 }
 
 const argparse = new ArgumentParser({
-	parallelDiscovery: { names: ['parallel-discovery', 'P'], type: 'boolean', default: false },
-	parallelSuites: { names: ['parallel-suites', 'parallel', 'p'], type: 'boolean', default: false },
+	parallelDiscovery: { names: ['parallel-discovery', 'P'], env: 'PARALLEL_DISCOVERY', type: 'boolean', default: false },
+	parallelSuites: { names: ['parallel-suites', 'parallel', 'p'], env: 'PARALLEL_SUITES', type: 'boolean', default: false },
 	pathsInclude: { names: ['include', 'i'], type: 'array', default: ['**/*.{spec|test}.{js|mjs|jsx}'] },
 	pathsExclude: { names: ['exclude', 'x'], type: 'array', default: ['**/node_modules', '**/.*'] },
-	browser: { names: ['browser', 'b'], type: 'string', default: null },
-	colour: { names: ['colour', 'color'], type: 'boolean', default: null },
-	port: { names: ['port'], type: 'int', default: 0 },
-	host: { names: ['host'], type: 'string', default: '127.0.0.1' },
+	browser: { names: ['browser', 'b'], env: 'BROWSER', type: 'string', default: null },
+	colour: { names: ['colour', 'color'], env: 'OUTPUT_COLOUR', type: 'boolean', default: null },
+	port: { names: ['port'], env: 'TESTRUNNER_PORT', type: 'int', default: 0 },
+	host: { names: ['host'], env: 'TESTRUNNER_HOST', type: 'string', default: '127.0.0.1' },
 	rest: { names: ['scan', null], type: 'array', default: ['.'] }
 });
 
 try {
-	const config = argparse.parse(process.argv);
+	const config = argparse.parse(process.env, process.argv);
 
 	const scanDirs = config.rest.map((path) => resolve(process.cwd(), path));
 	const paths = findPathsMatching(scanDirs, config.pathsInclude, config.pathsExclude);

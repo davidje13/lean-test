@@ -4,17 +4,57 @@ const NO = ['false', 'no', '0', 'off'];
 export default class ArgumentParser {
 	constructor(opts) {
 		this.names = new Map();
+		this.envs = [];
 		this.defaults = {};
 		Object.entries(opts).forEach(([id, v]) => {
 			this.defaults[id] = v.default;
 			const config = { id, type: v.type || 'boolean' };
 			v.names.forEach((name) => this.names.set(name, config));
+			if (v.env) {
+				this.envs.push({ env: v.env, config });
+			}
 		});
 	}
 
+	parseOpt(name, target, config, value, getValue) {
+		const { id, type } = config;
+		switch (type) {
+			case 'boolean':
+				if (id in target) {
+					throw new Error(`Multiple values for ${name} not supported`);
+				}
+				if (value === null || YES.includes(value)) {
+					target[id] = true;
+				} else if (NO.includes(value)) {
+					target[id] = false;
+				} else {
+					throw new Error(`Unknown boolean value for ${name}: ${value}`);
+				}
+				break;
+			case 'string':
+			case 'int':
+				if (id in target) {
+					throw new Error(`Multiple values for ${name} not supported`);
+				}
+				let v = value ?? getValue();
+				if (type === 'int') {
+					v = Number.parseInt(v, 10);
+				}
+				target[id] = v;
+				break;
+			case 'array':
+				const list = target[id] || [];
+				list.push(value ?? getValue());
+				target[id] = list;
+				break;
+			default:
+				throw new Error(`Unknown argument type for ${name}: ${type}`);
+		}
+	}
+
 	loadOpt(target, name, value, extra) {
-		const opt = this.names.get(name);
-		if (!opt) {
+		const config = this.names.get(name);
+		if (!config) {
 			throw new Error(`Unknown flag: ${name}`);
 		}
 		let inc = 0;
@@ -24,43 +64,18 @@ export default class ArgumentParser {
 			}
 			return extra[inc++];
 		};
-		switch (opt.type) {
-			case 'boolean':
-				if (opt.id in target) {
-					throw new Error(`Multiple values for ${name} not supported`);
-				}
-				if (value === null || YES.includes(value)) {
-					target[opt.id] = true;
-				} else if (NO.includes(value)) {
-					target[opt.id] = false;
-				} else {
-					throw new Error(`Unknown boolean value for ${name}: ${value}`);
-				}
-				break;
-			case 'string':
-			case 'int':
-				if (opt.id in target) {
-					throw new Error(`Multiple values for ${name} not supported`);
-				}
-				let v = value ?? getNext();
-				if (opt.type === 'int') {
-					v = Number.parseInt(v, 10);
-				}
-				target[opt.id] = v;
-				break;
-			case 'array':
-				const list = target[opt.id] || [];
-				list.push(value ?? getNext());
-				target[opt.id] = list;
-				break;
-			default:
-				throw new Error(`Unknown argument type for ${name}: ${opt.type}`);
-		}
+		this.parseOpt(name, target, config, value, getNext);
 		return inc;
 	}
 
-	parse(argv, begin = 2) {
+	parse(environment, argv, begin = 2) {
 		let rest = false;
+		const envResult = {};
+		this.envs.forEach(({ env, config }) => {
+			if (environment[env] !== undefined) {
+				this.parseOpt(env, envResult, config, environment[env]);
+			}
+		});
 		const result = {};
 		for (let i = begin; i < argv.length; ++i) {
 			const arg = argv[i];
@@ -81,7 +96,7 @@ export default class ArgumentParser {
 				this.loadOpt(result, null, arg, []);
 			}
 		}
-		return { ...this.defaults, ...result };
+		return { ...this.defaults, ...envResult, ...result };
 	}
 }
 

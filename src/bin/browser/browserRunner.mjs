@@ -44,11 +44,12 @@ export default async function browserRunner(config, paths, listener) {
 		return resultPromise;
 	};
 
+	const webdriverEnv = config.browser.toUpperCase().replace(/[^A-Z]+/g, '_');
+	const webdriver = process.env[`WEBDRIVER_HOST_${webdriverEnv}`] || process.env.WEBDRIVER_HOST;
+
 	await server.listen(Number(config.port), config.host);
 	try {
 		const url = server.baseurl();
-		const webdriverEnv = config.browser.toUpperCase().replace(/[^A-Z]+/g, '_');
-		const webdriver = process.env[`WEBDRIVER_HOST_${webdriverEnv}`] || process.env.WEBDRIVER_HOST;
 		if (webdriver) {
 			const close = await beginWebdriverSession(webdriver, config.browser, url);
 			return await runWithSession(close, runner);

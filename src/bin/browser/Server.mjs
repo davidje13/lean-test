@@ -96,7 +96,7 @@ export default class Server {
 			await this.close();
 			throw new Exception(`Server.address unexpectedly returned ${addr}; aborting`);
 		}
-		this.hostname = addr.address;
+		this.hostname = (addr.family.toLowerCase() === 'ipv6') ? `[${addr.address}]` : addr.address;
 		this.port = addr.port;
 		process.addListener('SIGINT', this.close);
 	}
