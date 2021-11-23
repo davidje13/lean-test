@@ -1,20 +1,23 @@
-before_script:
-- apt-get update
-- wget --no-verbose https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-- apt-get install -y ./google-chrome-stable_current_amd64.deb
-- apt-get install -y firefox-esr || apt-get install -y iceweasel
+.common: &common
+  services:
+  - name: selenium/standalone-firefox
+    alias: firefox
+  - name: selenium/standalone-chrome
+    alias: chrome
+  variables:
+    WEBDRIVER_HOST_CHROME: chrome:4444
+    WEBDRIVER_HOST_FIREFOX: firefox:4444
+  script:
+  - npm install-test --ignore-scripts=false
 
 node:14:
+  <<: *common
   image: node:14
-  script:
-  - npm install && npm test --ignore-scripts=false
 
 node:16:
+  <<: *common
   image: node:16
-  script:
-  - npm install-test
 
 node:17:
+  <<: *common
   image: node:17
-  script:
-  - npm install-test

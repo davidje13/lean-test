@@ -2,6 +2,7 @@ import { dirname, resolve, relative } from 'path';
 import { realpath } from 'fs/promises';
 import process from 'process';
 import launchBrowser from './launchBrowser.mjs';
+import { beginWebdriverSession } from './webdriver.mjs';
 import Server from './Server.mjs';
 
 export default async function browserRunner(config, paths, listener) {
@@ -38,23 +39,52 @@ export default async function browserRunner(config, paths, listener) {
 			}
 		};
 	});
+	const runner = () => {
+		beginTimeout(30000);
+		return resultPromise;
+	};
 
 	await server.listen(Number(config.port), config.host);
 	try {
 		const url = server.baseurl();
-		const launched = await launchBrowser(config.browser, url, { stdio: ['ignore', 'pipe', 'pipe'] });
-		return await run(launched, () => {
-			beginTimeout(30000);
-			return resultPromise;
-		});
+		const webdriverEnv = config.browser.toUpperCase().replace(/[^A-Z]+/g, '_');
+		const webdriver = process.env[`WEBDRIVER_HOST_${webdriverEnv}`] || process.env.WEBDRIVER_HOST;
+		if (webdriver) {
+			const close = await beginWebdriverSession(webdriver, config.browser, url);
+			return await runWithSession(close, runner);
+		} else {
+			const launched = await launchBrowser(config.browser, url, { stdio: ['ignore', 'pipe', 'pipe'] });
+			return await runWithProcess(launched, runner);
+		}
 	} finally {
 		server.close();
 	}
 }
 
-async function run(launched, fn) {
+async function runWithSession(close, runner) {
+	const end = async () => {
+		await close();
+		// mimick default SIGINT/SIGTERM behaviour
+		if (process.stderr.isTTY) {
+			process.stderr.write('\u001B[0m');
+		}
+		process.exit(1);
+	};
+	try {
+		// cannot use 'exit' because end is async
+		process.addListener('SIGTERM', end);
+		process.addListener('SIGINT', end);
+		return await runner();
+	} finally {
+		process.removeListener('SIGTERM', end);
+		process.removeListener('SIGINT', end);
+		await close();
+	}
+}
+
+async function runWithProcess(launched, runner) {
 	if (!launched) {
-		return fn();
+		return runner();
 	}
 
 	const { proc, teardown } = launched;
@@ -68,7 +98,7 @@ async function run(launched, fn) {
 		proc.stderr.addListener('data', (d) => stderr.push(d));
 		return await Promise.race([
 			new Promise((_, reject) => proc.once('error', (err) => reject(err))),
-			fn(),
+			runner(),
 		]);
 	} catch (e) {
 		throw new Error(

@@ -17,7 +17,7 @@ export default class Server {
 			['htm', 'text/html'],
 			['html', 'text/html'],
 			['txt', 'text/plain'],
-			['json', 'text/json'],
+			['json', 'application/json'],
 		]);
 		this.ignore404 = ['/favicon.ico'];
 

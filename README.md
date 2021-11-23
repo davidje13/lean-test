@@ -416,6 +416,25 @@ The `lean-test` executable can be configured in various ways:
   Runs the tests in a browser. Currently `chrome` and `firefox` are supported, or use
 	`manual` then open the printed URL in any browser to start the tests.
 
+	You can also use a WebDriver-compatible server (e.g. Selenium) by setting the
+	`WEBDRIVER_HOST` environment variable, or `WEBDRIVER_HOST_<BROWSER>` to set it for
+	a specific browser. For example:
+
+	```sh
+	# alternatively this could be a grid, for example
+	docker run -d -p 4444:4444 --shm-size="2g" selenium/standalone-chrome
+	export WEBDRIVER_HOST=localhost:4444
+	lean-test --browser=chrome
+	```
+
+	```sh
+	docker run -d -p 4444:4444 --shm-size="2g" selenium/standalone-chrome
+	docker run -d -p 4445:4444 --shm-size="2g" selenium/standalone-firefox
+	export WEBDRIVER_HOST_CHROME=localhost:4444
+	export WEBDRIVER_HOST_FIREFOX=localhost:4445
+	lean-test --browser=chrome && lean-test --browser=firefox
+	```
+
 - `--port <number>`:<br>
   Sets an explicit port number for the browser-based tests to use. By default this is
 	`0` (pick random available port). This only takes effect if `--browser` is used.
