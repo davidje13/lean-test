@@ -26,7 +26,6 @@ node:17:
 
 experiment:
   image: node:17
-  alias: experiment
   services:
   - name: selenium/standalone-firefox
     alias: firefox
