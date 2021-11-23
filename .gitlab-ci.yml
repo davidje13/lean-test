@@ -7,6 +7,7 @@
   variables:
     WEBDRIVER_HOST_CHROME: chrome:4444
     WEBDRIVER_HOST_FIREFOX: firefox:4444
+    WEBDRIVER_TESTRUNNER_HOST: node
     TESTRUNNER_HOST: '0.0.0.0'
   script:
   - npm install-test --ignore-scripts=false

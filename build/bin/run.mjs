@@ -502,8 +502,8 @@ class Server {
 		}
 	}
 
-	baseurl() {
-		return 'http://' + this.hostname + ':' + this.port + '/';
+	baseurl(overrideHost) {
+		return 'http://' + (overrideHost || this.hostname) + ':' + this.port + '/';
 	}
 
 	async listen(port, hostname) {
@@ -580,12 +580,12 @@ async function browserRunner(config, paths, listener) {
 
 	await server.listen(Number(config.port), config.host);
 	try {
-		const url = server.baseurl();
 		if (webdriver) {
-			const close = await beginWebdriverSession(webdriver, config.browser, url);
+			const overrideHost = process.env.WEBDRIVER_TESTRUNNER_HOST;
+			const close = await beginWebdriverSession(webdriver, config.browser, server.baseurl(overrideHost));
 			return await runWithSession(close, runner);
 		} else {
-			const launched = await launchBrowser(config.browser, url, { stdio: ['ignore', 'pipe', 'pipe'] });
+			const launched = await launchBrowser(config.browser, server.baseurl(), { stdio: ['ignore', 'pipe', 'pipe'] });
 			return await runWithProcess(launched, runner);
 		}
 	} finally {

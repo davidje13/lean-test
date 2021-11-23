@@ -85,8 +85,8 @@ export default class Server {
 		}
 	}
 
-	baseurl() {
-		return 'http://' + this.hostname + ':' + this.port + '/';
+	baseurl(overrideHost) {
+		return 'http://' + (overrideHost || this.hostname) + ':' + this.port + '/';
 	}
 
 	async listen(port, hostname) {
