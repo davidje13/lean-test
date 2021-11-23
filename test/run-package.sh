@@ -16,7 +16,7 @@ cd "$BASE_DIR/test/package";
 rm -rf node_modules || true;
 npm install --save-dev lean-test-*.tgz --audit=false;
 rm lean-test-*.tgz || true;
-npm test;
+npm test --ignore-scripts=false; # ignore-scripts is over-zealous on Node 14
 cd - >/dev/null;
 
 echo;
