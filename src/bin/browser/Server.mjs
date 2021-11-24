@@ -21,8 +21,7 @@ export default class Server {
 		]);
 		this.ignore404 = ['/favicon.ico'];
 
-		this.hostname = null;
-		this.port = null;
+		this.address = null;
 		this.server = createServer(this._handleRequest.bind(this));
 		this.close = this.close.bind(this);
 	}
@@ -85,8 +84,19 @@ export default class Server {
 		}
 	}
 
-	baseurl(overrideHost) {
-		return 'http://' + (overrideHost || this.hostname) + ':' + this.port + '/';
+	baseurl(overrideAddr) {
+		const address = overrideAddr ?? this.address;
+		let hostname;
+		if (typeof address === 'object') {
+			if (address.family.toLowerCase() === 'ipv6') {
+				hostname = `[${address.address}]`;
+			} else {
+				hostname = address.address;
+			}
+		} else {
+			hostname = address;
+		}
+		return `http://${hostname}:${this.address.port}/`;
 	}
 
 	async listen(port, hostname) {
@@ -96,16 +106,15 @@ export default class Server {
 			await this.close();
 			throw new Exception(`Server.address unexpectedly returned ${addr}; aborting`);
 		}
-		this.hostname = (addr.family.toLowerCase() === 'ipv6') ? `[${addr.address}]` : addr.address;
-		this.port = addr.port;
+		this.address = addr;
 		process.addListener('SIGINT', this.close);
 	}
 
 	async close() {
-		if (!this.hostname) {
+		if (!this.address) {
 			return;
 		}
-		this.hostname = null;
+		this.address = null;
 		this.port = null;
 		await new Promise((resolve) => this.server.close(resolve));
 		process.removeListener('SIGINT', this.close);

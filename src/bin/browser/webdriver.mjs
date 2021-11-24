@@ -1,6 +1,6 @@
 import { request } from 'http';
 
-export async function beginWebdriverSession(host, browser, url) {
+export async function beginWebdriverSession(host, browser, urlOptions) {
 	const { value: { sessionId } } = await sendJSON('POST', `${host}/session`, {
 		capabilities: {
 			firstMatch: [{ browserName: browser }]
@@ -8,31 +8,18 @@ export async function beginWebdriverSession(host, browser, url) {
 	});
 	const sessionBase = `${host}/session/${encodeURIComponent(sessionId)}`;
 	const close = () => sendJSON('DELETE', sessionBase);
-	try {
-		await loadSessionURL(sessionBase, url);
-		return close;
-	} catch (e) {
-		await close();
-		throw e;
-	}
-}
 
-async function loadSessionURL(sessionBase, url) {
-	try {
-		await sendJSON('POST', `${sessionBase}/url`, { url });
-	} catch (e) {
-		// fall-back: try using special docker host URL, since target might be in docker container
-		// See https://stackoverflow.com/a/43541732/1180785
-		const altUrl = url.replace(/:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1?\])\//, '://host.docker.internal/');
-		if (altUrl === url) {
-			throw e;
-		}
+	let lastError = null;
+	for (const url of urlOptions) {
 		try {
-			await sendJSON('POST', `${sessionBase}/url`, { url: altUrl });
-		} catch (ignore) {
-			throw e;
+			await sendJSON('POST', `${sessionBase}/url`, { url });
+			return close;
+		} catch (e) {
+			lastError = e;
 		}
 	}
+	await close();
+	throw lastError;
 }
 
 function sendJSON(method, path, data) {

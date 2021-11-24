@@ -1,6 +1,7 @@
 import { dirname, resolve, relative } from 'path';
 import { realpath } from 'fs/promises';
 import process from 'process';
+import { networkInterfaces } from 'os';
 import launchBrowser from './launchBrowser.mjs';
 import { beginWebdriverSession } from './webdriver.mjs';
 import Server from './Server.mjs';
@@ -50,8 +51,17 @@ export default async function browserRunner(config, paths, listener) {
 	await server.listen(Number(config.port), config.host);
 	try {
 		if (webdriver) {
-			const overrideHost = process.env.WEBDRIVER_TESTRUNNER_HOST;
-			const close = await beginWebdriverSession(webdriver, config.browser, server.baseurl(overrideHost));
+			// try various URLs until something works, because we don't know what environment we're in
+			const urls = new Set([
+				server.baseurl(process.env.WEBDRIVER_TESTRUNNER_HOST),
+				server.baseurl(),
+				server.baseurl('host.docker.internal'), // See https://stackoverflow.com/a/43541732/1180785
+				...Object.values(networkInterfaces())
+					.flatMap((i) => i)
+					.filter((i) => !i.internal)
+					.map((i) => server.baseurl(i)),
+			]);
+			const close = await beginWebdriverSession(webdriver, config.browser, urls);
 			return await runWithSession(close, runner);
 		} else {
 			const launched = await launchBrowser(config.browser, server.baseurl(), { stdio: ['ignore', 'pipe', 'pipe'] });

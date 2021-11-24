@@ -3,9 +3,9 @@ import process, { platform, getuid, stderr, env } from 'process';
 import { join, resolve, dirname, relative } from 'path';
 import { standardRunner, outputs, reporters } from '../lean-test.mjs';
 import { readdir, access, mkdtemp, rm, writeFile, readFile, realpath } from 'fs/promises';
+import { tmpdir, networkInterfaces } from 'os';
 import { constants } from 'fs';
 import { spawn } from 'child_process';
-import { tmpdir } from 'os';
 import { request, createServer } from 'http';
 
 const SPECIAL = /[^-a-zA-Z0-9 _]/g;
@@ -343,7 +343,7 @@ async function launchFirefox(url, opts) {
 	};
 }
 
-async function beginWebdriverSession(host, browser, url) {
+async function beginWebdriverSession(host, browser, urlOptions) {
 	const { value: { sessionId } } = await sendJSON('POST', `${host}/session`, {
 		capabilities: {
 			firstMatch: [{ browserName: browser }]
@@ -351,31 +351,18 @@ async function beginWebdriverSession(host, browser, url) {
 	});
 	const sessionBase = `${host}/session/${encodeURIComponent(sessionId)}`;
 	const close = () => sendJSON('DELETE', sessionBase);
-	try {
-		await loadSessionURL(sessionBase, url);
-		return close;
-	} catch (e) {
-		await close();
-		throw e;
-	}
-}
 
-async function loadSessionURL(sessionBase, url) {
-	try {
-		await sendJSON('POST', `${sessionBase}/url`, { url });
-	} catch (e) {
-		// fall-back: try using special docker host URL, since target might be in docker container
-		// See https://stackoverflow.com/a/43541732/1180785
-		const altUrl = url.replace(/:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1?\])\//, '://host.docker.internal/');
-		if (altUrl === url) {
-			throw e;
-		}
+	let lastError = null;
+	for (const url of urlOptions) {
 		try {
-			await sendJSON('POST', `${sessionBase}/url`, { url: altUrl });
-		} catch (ignore) {
-			throw e;
+			await sendJSON('POST', `${sessionBase}/url`, { url });
+			return close;
+		} catch (e) {
+			lastError = e;
 		}
 	}
+	await close();
+	throw lastError;
 }
 
 function sendJSON(method, path, data) {
@@ -438,8 +425,7 @@ class Server {
 		]);
 		this.ignore404 = ['/favicon.ico'];
 
-		this.hostname = null;
-		this.port = null;
+		this.address = null;
 		this.server = createServer(this._handleRequest.bind(this));
 		this.close = this.close.bind(this);
 	}
@@ -502,8 +488,19 @@ class Server {
 		}
 	}
 
-	baseurl(overrideHost) {
-		return 'http://' + (overrideHost || this.hostname) + ':' + this.port + '/';
+	baseurl(overrideAddr) {
+		const address = overrideAddr ?? this.address;
+		let hostname;
+		if (typeof address === 'object') {
+			if (address.family.toLowerCase() === 'ipv6') {
+				hostname = `[${address.address}]`;
+			} else {
+				hostname = address.address;
+			}
+		} else {
+			hostname = address;
+		}
+		return `http://${hostname}:${this.address.port}/`;
 	}
 
 	async listen(port, hostname) {
@@ -513,16 +510,15 @@ class Server {
 			await this.close();
 			throw new Exception(`Server.address unexpectedly returned ${addr}; aborting`);
 		}
-		this.hostname = (addr.family.toLowerCase() === 'ipv6') ? `[${addr.address}]` : addr.address;
-		this.port = addr.port;
+		this.address = addr;
 		process.addListener('SIGINT', this.close);
 	}
 
 	async close() {
-		if (!this.hostname) {
+		if (!this.address) {
 			return;
 		}
-		this.hostname = null;
+		this.address = null;
 		this.port = null;
 		await new Promise((resolve) => this.server.close(resolve));
 		process.removeListener('SIGINT', this.close);
@@ -581,8 +577,17 @@ async function browserRunner(config, paths, listener) {
 	await server.listen(Number(config.port), config.host);
 	try {
 		if (webdriver) {
-			const overrideHost = process.env.WEBDRIVER_TESTRUNNER_HOST;
-			const close = await beginWebdriverSession(webdriver, config.browser, server.baseurl(overrideHost));
+			// try various URLs until something works, because we don't know what environment we're in
+			const urls = new Set([
+				server.baseurl(process.env.WEBDRIVER_TESTRUNNER_HOST),
+				server.baseurl(),
+				server.baseurl('host.docker.internal'), // See https://stackoverflow.com/a/43541732/1180785
+				...Object.values(networkInterfaces())
+					.flatMap((i) => i)
+					.filter((i) => !i.internal)
+					.map((i) => server.baseurl(i)),
+			]);
+			const close = await beginWebdriverSession(webdriver, config.browser, urls);
 			return await runWithSession(close, runner);
 		} else {
 			const launched = await launchBrowser(config.browser, server.baseurl(), { stdio: ['ignore', 'pipe', 'pipe'] });
