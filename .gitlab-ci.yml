@@ -29,17 +29,18 @@ experiment:
   services:
   - name: selenium/standalone-firefox
     alias: firefox
-  script:
-  - set -x
-  - apt-get update && apt-get install -y jq
-  - npx http-server . -a 0.0.0.0 -p 8080 &
-  - sleep 10
-  - curl http://localhost:8080
-  - SESSION_ID="$(curl http://firefox:4444/session -d '{"capabilities":{"firstMatch":[{"browserName":"firefox"}]}}' | jq '.data.sessionId')"
-  - curl http://firefox:4444/session/$SESSION_ID/url -d '{"url":"http://example.com"}'
-  - curl http://firefox:4444/session/$SESSION_ID/url -d '{"url":"http://localhost:8080"}'
-  - curl http://firefox:4444/session/$SESSION_ID/url -d '{"url":"http://experiment:8080"}'
-  - curl http://firefox:4444/session/$SESSION_ID/url -d '{"url":"http://127.0.0.1:8080"}'
-  - curl http://firefox:4444/session/$SESSION_ID/url -d '{"url":"http://0.0.0.0:8080"}'
-  - curl http://firefox:4444/session/$SESSION_ID/url -d '{"url":"http://[::1]:8080"}'
-  - curl http://firefox:4444/session/$SESSION_ID/url -d '{"url":"http://[::]:8080"}'
+  script: |
+    set -x
+    apt-get update && apt-get install -y jq
+    npx http-server . -a 0.0.0.0 -p 8080 &
+    sleep 10
+    curl http://localhost:8080
+    SESSION_ID="$(curl http://firefox:4444/session -d '{"capabilities":{"firstMatch":[{"browserName":"firefox"}]}}' | jq '.value.sessionId')"
+    echo "Session ID: $SESSION_ID"
+    curl http://firefox:4444/session/$SESSION_ID/url -d '{"url":"http://example.com"}'
+    curl http://firefox:4444/session/$SESSION_ID/url -d '{"url":"http://localhost:8080"}'
+    curl http://firefox:4444/session/$SESSION_ID/url -d '{"url":"http://experiment:8080"}'
+    curl http://firefox:4444/session/$SESSION_ID/url -d '{"url":"http://127.0.0.1:8080"}'
+    curl http://firefox:4444/session/$SESSION_ID/url -d '{"url":"http://0.0.0.0:8080"}'
+    curl http://firefox:4444/session/$SESSION_ID/url -d '{"url":"http://[::1]:8080"}'
+    curl http://firefox:4444/session/$SESSION_ID/url -d '{"url":"http://[::]:8080"}'
