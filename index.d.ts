@@ -8,7 +8,7 @@ interface WriteStream {
 }
 
 export interface MatcherResult {
-	success: boolean;
+	pass: boolean;
 	message: (() => string) | string;
 }
 

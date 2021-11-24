@@ -154,12 +154,12 @@ skipped). Can use all the same matchers as `expect`.
 const isSeven = () => (actual) => {
 	if (actual === 7) {
 		return {
-			success: true,
+			pass: true,
 			message: 'Expected value not to be 7, but was.',
 		};
 	} else {
 		return {
-			success: false,
+			pass: false,
 			message: `Expected 7, but got ${actual}.`,
 		};
 	}

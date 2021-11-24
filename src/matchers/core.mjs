@@ -2,20 +2,20 @@ import { seq } from '../utils.mjs';
 import { checkEquals, delegateMatcher, ANY } from './checkEquals.mjs';
 
 export const not = (matcher) => (...args) =>
-	seq(matcher(...args), ({ success, message }) => ({ success: !success, message }));
+	seq(matcher(...args), ({ pass, message }) => ({ pass: !pass, message }));
 
 export const withMessage = (message, matcher) => (...args) =>
-	seq(matcher(...args), ({ success }) => ({ success, message }));
+	seq(matcher(...args), ({ pass }) => ({ pass, message }));
 
 export const equals = (expected) => (actual) => checkEquals(expected, actual, 'value');
 
 export const same = (expected) => (actual) => {
 	if (expected === actual) {
-		return { success: true, message: `Expected value not to be ${expected}, but was.` };
+		return { pass: true, message: `Expected value not to be ${expected}, but was.` };
 	}
 	const equalResult = checkEquals(expected, actual, 'value');
-	if (equalResult.success) {
-		return { success: false, message: `Expected exactly ${expected}, but got a different (but matching) instance.` };
+	if (equalResult.pass) {
+		return { pass: false, message: `Expected exactly ${expected}, but got a different (but matching) instance.` };
 	} else {
 		return equalResult;
 	}
@@ -23,57 +23,57 @@ export const same = (expected) => (actual) => {
 
 export const isTrue = () => (actual) => {
 	if (actual === true) {
-		return { success: true, message: `Expected value not to be true, but was.` };
+		return { pass: true, message: `Expected value not to be true, but was.` };
 	} else {
-		return { success: false, message: `Expected true, but got ${actual}.` };
+		return { pass: false, message: `Expected true, but got ${actual}.` };
 	}
 };
 
 export const isTruthy = () => (actual) => {
 	if (actual) {
-		return { success: true, message: `Expected value not to be truthy, but got ${actual}.` };
+		return { pass: true, message: `Expected value not to be truthy, but got ${actual}.` };
 	} else {
-		return { success: false, message: `Expected truthy value, but got ${actual}.` };
+		return { pass: false, message: `Expected truthy value, but got ${actual}.` };
 	}
 };
 
 export const isFalse = () => (actual) => {
 	if (actual === false) {
-		return { success: true, message: `Expected value not to be false, but was.` };
+		return { pass: true, message: `Expected value not to be false, but was.` };
 	} else {
-		return { success: false, message: `Expected false, but got ${actual}.` };
+		return { pass: false, message: `Expected false, but got ${actual}.` };
 	}
 };
 
 export const isFalsy = () => (actual) => {
 	if (!actual) {
-		return { success: true, message: `Expected value not to be falsy, but got ${actual}.` };
+		return { pass: true, message: `Expected value not to be falsy, but got ${actual}.` };
 	} else {
-		return { success: false, message: `Expected falsy value, but got ${actual}.` };
+		return { pass: false, message: `Expected falsy value, but got ${actual}.` };
 	}
 };
 
 export const isNull = () => (actual) => {
 	if (actual === null) {
-		return { success: true, message: `Expected value not to be null, but was.` };
+		return { pass: true, message: `Expected value not to be null, but was.` };
 	} else {
-		return { success: false, message: `Expected null, but got ${actual}.` };
+		return { pass: false, message: `Expected null, but got ${actual}.` };
 	}
 };
 
 export const isUndefined = () => (actual) => {
 	if (actual === undefined) {
-		return { success: true, message: `Expected value not to be undefined, but was.` };
+		return { pass: true, message: `Expected value not to be undefined, but was.` };
 	} else {
-		return { success: false, message: `Expected undefined, but got ${actual}.` };
+		return { pass: false, message: `Expected undefined, but got ${actual}.` };
 	}
 };
 
 export const isNullish = () => (actual) => {
 	if (actual === null || actual === undefined) {
-		return { success: true, message: `Expected value not to be nullish, but got ${actual}.` };
+		return { pass: true, message: `Expected value not to be nullish, but got ${actual}.` };
 	} else {
-		return { success: false, message: `Expected nullish value, but got ${actual}.` };
+		return { pass: false, message: `Expected nullish value, but got ${actual}.` };
 	}
 };
 
@@ -82,7 +82,7 @@ export const resolves = (expected = ANY) => (input) => {
 		return delegateMatcher(expected, actual, 'resolved value');
 	}
 	function reject(actual) {
-		return { success: false, message: `Expected ${input} to resolve, but threw ${actual}.` };
+		return { pass: false, message: `Expected ${input} to resolve, but threw ${actual}.` };
 	}
 
 	try {
@@ -100,17 +100,17 @@ export const resolves = (expected = ANY) => (input) => {
 export const throws = (expected = ANY) => (input) => {
 	function resolve(actual) {
 		if (typeof expected === 'string') {
-			return { success: false, message: `Expected ${input} to throw ${expected}, but did not throw (returned ${actual}).` };
+			return { pass: false, message: `Expected ${input} to throw ${expected}, but did not throw (returned ${actual}).` };
 		} else {
-			return { success: false, message: `Expected ${input} to throw, but did not throw (returned ${actual}).` };
+			return { pass: false, message: `Expected ${input} to throw, but did not throw (returned ${actual}).` };
 		}
 	}
 	function reject(actual) {
 		if (typeof expected === 'string' && actual instanceof Error) {
 			if (actual.message.includes(expected)) {
-				return { success: true, message: `Expected ${input} not to throw error containing ${expected} (threw ${actual}).` };
+				return { pass: true, message: `Expected ${input} not to throw error containing ${expected} (threw ${actual}).` };
 			} else {
-				return { success: false, message: `Expected ${input} to throw ${expected}, but threw ${actual}.` };
+				return { pass: false, message: `Expected ${input} to throw ${expected}, but threw ${actual}.` };
 			}
 		}
 		return delegateMatcher(expected, actual, 'thrown value');

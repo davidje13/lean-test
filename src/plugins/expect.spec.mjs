@@ -5,9 +5,9 @@ import expect from './expect.mjs';
 
 const MY_CUSTOM_SAME_MATCHER = (expected) => (actual) => {
 	if (actual === expected) {
-		return { success: true, message: 'inverted failure' };
+		return { pass: true, message: 'inverted failure' };
 	} else {
-		return { success: false, message: 'failure' };
+		return { pass: false, message: 'failure' };
 	}
 };
 

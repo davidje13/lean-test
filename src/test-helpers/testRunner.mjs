@@ -15,7 +15,7 @@ export default async function testRunner(plugins, expectedResult, block) {
 	const looseExpected = { ...result.summary, ...expectedResult };
 
 	const match = equals(looseExpected)(result.summary);
-	if (!match.success) {
+	if (!match.pass) {
 		new FullReporter(new Writer(process.stdout, false)).report(result);
 		fail(match.message);
 	}

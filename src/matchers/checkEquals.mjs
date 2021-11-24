@@ -3,9 +3,9 @@ export const ANY = Symbol();
 export const checkEquals = (expected, actual, name) => {
 	const diff = getDiff(actual, expected);
 	if (diff) {
-		return { success: false, message: `Expected ${name} to equal ${expected}, but ${diff}.` };
+		return { pass: false, message: `Expected ${name} to equal ${expected}, but ${diff}.` };
 	} else {
-		return { success: true, message: `Expected ${name} not to equal ${expected}, but did.` };
+		return { pass: true, message: `Expected ${name} not to equal ${expected}, but did.` };
 	}
 };
 
@@ -13,7 +13,7 @@ export const delegateMatcher = (matcher, actual, name) => {
 	if (typeof matcher === 'function') {
 		return matcher(actual);
 	} else if (matcher === ANY) {
-		return { success: true, message: `Expected no ${name}, but got ${actual}.` };
+		return { pass: true, message: `Expected no ${name}, but got ${actual}.` };
 	} else {
 		return checkEquals(matcher, actual, name);
 	}

@@ -787,9 +787,9 @@ const ANY = Symbol();
 const checkEquals = (expected, actual, name) => {
 	const diff = getDiff(actual, expected);
 	if (diff) {
-		return { success: false, message: `Expected ${name} to equal ${expected}, but ${diff}.` };
+		return { pass: false, message: `Expected ${name} to equal ${expected}, but ${diff}.` };
 	} else {
-		return { success: true, message: `Expected ${name} not to equal ${expected}, but did.` };
+		return { pass: true, message: `Expected ${name} not to equal ${expected}, but did.` };
 	}
 };
 
@@ -797,7 +797,7 @@ const delegateMatcher = (matcher, actual, name) => {
 	if (typeof matcher === 'function') {
 		return matcher(actual);
 	} else if (matcher === ANY) {
-		return { success: true, message: `Expected no ${name}, but got ${actual}.` };
+		return { pass: true, message: `Expected no ${name}, but got ${actual}.` };
 	} else {
 		return checkEquals(matcher, actual, name);
 	}
@@ -837,20 +837,20 @@ function getDiff(a, b) {
 }
 
 const not = (matcher) => (...args) =>
-	seq(matcher(...args), ({ success, message }) => ({ success: !success, message }));
+	seq(matcher(...args), ({ pass, message }) => ({ pass: !pass, message }));
 
 const withMessage = (message, matcher) => (...args) =>
-	seq(matcher(...args), ({ success }) => ({ success, message }));
+	seq(matcher(...args), ({ pass }) => ({ pass, message }));
 
 const equals = (expected) => (actual) => checkEquals(expected, actual, 'value');
 
 const same = (expected) => (actual) => {
 	if (expected === actual) {
-		return { success: true, message: `Expected value not to be ${expected}, but was.` };
+		return { pass: true, message: `Expected value not to be ${expected}, but was.` };
 	}
 	const equalResult = checkEquals(expected, actual, 'value');
-	if (equalResult.success) {
-		return { success: false, message: `Expected exactly ${expected}, but got a different (but matching) instance.` };
+	if (equalResult.pass) {
+		return { pass: false, message: `Expected exactly ${expected}, but got a different (but matching) instance.` };
 	} else {
 		return equalResult;
 	}
@@ -858,57 +858,57 @@ const same = (expected) => (actual) => {
 
 const isTrue = () => (actual) => {
 	if (actual === true) {
-		return { success: true, message: `Expected value not to be true, but was.` };
+		return { pass: true, message: `Expected value not to be true, but was.` };
 	} else {
-		return { success: false, message: `Expected true, but got ${actual}.` };
+		return { pass: false, message: `Expected true, but got ${actual}.` };
 	}
 };
 
 const isTruthy = () => (actual) => {
 	if (actual) {
-		return { success: true, message: `Expected value not to be truthy, but got ${actual}.` };
+		return { pass: true, message: `Expected value not to be truthy, but got ${actual}.` };
 	} else {
-		return { success: false, message: `Expected truthy value, but got ${actual}.` };
+		return { pass: false, message: `Expected truthy value, but got ${actual}.` };
 	}
 };
 
 const isFalse = () => (actual) => {
 	if (actual === false) {
-		return { success: true, message: `Expected value not to be false, but was.` };
+		return { pass: true, message: `Expected value not to be false, but was.` };
 	} else {
-		return { success: false, message: `Expected false, but got ${actual}.` };
+		return { pass: false, message: `Expected false, but got ${actual}.` };
 	}
 };
 
 const isFalsy = () => (actual) => {
 	if (!actual) {
-		return { success: true, message: `Expected value not to be falsy, but got ${actual}.` };
+		return { pass: true, message: `Expected value not to be falsy, but got ${actual}.` };
 	} else {
-		return { success: false, message: `Expected falsy value, but got ${actual}.` };
+		return { pass: false, message: `Expected falsy value, but got ${actual}.` };
 	}
 };
 
 const isNull = () => (actual) => {
 	if (actual === null) {
-		return { success: true, message: `Expected value not to be null, but was.` };
+		return { pass: true, message: `Expected value not to be null, but was.` };
 	} else {
-		return { success: false, message: `Expected null, but got ${actual}.` };
+		return { pass: false, message: `Expected null, but got ${actual}.` };
 	}
 };
 
 const isUndefined = () => (actual) => {
 	if (actual === undefined) {
-		return { success: true, message: `Expected value not to be undefined, but was.` };
+		return { pass: true, message: `Expected value not to be undefined, but was.` };
 	} else {
-		return { success: false, message: `Expected undefined, but got ${actual}.` };
+		return { pass: false, message: `Expected undefined, but got ${actual}.` };
 	}
 };
 
 const isNullish = () => (actual) => {
 	if (actual === null || actual === undefined) {
-		return { success: true, message: `Expected value not to be nullish, but got ${actual}.` };
+		return { pass: true, message: `Expected value not to be nullish, but got ${actual}.` };
 	} else {
-		return { success: false, message: `Expected nullish value, but got ${actual}.` };
+		return { pass: false, message: `Expected nullish value, but got ${actual}.` };
 	}
 };
 
@@ -917,7 +917,7 @@ const resolves = (expected = ANY) => (input) => {
 		return delegateMatcher(expected, actual, 'resolved value');
 	}
 	function reject(actual) {
-		return { success: false, message: `Expected ${input} to resolve, but threw ${actual}.` };
+		return { pass: false, message: `Expected ${input} to resolve, but threw ${actual}.` };
 	}
 
 	try {
@@ -935,17 +935,17 @@ const resolves = (expected = ANY) => (input) => {
 const throws = (expected = ANY) => (input) => {
 	function resolve(actual) {
 		if (typeof expected === 'string') {
-			return { success: false, message: `Expected ${input} to throw ${expected}, but did not throw (returned ${actual}).` };
+			return { pass: false, message: `Expected ${input} to throw ${expected}, but did not throw (returned ${actual}).` };
 		} else {
-			return { success: false, message: `Expected ${input} to throw, but did not throw (returned ${actual}).` };
+			return { pass: false, message: `Expected ${input} to throw, but did not throw (returned ${actual}).` };
 		}
 	}
 	function reject(actual) {
 		if (typeof expected === 'string' && actual instanceof Error) {
 			if (actual.message.includes(expected)) {
-				return { success: true, message: `Expected ${input} not to throw error containing ${expected} (threw ${actual}).` };
+				return { pass: true, message: `Expected ${input} not to throw error containing ${expected} (threw ${actual}).` };
 			} else {
-				return { success: false, message: `Expected ${input} to throw ${expected}, but threw ${actual}.` };
+				return { pass: false, message: `Expected ${input} to throw ${expected}, but threw ${actual}.` };
 			}
 		}
 		return delegateMatcher(expected, actual, 'thrown value');
@@ -965,33 +965,33 @@ const throws = (expected = ANY) => (input) => {
 
 const isGreaterThan = (expected) => (actual) => {
 	if (actual > expected) {
-		return { success: true, message: `Expected a value not greater than ${expected}, but got ${actual}.` };
+		return { pass: true, message: `Expected a value not greater than ${expected}, but got ${actual}.` };
 	} else {
-		return { success: false, message: `Expected a value greater than ${expected}, but got ${actual}.` };
+		return { pass: false, message: `Expected a value greater than ${expected}, but got ${actual}.` };
 	}
 };
 
 const isLessThan = (expected) => (actual) => {
 	if (actual < expected) {
-		return { success: true, message: `Expected a value not less than ${expected}, but got ${actual}.` };
+		return { pass: true, message: `Expected a value not less than ${expected}, but got ${actual}.` };
 	} else {
-		return { success: false, message: `Expected a value less than ${expected}, but got ${actual}.` };
+		return { pass: false, message: `Expected a value less than ${expected}, but got ${actual}.` };
 	}
 };
 
 const isGreaterThanOrEqual = (expected) => (actual) => {
 	if (actual >= expected) {
-		return { success: true, message: `Expected a value not greater than or equal to ${expected}, but got ${actual}.` };
+		return { pass: true, message: `Expected a value not greater than or equal to ${expected}, but got ${actual}.` };
 	} else {
-		return { success: false, message: `Expected a value greater than or equal to ${expected}, but got ${actual}.` };
+		return { pass: false, message: `Expected a value greater than or equal to ${expected}, but got ${actual}.` };
 	}
 };
 
 const isLessThanOrEqual = (expected) => (actual) => {
 	if (actual <= expected) {
-		return { success: true, message: `Expected a value not less than or equal to ${expected}, but got ${actual}.` };
+		return { pass: true, message: `Expected a value not less than or equal to ${expected}, but got ${actual}.` };
 	} else {
-		return { success: false, message: `Expected a value less than or equal to ${expected}, but got ${actual}.` };
+		return { pass: false, message: `Expected a value less than or equal to ${expected}, but got ${actual}.` };
 	}
 };
 
@@ -1006,9 +1006,9 @@ const hasLength = (expected = ANY) => (actual) => {
 	const length = getLength(actual);
 	if (length === null) {
 		if (expected === ANY) {
-			return { success: false, message: `Expected a value with defined size, but got ${actual}.` };
+			return { pass: false, message: `Expected a value with defined size, but got ${actual}.` };
 		} else {
-			return { success: false, message: `Expected a value of size ${expected}, but got ${actual}.` };
+			return { pass: false, message: `Expected a value of size ${expected}, but got ${actual}.` };
 		}
 	}
 	return delegateMatcher(expected, length, 'length');
@@ -1017,11 +1017,11 @@ const hasLength = (expected = ANY) => (actual) => {
 const isEmpty = () => (actual) => {
 	const length = getLength(actual);
 	if (length === null) {
-		return { success: false, message: `Expected an empty value, but got ${actual}.` };
+		return { pass: false, message: `Expected an empty value, but got ${actual}.` };
 	} else if (length > 0) {
-		return { success: false, message: `Expected an empty value, but got ${actual}.` };
+		return { pass: false, message: `Expected an empty value, but got ${actual}.` };
 	} else {
-		return { success: true, message: `Expected a non-empty value, but got ${actual}.` };
+		return { pass: true, message: `Expected a non-empty value, but got ${actual}.` };
 	}
 };
 
@@ -1037,12 +1037,12 @@ const contains = (sub) => (actual) => {
 	} else if (actual instanceof Set) {
 		pass = actual.has(sub);
 	} else {
-		return { success: false, message: `Expected to contain ${sub}, but got non-collection type ${actual}.` };
+		return { pass: false, message: `Expected to contain ${sub}, but got non-collection type ${actual}.` };
 	}
 	if (pass) {
-		return { success: true, message: `Expected not to contain ${sub}, but got ${actual}.` };
+		return { pass: true, message: `Expected not to contain ${sub}, but got ${actual}.` };
 	} else {
-		return { success: false, message: `Expected to contain ${sub}, but got ${actual}.` };
+		return { pass: false, message: `Expected to contain ${sub}, but got ${actual}.` };
 	}
 };
 
@@ -1074,8 +1074,8 @@ const FLUENT_MATCHERS = Symbol();
 
 const expect = () => (builder) => {
 	const invokeMatcher = (actual, matcher, ErrorType, skipFrames) =>
-		seq(matcher(actual), ({ success, message }) => {
-			if (!success) {
+		seq(matcher(actual), ({ pass, message }) => {
+			if (!pass) {
 				throw new ErrorType(resolveMessage(message), skipFrames + 3);
 			}
 		});

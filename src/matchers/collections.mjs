@@ -11,9 +11,9 @@ export const hasLength = (expected = ANY) => (actual) => {
 	const length = getLength(actual);
 	if (length === null) {
 		if (expected === ANY) {
-			return { success: false, message: `Expected a value with defined size, but got ${actual}.` };
+			return { pass: false, message: `Expected a value with defined size, but got ${actual}.` };
 		} else {
-			return { success: false, message: `Expected a value of size ${expected}, but got ${actual}.` };
+			return { pass: false, message: `Expected a value of size ${expected}, but got ${actual}.` };
 		}
 	}
 	return delegateMatcher(expected, length, 'length');
@@ -22,11 +22,11 @@ export const hasLength = (expected = ANY) => (actual) => {
 export const isEmpty = () => (actual) => {
 	const length = getLength(actual);
 	if (length === null) {
-		return { success: false, message: `Expected an empty value, but got ${actual}.` };
+		return { pass: false, message: `Expected an empty value, but got ${actual}.` };
 	} else if (length > 0) {
-		return { success: false, message: `Expected an empty value, but got ${actual}.` };
+		return { pass: false, message: `Expected an empty value, but got ${actual}.` };
 	} else {
-		return { success: true, message: `Expected a non-empty value, but got ${actual}.` };
+		return { pass: true, message: `Expected a non-empty value, but got ${actual}.` };
 	}
 };
 
@@ -42,11 +42,11 @@ export const contains = (sub) => (actual) => {
 	} else if (actual instanceof Set) {
 		pass = actual.has(sub);
 	} else {
-		return { success: false, message: `Expected to contain ${sub}, but got non-collection type ${actual}.` };
+		return { pass: false, message: `Expected to contain ${sub}, but got non-collection type ${actual}.` };
 	}
 	if (pass) {
-		return { success: true, message: `Expected not to contain ${sub}, but got ${actual}.` };
+		return { pass: true, message: `Expected not to contain ${sub}, but got ${actual}.` };
 	} else {
-		return { success: false, message: `Expected to contain ${sub}, but got ${actual}.` };
+		return { pass: false, message: `Expected to contain ${sub}, but got ${actual}.` };
 	}
 };

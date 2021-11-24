@@ -6,8 +6,8 @@ const FLUENT_MATCHERS = Symbol();
 
 const expect = () => (builder) => {
 	const invokeMatcher = (actual, matcher, ErrorType, skipFrames) =>
-		seq(matcher(actual), ({ success, message }) => {
-			if (!success) {
+		seq(matcher(actual), ({ pass, message }) => {
+			if (!pass) {
 				throw new ErrorType(resolveMessage(message), skipFrames + 3);
 			}
 		});
