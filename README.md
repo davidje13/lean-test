@@ -168,8 +168,8 @@ const isSeven = () => (actual) => {
 // can be used matcher-style immediately:
 expect(7, isSeven());
 
-// use extendExpect to allow use fluent-style:
-extendExpect({ isSeven });
+// use expect.extend to allow use fluent-style:
+expect.extend({ isSeven });
 // ...
 expect(7).isSeven();
 ```

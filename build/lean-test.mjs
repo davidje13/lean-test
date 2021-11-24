@@ -606,7 +606,6 @@ class Runner {
 }
 
 const GLOBALS = Symbol();
-const METHODS = Symbol();
 const NODE_TYPES = Symbol();
 const NODE_OPTIONS = Symbol();
 const NODE_INIT = Symbol();
@@ -696,10 +695,6 @@ Runner.Builder = class RunnerBuilder {
 		return this.extend(GLOBALS, ...Object.entries(globals));
 	}
 
-	addMethods(methods) {
-		return this.extend(METHODS, ...Object.entries(methods));
-	}
-
 	async build() {
 		const exts = this.extensions.copy();
 		const parallelDiscovery = this.config.parallelDiscovery && await StackScope.isSupported();
@@ -737,8 +732,7 @@ Runner.Builder = class RunnerBuilder {
 		});
 
 		const methods = Object.freeze(Object.fromEntries([
-			...exts.get(GLOBALS),
-			...exts.get(METHODS).map(([key, method]) => ([key, method.bind(methodTarget)])),
+			...exts.get(GLOBALS).map(([key, g]) => ([key, bindAll(g, methodTarget)])),
 			...exts.get(NODE_TYPES).map(({ key, optionsFactory, config }) => [key, Object.assign(
 				(...args) => addChildNode(config, optionsFactory(...args)),
 				Object.fromEntries(exts.get(NODE_OPTIONS).map(({ name, options }) => [
@@ -770,6 +764,17 @@ Runner.Builder = class RunnerBuilder {
 		return new Runner(baseNode, Object.freeze(baseContext));
 	}
 };
+
+function bindAll(fn, thisArg) {
+	if (typeof fn !== 'function') {
+		return fn;
+	}
+	const r = fn.bind(thisArg);
+	Object.entries(fn).forEach(([key, value]) => {
+		r[key] = bindAll(value, thisArg);
+	});
+	return r;
+}
 
 /** same as result.then(then), but synchronous if result is synchronous */
 function seq(result, then) {
@@ -1067,7 +1072,20 @@ var matchers = /*#__PURE__*/Object.freeze({
 	isLessThanOrEqual: isLessThanOrEqual,
 	hasLength: hasLength,
 	isEmpty: isEmpty,
-	contains: contains
+	contains: contains,
+	toEqual: equals,
+	toBe: same,
+	toBeTruthy: isTruthy,
+	toBeFalsy: isFalsy,
+	toBeNull: isNull,
+	toBeUndefined: isUndefined,
+	toThrow: throws,
+	toBeGreaterThan: isGreaterThan,
+	toBeLessThan: isLessThan,
+	toBeGreaterThanOrEqual: isGreaterThanOrEqual,
+	toBeLessThanOrEqual: isLessThanOrEqual,
+	toHaveLength: hasLength,
+	toContain: contains
 });
 
 const FLUENT_MATCHERS = Symbol();
@@ -1089,17 +1107,21 @@ const expect = () => (builder) => {
 		));
 	};
 
-	builder.addMethods({
-		expect(...args) {
-			return run(this, TestAssertionError, ...args);
-		},
-		assume(...args) {
-			return run(this, TestAssumptionError, ...args);
-		},
-		extendExpect(matchers) {
-			this.extend(FLUENT_MATCHERS, ...Object.entries(matchers));
-		}
-	});
+	function expect(...args) {
+		return run(this, TestAssertionError, ...args);
+	}
+
+	function assume(...args) {
+		return run(this, TestAssumptionError, ...args);
+	}
+
+	function extend(matchers) {
+		this.extend(FLUENT_MATCHERS, ...Object.entries(matchers));
+	}
+
+	expect.extend = extend;
+
+	builder.addGlobals({ expect, assume });
 };
 
 expect.matchers = (...matcherDictionaries) => (builder) => {
@@ -1110,7 +1132,7 @@ expect.matchers = (...matcherDictionaries) => (builder) => {
 };
 
 var fail = () => (builder) => {
-	builder.addMethods({
+	builder.addGlobals({
 		fail(message) {
 			throw new TestAssertionError(resolveMessage(message), 1);
 		},
@@ -1236,7 +1258,7 @@ var lifecycle = ({ order = 0 } = {}) => (builder) => {
 		}
 	};
 
-	builder.addMethods({
+	builder.addGlobals({
 		beforeEach(name, fn) {
 			this.getCurrentNodeScope(scope).beforeEach.push(convert(name, fn, 'each'));
 		},
@@ -1333,7 +1355,7 @@ function getOutput(type, binary) {
 }
 
 var outputCaptor = ({ order = -1 } = {}) => (builder) => {
-	builder.addMethods({
+	builder.addGlobals({
 		getStdout(binary = false) {
 			return getOutput('stdout', binary);
 		},

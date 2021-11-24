@@ -81,7 +81,7 @@ function getOutput(type, binary) {
 }
 
 export default ({ order = -1 } = {}) => (builder) => {
-	builder.addMethods({
+	builder.addGlobals({
 		getStdout(binary = false) {
 			return getOutput('stdout', binary);
 		},

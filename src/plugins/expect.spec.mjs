@@ -70,7 +70,7 @@ describe('expect', {
 
 	async 'custom fluent matchers can be registered and used'() {
 		await testRunner([expect(), expect.matchers(core)], { pass: 1 }, (g) => {
-			g.extendExpect({
+			g.expect.extend({
 				myMatcherName: MY_CUSTOM_SAME_MATCHER,
 			});
 
@@ -80,7 +80,7 @@ describe('expect', {
 		});
 
 		await testRunner([expect(), expect.matchers(core)], { fail: 1 }, (g) => {
-			g.extendExpect({
+			g.expect.extend({
 				myMatcherName: MY_CUSTOM_SAME_MATCHER,
 			});
 

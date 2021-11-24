@@ -83,7 +83,7 @@ export default ({ order = 0 } = {}) => (builder) => {
 		}
 	};
 
-	builder.addMethods({
+	builder.addGlobals({
 		beforeEach(name, fn) {
 			this.getCurrentNodeScope(scope).beforeEach.push(convert(name, fn, 'each'));
 		},

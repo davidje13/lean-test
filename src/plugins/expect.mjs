@@ -21,17 +21,21 @@ const expect = () => (builder) => {
 		));
 	};
 
-	builder.addMethods({
-		expect(...args) {
-			return run(this, TestAssertionError, ...args);
-		},
-		assume(...args) {
-			return run(this, TestAssumptionError, ...args);
-		},
-		extendExpect(matchers) {
-			this.extend(FLUENT_MATCHERS, ...Object.entries(matchers));
-		}
-	});
+	function expect(...args) {
+		return run(this, TestAssertionError, ...args);
+	}
+
+	function assume(...args) {
+		return run(this, TestAssumptionError, ...args);
+	}
+
+	function extend(matchers) {
+		this.extend(FLUENT_MATCHERS, ...Object.entries(matchers));
+	}
+
+	expect.extend = extend;
+
+	builder.addGlobals({ expect, assume });
 };
 
 expect.matchers = (...matcherDictionaries) => (builder) => {

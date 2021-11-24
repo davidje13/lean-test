@@ -188,8 +188,7 @@ declare namespace Runner {
 		addScope(defaults: { node?: () => unknown, context?: () => unknown }): Symbol;
 		addNodeType(key: string | Symbol, optionsFactory: (...args: unknown[]) => NodeOptions, config: NodeConfig): Builder;
 		addNodeOption(name: string, options: NodeOptions): Builder;
-		addGlobals(globals: Record<string, unknown>): Builder;
-		addMethods(methods: Record<string, (this: MethodThis, ...args: unknown[]) => unknown>): Builder;
+		addGlobals(globals: Record<string, unknown | ((this: MethodThis, ...args: unknown[]) => unknown)>): Builder;
 		build(): Promise<Runner>;
 	}
 }
@@ -240,12 +239,31 @@ interface matchers {
 		SyncMatcher<() => T> &
 		AsyncMatcher<Promise<T> | (() => Promise<T>)>
 	);
-	rejects: (expectation?: SyncMatcher<unknown> | string) => (
+	throws: (expectation?: SyncMatcher<unknown> | string) => (
 		SyncMatcher<() => unknown> &
 		AsyncMatcher<Promise<unknown> | (() => Promise<unknown>)>
 	);
 	hasLength: (expectation?: SyncMatcher<number> | number) => SyncMatcher<LengthHaver>;
 	isEmpty: () => SyncMatcher<LengthHaver>;
+	contains: (expectation?: SyncMatcher<unknown> | string | unknown) => SyncMatcher<string | Array<any> | Set<any>>;
+
+	// compatibility aliases
+	toEqual: <T>(expected: T) => SyncMatcher<T>;
+	toBe: <T>(expected: T) => SyncMatcher<T>;
+	toBeTruthy: () => SyncMatcher<unknown>;
+	toBeFalsy: () => SyncMatcher<unknown>;
+	toBeNull: () => SyncMatcher<unknown>;
+	toBeUndefined: () => SyncMatcher<unknown>;
+	toThrow: (expectation?: SyncMatcher<unknown> | string) => (
+		SyncMatcher<() => unknown> &
+		AsyncMatcher<Promise<unknown> | (() => Promise<unknown>)>
+	);
+	toBeGreaterThan: (value: number) => SyncMatcher<number>;
+	toBeLessThan: (value: number) => SyncMatcher<number>;
+	toBeGreaterThanOrEqual: (value: number) => SyncMatcher<number>;
+	toBeLessThanOrEqual: (value: number) => SyncMatcher<number>;
+	toHaveLength: (expectation?: SyncMatcher<number> | number) => SyncMatcher<LengthHaver>;
+	toContain: (expectation?: SyncMatcher<unknown> | string | unknown) => SyncMatcher<string | Array<any> | Set<any>>;
 }
 export const matchers: matchers;
 
@@ -307,10 +325,29 @@ declare global { // same as DiscoveryGlobals + matchers
 		SyncMatcher<() => T> &
 		AsyncMatcher<Promise<T> | (() => Promise<T>)>
 	);
-	const rejects: (expectation?: SyncMatcher<unknown> | string) => (
+	const throws: (expectation?: SyncMatcher<unknown> | string) => (
 		SyncMatcher<() => unknown> &
 		AsyncMatcher<Promise<unknown> | (() => Promise<unknown>)>
 	);
 	const hasLength: (expectation?: SyncMatcher<number> | number) => SyncMatcher<LengthHaver>;
 	const isEmpty: () => SyncMatcher<LengthHaver>;
+	const contains: (expectation?: SyncMatcher<unknown> | string | unknown) => SyncMatcher<string | Array<any> | Set<any>>;
+
+	// compatibility aliases
+	const toEqual: <T>(expected: T) => SyncMatcher<T>;
+	const toBe: <T>(expected: T) => SyncMatcher<T>;
+	const toBeTruthy: () => SyncMatcher<unknown>;
+	const toBeFalsy: () => SyncMatcher<unknown>;
+	const toBeNull: () => SyncMatcher<unknown>;
+	const toBeUndefined: () => SyncMatcher<unknown>;
+	const toThrow: (expectation?: SyncMatcher<unknown> | string) => (
+		SyncMatcher<() => unknown> &
+		AsyncMatcher<Promise<unknown> | (() => Promise<unknown>)>
+	);
+	const toBeGreaterThan: (value: number) => SyncMatcher<number>;
+	const toBeLessThan: (value: number) => SyncMatcher<number>;
+	const toBeGreaterThanOrEqual: (value: number) => SyncMatcher<number>;
+	const toBeLessThanOrEqual: (value: number) => SyncMatcher<number>;
+	const toHaveLength: (expectation?: SyncMatcher<number> | number) => SyncMatcher<LengthHaver>;
+	const toContain: (expectation?: SyncMatcher<unknown> | string | unknown) => SyncMatcher<string | Array<any> | Set<any>>;
 }

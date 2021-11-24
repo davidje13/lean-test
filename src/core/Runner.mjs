@@ -22,7 +22,6 @@ export default class Runner {
 }
 
 const GLOBALS = Symbol();
-const METHODS = Symbol();
 const NODE_TYPES = Symbol();
 const NODE_OPTIONS = Symbol();
 const NODE_INIT = Symbol();
@@ -112,10 +111,6 @@ Runner.Builder = class RunnerBuilder {
 		return this.extend(GLOBALS, ...Object.entries(globals));
 	}
 
-	addMethods(methods) {
-		return this.extend(METHODS, ...Object.entries(methods));
-	}
-
 	async build() {
 		const exts = this.extensions.copy();
 		const parallelDiscovery = this.config.parallelDiscovery && await StackScope.isSupported();
@@ -153,8 +148,7 @@ Runner.Builder = class RunnerBuilder {
 		});
 
 		const methods = Object.freeze(Object.fromEntries([
-			...exts.get(GLOBALS),
-			...exts.get(METHODS).map(([key, method]) => ([key, method.bind(methodTarget)])),
+			...exts.get(GLOBALS).map(([key, g]) => ([key, bindAll(g, methodTarget)])),
 			...exts.get(NODE_TYPES).map(({ key, optionsFactory, config }) => [key, Object.assign(
 				(...args) => addChildNode(config, optionsFactory(...args)),
 				Object.fromEntries(exts.get(NODE_OPTIONS).map(({ name, options }) => [
@@ -185,4 +179,15 @@ Runner.Builder = class RunnerBuilder {
 
 		return new Runner(baseNode, Object.freeze(baseContext));
 	}
+}
+
+function bindAll(fn, thisArg) {
+	if (typeof fn !== 'function') {
+		return fn;
+	}
+	const r = fn.bind(thisArg);
+	Object.entries(fn).forEach(([key, value]) => {
+		r[key] = bindAll(value, thisArg);
+	});
+	return r;
 }

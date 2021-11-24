@@ -3,7 +3,7 @@ import TestAssertionError from '../core/TestAssertionError.mjs';
 import TestAssumptionError from '../core/TestAssumptionError.mjs';
 
 export default () => (builder) => {
-	builder.addMethods({
+	builder.addGlobals({
 		fail(message) {
 			throw new TestAssertionError(resolveMessage(message), 1);
 		},
