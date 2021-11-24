@@ -26,7 +26,9 @@ type FluentExpect<T> = {
 
 type Expect = (
 	(<T, M extends Matcher<T>>(actual: T, matcher: M) => AsyncChain<ReturnType<M>, void>) &
-	(<T>(actual: T) => FluentExpect<T>)
+	(<T>(actual: T) => FluentExpect<T>) & {
+		extend: (matchers: Record<string, (...args: unknown[]) => Matcher<unknown>>) => void;
+	}
 );
 
 export type Plugin = (builder: Runner.Builder) => void;
