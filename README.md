@@ -447,7 +447,7 @@ The `lean-test` executable can be configured in various ways:
 	Sets an explicit host name for the browser-based tests to use. By default this is
 	`127.0.0.1` (local loopback). This only takes effect if `--browser` is used.
 	You may want to change this setting if you need to run tests in a browser running on a
-	different computer on the same network (e.g. by specifying `localhost` to make it
+	different computer on the same network (e.g. by specifying `0.0.0.0` to make it
 	available over the network).
 
 - `--parallel-suites` / `--parallel` / `-p` / environment `PARALLEL_SUITES=true`:<br>
