@@ -412,8 +412,8 @@ describe('lifecycle', () => {
 
 The `lean-test` executable can be configured in various ways:
 
-- `--browser <name>` / `-b <name>`:<br>
-  Runs the tests in a browser. Currently `chrome` and `firefox` are supported, or use
+- `--browser <name>` / `-b <name>` / environment `BROWSER=<name>`:<br>
+	Runs the tests in a browser. Currently `chrome` and `firefox` are supported, or use
 	`manual` then open the printed URL in any browser to start the tests.
 
 	You can also use a WebDriver-compatible server (e.g. Selenium) by setting the
@@ -435,32 +435,36 @@ The `lean-test` executable can be configured in various ways:
 	lean-test --browser=chrome && lean-test --browser=firefox
 	```
 
-- `--port <number>`:<br>
-  Sets an explicit port number for the browser-based tests to use. By default this is
+	If you are using a remote browser, you will also need to set
+	`--host 0.0.0.0` (or equivalently `TESTRUNNER_HOST=0.0.0.0`) so that the test server
+	is accessible to the browser.
+
+- `--port <number>` / environment `TESTRUNNER_PORT=<number>`:<br>
+	Sets an explicit port number for the browser-based tests to use. By default this is
 	`0` (pick random available port). This only takes effect if `--browser` is used.
 
-- `--host <name>`:<br>
-  Sets an explicit host name for the browser-based tests to use. By default this is
+- `--host <name>` / environment `TESTRUNNER_HOST=<name>`:<br>
+	Sets an explicit host name for the browser-based tests to use. By default this is
 	`127.0.0.1` (local loopback). This only takes effect if `--browser` is used.
 	You may want to change this setting if you need to run tests in a browser running on a
 	different computer on the same network (e.g. by specifying `localhost` to make it
 	available over the network).
 
-- `--parallel-suites` / `--parallel` / `-p`:<br>
-  Runs test suites in parallel. This is generally recommended unless the code being
+- `--parallel-suites` / `--parallel` / `-p` / environment `PARALLEL_SUITES=true`:<br>
+	Runs test suites in parallel. This is generally recommended unless the code being
 	tested may cause tests in different files to interfere with each other (e.g. uses
 	singletons or global state).
 
 - `--include <pattern>` / `-i <pattern>`:<br>
-  Configures the search pattern glob. Can be set multiple times. By default, this is
+	Configures the search pattern glob. Can be set multiple times. By default, this is
 	`**/*.{spec|test}.{js|mjs|jsx}`.
 
 - `--exclude <pattern>` / `-x <pattern>`:<br>
-  Configures the exclusion pattern glob. Can be set multiple times. By default, this is
+	Configures the exclusion pattern glob. Can be set multiple times. By default, this is
 	`**/node_modules` and `**/.*`.
 
-- `--parallel-discovery` / `-P`:<br>
-  Runs test discovery in parallel. This may be slightly faster than the default
+- `--parallel-discovery` / `-P` / environment `PARALLEL_DISCOVERY=true`:<br>
+	Runs test discovery in parallel. This may be slightly faster than the default
 	(synchronous) discovery, but may fail with an error depending on the environment
 	and the test complexity.
 
@@ -472,4 +476,54 @@ Example:
 ```sh
 # Run all js/mjs files in the 'tests' folder, using Chrome:
 lean-test --parallel --browser chrome -i '**/*.{js|mjs}' tests
+```
+
+## CI Examples for Browser testing
+
+These examples assume that `package.json` contains something like:
+
+```json
+{
+  "scripts": {
+    "test": "lean-test --browser=chrome && lean-test --browser=firefox"
+  }
+}
+```
+
+### GitLab CI/CD
+
+```yaml
+build_and_test:
+  image: node:16
+  services:
+  - name: selenium/standalone-firefox
+    alias: firefox
+  - name: selenium/standalone-chrome
+    alias: chrome
+  variables:
+    WEBDRIVER_HOST_CHROME: chrome:4444
+    WEBDRIVER_HOST_FIREFOX: firefox:4444
+    TESTRUNNER_HOST: '0.0.0.0'
+  script:
+  - npm install-test
+```
+
+### GitHub Actions
+
+```yaml
+name: Test
+on: [push]
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Install Node
+      uses: actions/setup-node@v2
+      with:
+        node-version: '16'
+    - name: Test
+      run: npm install-test
 ```
