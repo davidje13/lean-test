@@ -35,13 +35,13 @@ experiment:
     npx http-server . -a 0.0.0.0 -p 8080 &
     sleep 10
     curl http://localhost:8080
-    SESSION_ID="$(curl "http://firefox:4444/session" -d '{"capabilities":{"firstMatch":[{"browserName":"firefox"}]}}' | jq '.value.sessionId' -r)"
+    SESSION_ID="$(curl "http://firefox:4444/session" -d '{"capabilities":{"firstMatch":[{"browserName":"firefox"}]}}' -H 'Content-Type: application/json' | jq '.value.sessionId' -r)"
     echo "Session ID: $SESSION_ID"
-    curl "http://firefox:4444/session/$SESSION_ID/url" -d '{"url":"http://example.com"}'
-    curl "http://firefox:4444/session/$SESSION_ID/url" -d '{"url":"http://localhost:8080"}'
-    curl "http://firefox:4444/session/$SESSION_ID/url" -d '{"url":"http://host.docker.internal:8080"}'
-    curl "http://firefox:4444/session/$SESSION_ID/url" -d '{"url":"http://experiment:8080"}'
-    curl "http://firefox:4444/session/$SESSION_ID/url" -d '{"url":"http://127.0.0.1:8080"}'
-    curl "http://firefox:4444/session/$SESSION_ID/url" -d '{"url":"http://0.0.0.0:8080"}'
-    curl "http://firefox:4444/session/$SESSION_ID/url" -d '{"url":"http://[::1]:8080"}'
-    curl "http://firefox:4444/session/$SESSION_ID/url" -d '{"url":"http://[::]:8080"}'
+    curl "http://firefox:4444/session/$SESSION_ID/url" -d '{"url":"http://example.com"}' -H 'Content-Type: application/json'
+    curl "http://firefox:4444/session/$SESSION_ID/url" -d '{"url":"http://localhost:8080"}' -H 'Content-Type: application/json'
+    curl "http://firefox:4444/session/$SESSION_ID/url" -d '{"url":"http://host.docker.internal:8080"}' -H 'Content-Type: application/json'
+    curl "http://firefox:4444/session/$SESSION_ID/url" -d '{"url":"http://experiment:8080"}' -H 'Content-Type: application/json'
+    curl "http://firefox:4444/session/$SESSION_ID/url" -d '{"url":"http://127.0.0.1:8080"}' -H 'Content-Type: application/json'
+    curl "http://firefox:4444/session/$SESSION_ID/url" -d '{"url":"http://0.0.0.0:8080"}' -H 'Content-Type: application/json'
+    curl "http://firefox:4444/session/$SESSION_ID/url" -d '{"url":"http://[::1]:8080"}' -H 'Content-Type: application/json'
+    curl "http://firefox:4444/session/$SESSION_ID/url" -d '{"url":"http://[::]:8080"}' -H 'Content-Type: application/json'
