@@ -13,45 +13,49 @@
 [ERRO]     test: error [xx]
              Error: nope
               at test/reporting/stacktrace.spec.mjs:5:9
+[ERRO]     test: multiline error [xx]
+             Error: nope
+             newline
+              at test/reporting/stacktrace.spec.mjs:9:9
 [FAIL]     test: fail [xx]
              Failure: nope
-              at test/reporting/stacktrace.spec.mjs:9:3
+              at test/reporting/stacktrace.spec.mjs:13:3
 [FAIL]     test: expect matcher [xx]
              Failure: Expected value to equal 2, but 1 != 2.
-              at test/reporting/stacktrace.spec.mjs:13:3
+              at test/reporting/stacktrace.spec.mjs:17:3
 [FAIL]     test: expect fluent [xx]
              Failure: Expected value to equal 2, but 1 != 2.
-              at test/reporting/stacktrace.spec.mjs:17:13
+              at test/reporting/stacktrace.spec.mjs:21:13
 [FAIL]     test: expect lambda matcher [xx]
              Failure: Expected resolved value to equal 8, but 7 != 8.
-              at test/reporting/stacktrace.spec.mjs:21:3
+              at test/reporting/stacktrace.spec.mjs:25:3
 [FAIL]     test: expect lambda fluent [xx]
              Failure: Expected resolved value to equal 8, but 7 != 8.
-              at test/reporting/stacktrace.spec.mjs:25:19
+              at test/reporting/stacktrace.spec.mjs:29:19
 [FAIL]     test: user-space function call [xx]
              Failure: inside
-              at test/reporting/stacktrace.spec.mjs:30:4
-              at test/reporting/stacktrace.spec.mjs:32:3
+              at test/reporting/stacktrace.spec.mjs:34:4
+              at test/reporting/stacktrace.spec.mjs:36:3
 [FAIL]     test: async 1 [xx]
              Failure: Expected value to equal 2, but 1 != 2.
-              at test/reporting/stacktrace.spec.mjs:36:3
+              at test/reporting/stacktrace.spec.mjs:40:3
 [FAIL]     test: async 2 [xx]
              Failure: Expected value to equal 2, but 1 != 2.
-              at test/reporting/stacktrace.spec.mjs:41:3
+              at test/reporting/stacktrace.spec.mjs:45:3
 [FAIL]     test: async 3 [xx]
              Failure: Expected value to equal 2, but 1 != 2.
-              at test/reporting/stacktrace.spec.mjs:47:3
+              at test/reporting/stacktrace.spec.mjs:51:3
 [FAIL]     test: async fn [xx]
              Failure: inside
-              at test/reporting/stacktrace.spec.mjs:53:4
-              at test/reporting/stacktrace.spec.mjs:56:3
+              at test/reporting/stacktrace.spec.mjs:57:4
+              at test/reporting/stacktrace.spec.mjs:60:3
 [ERRO]     test: timeout [xx]
 [ERRO]       with xx timeout [xx]
                Error: timeout after xx
 
-Total:    14
+Total:    15
 Pass:     1
-Errors:   2
+Errors:   3
 Failures: 11
 Skipped:  0
 Duration: xx

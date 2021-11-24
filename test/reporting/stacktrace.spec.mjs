@@ -5,6 +5,10 @@ describe('stack traces', () => {
 		throw new Error('nope');
 	});
 
+	test('multiline error', () => {
+		throw new Error('nope\nnewline');
+	});
+
 	test('fail', () => {
 		fail('nope');
 	});

@@ -89,7 +89,10 @@ function extractStackList(error) {
 	if (!error || typeof error !== 'object' || typeof error.stack !== 'string') {
 		return [];
 	}
+	const messageLines = error.message.split('\n');
 	const list = error.stack.split('\n');
-	list.shift();
+	for (let i = 0; i < messageLines.length; ++i) {
+		list.shift();
+	}
 	return list;
 }
