@@ -16,8 +16,9 @@ const results = await Promise.all([
 	runIntegrationTest('reporting'),
 	runIntegrationTest('browser', 'expected.txt', '--browser=chrome'),
 	runIntegrationTest('browser', 'expected-ff.txt', '--browser=firefox'), // firefox stack traces do not handle async chains but are still OK
-	runIntegrationTest('multibrowser', 'expected.txt', '--browser=chrome,firefox'),
 ]);
+// run separately to avoid needing multiple browser sessions for the same browser at a time on CI
+results.push(await runIntegrationTest('multibrowser', 'expected.txt', '--browser=chrome,firefox'));
 
 process.stdout.write('\nIntegration tests: ');
 if (results.some((result) => !result)) {
