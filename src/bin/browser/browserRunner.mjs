@@ -2,8 +2,10 @@ import { dirname, resolve, relative } from 'path';
 import { realpath } from 'fs/promises';
 import process from 'process';
 import { networkInterfaces } from 'os';
+import { MultiRunner } from '../../lean-test.mjs';
 import launchBrowser from './launchBrowser.mjs';
 import { beginWebdriverSession } from './webdriver.mjs';
+import EventListener from './EventListener.mjs';
 import Server from './Server.mjs';
 
 export default async function browserRunner(config, paths, listener) {
@@ -12,63 +14,57 @@ export default async function browserRunner(config, paths, listener) {
 	const basePath = process.cwd();
 
 	const index = await buildIndex(config, paths, basePath);
-	const server = new Server(index, [
+	const postListener = new EventListener();
+	const server = new Server(index, postListener.handle, [
 		['/.lean-test/', resolve(selfPath, '..')],
 		['/', basePath],
 	]);
-	let beginTimeout;
-	const resultPromise = new Promise((res, rej) => {
-		let timeout = null;
-		let hasSeenEvent = false;
-		beginTimeout = (millis) => {
-			if (!hasSeenEvent) {
-				timeout = setTimeout(() => rej(new Error('browser launch timed out')), millis);
-			}
-		};
-		server.callback = ({ events }) => {
-			hasSeenEvent = true;
-			if (timeout) {
-				clearTimeout(timeout);
-				timeout = null;
-			}
-			for (const event of events) {
-				if (event.type === 'browser-end') {
-					res(event.result);
-				} else {
-					listener?.(event);
-				}
-			}
-		};
-	});
-	const runner = () => {
-		beginTimeout(30000);
-		return resultPromise;
-	};
-
-	const webdriverEnv = config.browser.toUpperCase().replace(/[^A-Z]+/g, '_');
-	const webdriver = process.env[`WEBDRIVER_HOST_${webdriverEnv}`] || process.env.WEBDRIVER_HOST;
-
 	await server.listen(Number(config.port), config.host);
+
 	try {
-		if (webdriver) {
-			// try various URLs until something works, because we don't know what environment we're in
-			const urls = new Set([
-				server.baseurl(process.env.WEBDRIVER_TESTRUNNER_HOST),
-				server.baseurl(),
-				server.baseurl('host.docker.internal'), // See https://stackoverflow.com/a/43541732/1180785
-				...Object.values(networkInterfaces())
-					.flatMap((i) => i)
-					.filter((i) => !i.internal)
-					.map((i) => server.baseurl(i)),
-			]);
-			const close = await beginWebdriverSession(webdriver, config.browser, urls);
-			return await runWithSession(close, runner);
-		} else {
-			const launched = await launchBrowser(config.browser, server.baseurl(), { stdio: ['ignore', 'pipe', 'pipe'] });
-			return await runWithProcess(launched, runner);
-		}
+		const multi = new MultiRunner();
+		config.browser.forEach((browser, browserID) => multi.add(browser, (subListener) => {
+			const webdriverEnv = browser.toUpperCase().replace(/[^A-Z]+/g, '_');
+			const webdriver = process.env[`WEBDRIVER_HOST_${webdriverEnv}`] || process.env.WEBDRIVER_HOST;
+
+			return run(server, browser, webdriver, '#' + browserID, () => new Promise((res, rej) => {
+				let timeout = setTimeout(() => rej(new Error('browser launch timed out')), 30000);
+				postListener.addListener(browserID, (event) => {
+					if (timeout) {
+						clearTimeout(timeout);
+						timeout = null;
+					}
+					if (event.type === 'browser-end') {
+						res(event.result);
+					} else {
+						subListener(event);
+					}
+				});
+			}));
+		}));
+		return await multi.run(listener);
 	} finally {
 		server.close();
+	}
+}
+
+async function run(server, browser, webdriver, arg, runner) {
+	if (webdriver) {
+		// try various URLs until something works, because we don't know what environment we're in
+		const urls = new Set([
+			server.baseurl(process.env.WEBDRIVER_TESTRUNNER_HOST),
+			server.baseurl(),
+			server.baseurl('host.docker.internal'), // See https://stackoverflow.com/a/43541732/1180785
+			...Object.values(networkInterfaces())
+				.flatMap((i) => i)
+				.filter((i) => !i.internal)
+				.map((i) => server.baseurl(i)),
+		]);
+		const close = await beginWebdriverSession(webdriver, browser, urls, arg);
+		return runWithSession(close, runner);
+	} else {
+		const launched = await launchBrowser(browser, server.baseurl() + arg, { stdio: ['ignore', 'pipe', 'pipe'] });
+		return runWithProcess(launched, runner);
 	}
 }
 
@@ -129,7 +125,8 @@ const INDEX = `<!DOCTYPE html>
 <title>Lean Test Runner</title>
 <script type="module">
 import run from '/.lean-test/browser-runtime.mjs';
-await run(/*CONFIG*/, /*SUITES*/);
+const id = window.location.hash.substr(1);
+await run(id, /*CONFIG*/, /*SUITES*/);
 </script>
 </head>
 <body></body>

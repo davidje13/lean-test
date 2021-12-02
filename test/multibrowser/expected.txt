@@ -1,0 +1,22 @@
+[FAIL] chrome [xx]
+[FAIL]   suite: basics.spec.mjs [xx]
+[PASS]     test: is chrome [xx]
+[FAIL]     test: is firefox [xx]
+             Failure: not expected browser
+              at basics.spec.mjs:6:2
+[FAIL] firefox [xx]
+[FAIL]   suite: basics.spec.mjs [xx]
+[FAIL]     test: is chrome [xx]
+             Failure: not expected browser
+              at basics.spec.mjs:2:8
+[PASS]     test: is firefox [xx]
+
+Total:    4
+Pass:     2
+Errors:   0
+Failures: 2
+Skipped:  0
+Duration: xx
+
+FAIL
+EXIT: 1

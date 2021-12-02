@@ -6,10 +6,10 @@ import process from 'process';
 const CHARSET = '; charset=utf-8';
 
 export default class Server {
-	constructor(index, directories) {
+	constructor(index, postListener, directories) {
 		this.index = index;
+		this.postListener = postListener;
 		this.directories = directories;
-		this.callback = null;
 		this.mimes = new Map([
 			['js', 'application/javascript'],
 			['mjs', 'application/javascript'],
@@ -38,7 +38,7 @@ export default class Server {
 					for await (const part of req) {
 						all.push(part);
 					}
-					this.callback(JSON.parse(Buffer.concat(all).toString('utf-8')));
+					this.postListener(JSON.parse(Buffer.concat(all).toString('utf-8')));
 					res.setHeader('Content-Type', this.getContentType('json'));
 					res.end(JSON.stringify({'result': 'ok'}));
 				} else {

@@ -44,7 +44,7 @@ export default class ArgumentParser {
 				break;
 			case 'array':
 				const list = target[id] || [];
-				list.push(value ?? getValue());
+				list.push(...(value ?? getValue()).split(','));
 				target[id] = list;
 				break;
 			default:

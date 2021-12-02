@@ -254,7 +254,12 @@ ResultStage.of = async (label, fn, { errorStackSkipFrames = 0, context = null } 
 
 ResultStage.getContext = () => RESULT_STAGE_SCOPE.get();
 
+let idNamespace = '';
 let nextID = 0;
+
+function setIdNamespace(namespace) {
+	idNamespace = namespace + '-';
+}
 
 const filterSummary = ({ tangible, time, fail }, summary) => ({
 	count: tangible ? summary.count : 0,
@@ -268,7 +273,7 @@ const filterSummary = ({ tangible, time, fail }, summary) => ({
 
 class Result {
 	constructor(label, parent) {
-		this.id = (++nextID);
+		this.id = `${idNamespace}${++nextID}`;
 		this.label = label;
 		this.parent = parent;
 		this.children = [];
@@ -304,7 +309,7 @@ class Result {
 			if (this.cancelled && !config.noCancel) {
 				stage._complete();
 			} else {
-				return fn(this);
+				return fn();
 			}
 		}, { errorStackSkipFrames: errorStackSkipFrames + 1 });
 	}
@@ -380,10 +385,25 @@ class Result {
 	}
 }
 
-Result.of = async (label, fn, { parent = null } = {}) => {
+Result.of = async (label, fn, { parent = null, isBlock = false, listener = null } = {}) => {
 	const result = new Result(label, parent);
-	await result.createStage({ fail: true, time: true }, 'core', fn);
-	return result.build();
+	await result.createStage({ fail: true, time: true }, 'core', () => {
+		listener?.({
+			type: 'begin',
+			time: Date.now(),
+			isBlock: Boolean(isBlock),
+			...result.info,
+		});
+		return fn(result);
+	});
+	const builtResult = result.build();
+	listener?.({
+		type: 'complete',
+		time: Date.now(),
+		isBlock: Boolean(isBlock),
+		...builtResult,
+	});
+	return builtResult;
 };
 
 function buildError(err) {
@@ -468,32 +488,15 @@ class Node {
 		Object.freeze(this);
 	}
 
-	async run(context, parentResult = null) {
+	run(context, parentResult = null) {
 		const label = this.config.display ? `${this.config.display}: ${this.options.name}` : null;
 		const listener = context[LISTENER];
-		const result = await Result.of(
-			label,
-			(result) => {
-				listener?.({
-					type: 'begin',
-					time: Date.now(),
-					isBlock: Boolean(this.config.isBlock),
-					...result.info,
-				});
-				if (this.discoveryStage) {
-					result.attachStage({ fail: true, time: true }, this.discoveryStage);
-				}
-				return runChain(context[RUN_INTERCEPTORS], [context, result, this]);
-			},
-			{ parent: parentResult },
-		);
-		listener?.({
-			type: 'complete',
-			time: Date.now(),
-			isBlock: Boolean(this.config.isBlock),
-			...result,
-		});
-		return result;
+		return Result.of(label, (result) => {
+			if (this.discoveryStage) {
+				result.attachStage({ fail: true, time: true }, this.discoveryStage);
+			}
+			return runChain(context[RUN_INTERCEPTORS], [context, result, this]);
+		}, { parent: parentResult, isBlock: this.config.isBlock, listener });
 	}
 }
 
@@ -1521,6 +1524,41 @@ var index$2 = /*#__PURE__*/Object.freeze({
 	timeout: timeout
 });
 
+class MultiRunner {
+	constructor() {
+		this.runners = [];
+	}
+
+	add(label, runner) {
+		this.runners.push({ label, runner });
+	}
+
+	run(listener) {
+		if (this.runners.length === 0) {
+			throw new Error('No sub-runners registered');
+		}
+		if (this.runners.length === 1) {
+			return this.runners[0].runner(listener);
+		}
+		return Result.of(null, async (baseResult) => Promise.all(this.runners.map(async ({ label, runner }) => {
+			const convert = (o) => ((o.parent === null) ? { ...o, parent: baseResult.id, label } : o);
+			try {
+				const subResult = await runner((event) => listener?.(convert(event)));
+				baseResult.children?.push(new StaticResult(convert(subResult)));
+			} catch (e) {
+				baseResult.createChild(label, () => { throw e; });
+			}
+		})), { isBlock: true, listener });
+	}
+}
+
+class StaticResult {
+	constructor(built) {
+		this.build = () => built;
+		this.getCurrentSummary = () => built.summary;
+	}
+}
+
 class Writer {
 	constructor(writer, forceTTY = null) {
 		this.writer = writer;
@@ -1737,4 +1775,4 @@ function standardRunner() {
 		.addPlugin(timeout());
 }
 
-export { Runner, TestAssertionError, TestAssumptionError, matchers, index$1 as outputs, index$2 as plugins, index as reporters, standardRunner };
+export { MultiRunner, Runner, TestAssertionError, TestAssumptionError, matchers, index$1 as outputs, index$2 as plugins, index as reporters, setIdNamespace, standardRunner };

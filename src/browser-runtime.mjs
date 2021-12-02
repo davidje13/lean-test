@@ -1,4 +1,4 @@
-import { standardRunner } from './lean-test.mjs';
+import { standardRunner, setIdNamespace } from './lean-test.mjs';
 
 class Aggregator {
 	constructor(next) {
@@ -43,12 +43,14 @@ class Aggregator {
 	}
 }
 
-const eventDispatcher = new Aggregator((events) => fetch('/', {
-	method: 'POST',
-	body: JSON.stringify({ events }),
-}));
+export default async function run(id, config, suites) {
+	setIdNamespace(id);
 
-export default async function run(config, suites) {
+	const eventDispatcher = new Aggregator((events) => fetch('/', {
+		method: 'POST',
+		body: JSON.stringify({ id, events }),
+	}));
+
 	const builder = standardRunner()
 		.useParallelDiscovery(false)
 		.useParallelSuites(config.parallelSuites);

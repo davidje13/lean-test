@@ -52,8 +52,8 @@ export interface LiveReporter {
 }
 
 export interface ResultInfo {
-	id: string | number;
-	parent: string | number | null;
+	id: string;
+	parent: string | null;
 	label: string | null;
 }
 
@@ -195,6 +195,12 @@ declare namespace Runner {
 	}
 }
 export { Runner };
+
+export class MultiRunner implements Runner {
+	constructor();
+	add(label: string, runner: (subListener: TestEventHandler) => Promise<Result>): void;
+	run(listener?: TestEventHandler | null | undefined): Promise<Result>;
+}
 
 export namespace outputs {
 	class Writer implements Output {

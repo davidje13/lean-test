@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import process, { platform, getuid, stderr, env } from 'process';
 import { join, resolve, dirname, relative } from 'path';
-import { standardRunner, outputs, reporters } from '../lean-test.mjs';
+import { MultiRunner, standardRunner, outputs, reporters } from '../lean-test.mjs';
 import { readdir, access, mkdtemp, rm, writeFile, readFile, realpath } from 'fs/promises';
 import { tmpdir, networkInterfaces } from 'os';
 import { constants } from 'fs';
@@ -120,7 +120,7 @@ class ArgumentParser {
 				break;
 			case 'array':
 				const list = target[id] || [];
-				list.push(value ?? getValue());
+				list.push(...(value ?? getValue()).split(','));
 				target[id] = list;
 				break;
 			default:
@@ -343,7 +343,7 @@ async function launchFirefox(url, opts) {
 	};
 }
 
-async function beginWebdriverSession(host, browser, urlOptions) {
+async function beginWebdriverSession(host, browser, urlOptions, path) {
 	const { value: { sessionId } } = await sendJSON('POST', `${host}/session`, {
 		capabilities: {
 			firstMatch: [{ browserName: browser }]
@@ -355,7 +355,7 @@ async function beginWebdriverSession(host, browser, urlOptions) {
 	let lastError = null;
 	for (const url of urlOptions) {
 		try {
-			await sendJSON('POST', `${sessionBase}/url`, { url });
+			await sendJSON('POST', `${sessionBase}/url`, { url: url + path });
 			return close;
 		} catch (e) {
 			lastError = e;
@@ -407,13 +407,44 @@ function sendJSON(method, path, data) {
 	});
 }
 
+class EventListener {
+	constructor() {
+		this.listeners = new Map();
+		this.eventQueue = [];
+
+		this.handle = this.handle.bind(this);
+	}
+
+	addListener(id, fn) {
+		this.listeners.set(String(id), fn);
+		const events = [];
+		for (let i = 0; i < this.eventQueue.length; ++i) {
+			if (this.eventQueue[i].id === id) {
+				events.push(...this.eventQueue[i].events);
+				this.eventQueue.splice(i, 1);
+				--i;
+			}
+		}
+		events.forEach(fn);
+	}
+
+	handle({ id, events }) {
+		const listener = this.listeners.get(String(id));
+		if (listener) {
+			events.forEach(listener);
+		} else {
+			this.eventQueue.push({ id, events });
+		}
+	}
+}
+
 const CHARSET = '; charset=utf-8';
 
 class Server {
-	constructor(index, directories) {
+	constructor(index, postListener, directories) {
 		this.index = index;
+		this.postListener = postListener;
 		this.directories = directories;
-		this.callback = null;
 		this.mimes = new Map([
 			['js', 'application/javascript'],
 			['mjs', 'application/javascript'],
@@ -442,7 +473,7 @@ class Server {
 					for await (const part of req) {
 						all.push(part);
 					}
-					this.callback(JSON.parse(Buffer.concat(all).toString('utf-8')));
+					this.postListener(JSON.parse(Buffer.concat(all).toString('utf-8')));
 					res.setHeader('Content-Type', this.getContentType('json'));
 					res.end(JSON.stringify({'result': 'ok'}));
 				} else {
@@ -538,63 +569,57 @@ async function browserRunner(config, paths, listener) {
 	const basePath = process.cwd();
 
 	const index = await buildIndex(config, paths, basePath);
-	const server = new Server(index, [
+	const postListener = new EventListener();
+	const server = new Server(index, postListener.handle, [
 		['/.lean-test/', resolve(selfPath, '..')],
 		['/', basePath],
 	]);
-	let beginTimeout;
-	const resultPromise = new Promise((res, rej) => {
-		let timeout = null;
-		let hasSeenEvent = false;
-		beginTimeout = (millis) => {
-			if (!hasSeenEvent) {
-				timeout = setTimeout(() => rej(new Error('browser launch timed out')), millis);
-			}
-		};
-		server.callback = ({ events }) => {
-			hasSeenEvent = true;
-			if (timeout) {
-				clearTimeout(timeout);
-				timeout = null;
-			}
-			for (const event of events) {
-				if (event.type === 'browser-end') {
-					res(event.result);
-				} else {
-					listener?.(event);
-				}
-			}
-		};
-	});
-	const runner = () => {
-		beginTimeout(30000);
-		return resultPromise;
-	};
-
-	const webdriverEnv = config.browser.toUpperCase().replace(/[^A-Z]+/g, '_');
-	const webdriver = process.env[`WEBDRIVER_HOST_${webdriverEnv}`] || process.env.WEBDRIVER_HOST;
-
 	await server.listen(Number(config.port), config.host);
+
 	try {
-		if (webdriver) {
-			// try various URLs until something works, because we don't know what environment we're in
-			const urls = new Set([
-				server.baseurl(process.env.WEBDRIVER_TESTRUNNER_HOST),
-				server.baseurl(),
-				server.baseurl('host.docker.internal'), // See https://stackoverflow.com/a/43541732/1180785
-				...Object.values(networkInterfaces())
-					.flatMap((i) => i)
-					.filter((i) => !i.internal)
-					.map((i) => server.baseurl(i)),
-			]);
-			const close = await beginWebdriverSession(webdriver, config.browser, urls);
-			return await runWithSession(close, runner);
-		} else {
-			const launched = await launchBrowser(config.browser, server.baseurl(), { stdio: ['ignore', 'pipe', 'pipe'] });
-			return await runWithProcess(launched, runner);
-		}
+		const multi = new MultiRunner();
+		config.browser.forEach((browser, browserID) => multi.add(browser, (subListener) => {
+			const webdriverEnv = browser.toUpperCase().replace(/[^A-Z]+/g, '_');
+			const webdriver = process.env[`WEBDRIVER_HOST_${webdriverEnv}`] || process.env.WEBDRIVER_HOST;
+
+			return run(server, browser, webdriver, '#' + browserID, () => new Promise((res, rej) => {
+				let timeout = setTimeout(() => rej(new Error('browser launch timed out')), 30000);
+				postListener.addListener(browserID, (event) => {
+					if (timeout) {
+						clearTimeout(timeout);
+						timeout = null;
+					}
+					if (event.type === 'browser-end') {
+						res(event.result);
+					} else {
+						subListener(event);
+					}
+				});
+			}));
+		}));
+		return await multi.run(listener);
 	} finally {
 		server.close();
+	}
+}
+
+async function run(server, browser, webdriver, arg, runner) {
+	if (webdriver) {
+		// try various URLs until something works, because we don't know what environment we're in
+		const urls = new Set([
+			server.baseurl(process.env.WEBDRIVER_TESTRUNNER_HOST),
+			server.baseurl(),
+			server.baseurl('host.docker.internal'), // See https://stackoverflow.com/a/43541732/1180785
+			...Object.values(networkInterfaces())
+				.flatMap((i) => i)
+				.filter((i) => !i.internal)
+				.map((i) => server.baseurl(i)),
+		]);
+		const close = await beginWebdriverSession(webdriver, browser, urls, arg);
+		return runWithSession(close, runner);
+	} else {
+		const launched = await launchBrowser(browser, server.baseurl() + arg, { stdio: ['ignore', 'pipe', 'pipe'] });
+		return runWithProcess(launched, runner);
 	}
 }
 
@@ -655,7 +680,8 @@ const INDEX = `<!DOCTYPE html>
 <title>Lean Test Runner</title>
 <script type="module">
 import run from '/.lean-test/browser-runtime.mjs';
-await run(/*CONFIG*/, /*SUITES*/);
+const id = window.location.hash.substr(1);
+await run(id, /*CONFIG*/, /*SUITES*/);
 </script>
 </head>
 <body></body>
@@ -693,7 +719,7 @@ const argparse = new ArgumentParser({
 	parallelSuites: { names: ['parallel-suites', 'parallel', 'p'], env: 'PARALLEL_SUITES', type: 'boolean', default: false },
 	pathsInclude: { names: ['include', 'i'], type: 'array', default: ['**/*.{spec|test}.{js|mjs|jsx}'] },
 	pathsExclude: { names: ['exclude', 'x'], type: 'array', default: ['**/node_modules', '**/.*'] },
-	browser: { names: ['browser', 'b'], env: 'BROWSER', type: 'string', default: null },
+	browser: { names: ['browser', 'b'], env: 'BROWSER', type: 'array', default: [] },
 	colour: { names: ['colour', 'color'], env: 'OUTPUT_COLOUR', type: 'boolean', default: null },
 	port: { names: ['port'], env: 'TESTRUNNER_PORT', type: 'int', default: 0 },
 	host: { names: ['host'], env: 'TESTRUNNER_HOST', type: 'string', default: '127.0.0.1' },
@@ -718,7 +744,7 @@ try {
 		new reporters.Summary(stdout),
 	];
 
-	const runner = config.browser ? browserRunner : nodeRunner;
+	const runner = config.browser.length ? browserRunner : nodeRunner;
 	const result = await runner(config, paths, liveReporter.eventListener);
 	finalReporters.forEach((reporter) => reporter.report(result));
 

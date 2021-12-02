@@ -13,7 +13,7 @@ const argparse = new ArgumentParser({
 	parallelSuites: { names: ['parallel-suites', 'parallel', 'p'], env: 'PARALLEL_SUITES', type: 'boolean', default: false },
 	pathsInclude: { names: ['include', 'i'], type: 'array', default: ['**/*.{spec|test}.{js|mjs|jsx}'] },
 	pathsExclude: { names: ['exclude', 'x'], type: 'array', default: ['**/node_modules', '**/.*'] },
-	browser: { names: ['browser', 'b'], env: 'BROWSER', type: 'string', default: null },
+	browser: { names: ['browser', 'b'], env: 'BROWSER', type: 'array', default: [] },
 	colour: { names: ['colour', 'color'], env: 'OUTPUT_COLOUR', type: 'boolean', default: null },
 	port: { names: ['port'], env: 'TESTRUNNER_PORT', type: 'int', default: 0 },
 	host: { names: ['host'], env: 'TESTRUNNER_HOST', type: 'string', default: '127.0.0.1' },
@@ -38,7 +38,7 @@ try {
 		new reporters.Summary(stdout),
 	];
 
-	const runner = config.browser ? browserRunner : nodeRunner;
+	const runner = config.browser.length ? browserRunner : nodeRunner;
 	const result = await runner(config, paths, liveReporter.eventListener);
 	finalReporters.forEach((reporter) => reporter.report(result));
 

@@ -68,31 +68,14 @@ export default class Node {
 		Object.freeze(this);
 	}
 
-	async run(context, parentResult = null) {
+	run(context, parentResult = null) {
 		const label = this.config.display ? `${this.config.display}: ${this.options.name}` : null;
 		const listener = context[LISTENER];
-		const result = await Result.of(
-			label,
-			(result) => {
-				listener?.({
-					type: 'begin',
-					time: Date.now(),
-					isBlock: Boolean(this.config.isBlock),
-					...result.info,
-				});
-				if (this.discoveryStage) {
-					result.attachStage({ fail: true, time: true }, this.discoveryStage);
-				}
-				return runChain(context[RUN_INTERCEPTORS], [context, result, this]);
-			},
-			{ parent: parentResult },
-		);
-		listener?.({
-			type: 'complete',
-			time: Date.now(),
-			isBlock: Boolean(this.config.isBlock),
-			...result,
-		});
-		return result;
+		return Result.of(label, (result) => {
+			if (this.discoveryStage) {
+				result.attachStage({ fail: true, time: true }, this.discoveryStage);
+			}
+			return runChain(context[RUN_INTERCEPTORS], [context, result, this]);
+		}, { parent: parentResult, isBlock: this.config.isBlock, listener });
 	}
 }

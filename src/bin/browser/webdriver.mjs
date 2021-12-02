@@ -1,6 +1,6 @@
 import { request } from 'http';
 
-export async function beginWebdriverSession(host, browser, urlOptions) {
+export async function beginWebdriverSession(host, browser, urlOptions, path) {
 	const { value: { sessionId } } = await sendJSON('POST', `${host}/session`, {
 		capabilities: {
 			firstMatch: [{ browserName: browser }]
@@ -12,7 +12,7 @@ export async function beginWebdriverSession(host, browser, urlOptions) {
 	let lastError = null;
 	for (const url of urlOptions) {
 		try {
-			await sendJSON('POST', `${sessionBase}/url`, { url });
+			await sendJSON('POST', `${sessionBase}/url`, { url: url + path });
 			return close;
 		} catch (e) {
 			lastError = e;

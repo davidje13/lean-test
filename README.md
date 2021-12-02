@@ -2,6 +2,20 @@
 
 A testing framework for when you want to test without adding hundreds of dependencies.
 
+Runs tests in NodeJS and/or in browsers.
+
+### Running in NodeJS
+
+```sh
+npx lean-test
+```
+
+### Running in browsers
+
+```sh
+npx lean-test --browser chrome --browser firefox
+```
+
 ## Features
 
 - Run tests from the commandline against NodeJS and/or browsers;
@@ -439,6 +453,15 @@ The `lean-test` executable can be configured in various ways:
 	`--host 0.0.0.0` (or equivalently `TESTRUNNER_HOST=0.0.0.0`) so that the test server
 	is accessible to the browser.
 
+	If you specify more than one browser, the tests will be run in all browsers in
+	parallel, with the results containing one section per browser:
+
+	```sh
+	lean-test --browser=chrome,firefox
+	# or
+	lean-test --browser chrome --browser firefox
+	```
+
 - `--port <number>` / environment `TESTRUNNER_PORT=<number>`:<br>
 	Sets an explicit port number for the browser-based tests to use. By default this is
 	`0` (pick random available port). This only takes effect if `--browser` is used.
@@ -485,7 +508,7 @@ These examples assume that `package.json` contains something like:
 ```json
 {
   "scripts": {
-    "test": "lean-test --browser=chrome && lean-test --browser=firefox"
+    "test": "lean-test --browser=chrome,firefox"
   }
 }
 ```

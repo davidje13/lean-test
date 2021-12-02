@@ -1,5 +1,11 @@
 import ResultStage from './ResultStage.mjs';
+
+let idNamespace = '';
 let nextID = 0;
+
+export function setIdNamespace(namespace) {
+	idNamespace = namespace + '-';
+}
 
 const filterSummary = ({ tangible, time, fail }, summary) => ({
 	count: tangible ? summary.count : 0,
@@ -13,7 +19,7 @@ const filterSummary = ({ tangible, time, fail }, summary) => ({
 
 export default class Result {
 	constructor(label, parent) {
-		this.id = (++nextID);
+		this.id = `${idNamespace}${++nextID}`;
 		this.label = label;
 		this.parent = parent;
 		this.children = [];
@@ -49,7 +55,7 @@ export default class Result {
 			if (this.cancelled && !config.noCancel) {
 				stage._complete();
 			} else {
-				return fn(this);
+				return fn();
 			}
 		}, { errorStackSkipFrames: errorStackSkipFrames + 1 });
 	}
@@ -125,10 +131,25 @@ export default class Result {
 	}
 }
 
-Result.of = async (label, fn, { parent = null } = {}) => {
+Result.of = async (label, fn, { parent = null, isBlock = false, listener = null } = {}) => {
 	const result = new Result(label, parent);
-	await result.createStage({ fail: true, time: true }, 'core', fn);
-	return result.build();
+	await result.createStage({ fail: true, time: true }, 'core', () => {
+		listener?.({
+			type: 'begin',
+			time: Date.now(),
+			isBlock: Boolean(isBlock),
+			...result.info,
+		});
+		return fn(result);
+	});
+	const builtResult = result.build();
+	listener?.({
+		type: 'complete',
+		time: Date.now(),
+		isBlock: Boolean(isBlock),
+		...builtResult,
+	});
+	return builtResult;
 };
 
 function buildError(err) {
