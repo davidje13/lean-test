@@ -16,15 +16,15 @@ export default class MultiRunner {
 		if (this.runners.length === 1) {
 			return this.runners[0].runner(listener);
 		}
-		return Result.of(null, async (baseResult) => Promise.all(this.runners.map(async ({ label, runner }) => {
-			const convert = (o) => ((o.parent === null) ? { ...o, parent: baseResult.id, label } : o);
-			try {
-				const subResult = await runner((event) => listener?.(convert(event)));
-				baseResult.children?.push(new StaticResult(convert(subResult)));
-			} catch (e) {
-				baseResult.createChild(label, () => { throw e; });
-			}
-		})), { isBlock: true, listener });
+		return Result.of(null, async (baseResult) => {
+			const subResults = await Promise.all(this.runners.map(async ({ label, runner }) => {
+				const convert = (o) => ((o.parent === null) ? { ...o, parent: baseResult.id, label } : o);
+				const subResult = await runner((event) => listener?.(convert(event)))
+					.catch((e) => Result.of(null, () => { throw e; }, { isBlock: true }));
+				return new StaticResult(convert(subResult));
+			}));
+			baseResult.children.push(...subResults);
+		}, { isBlock: true, listener });
 	}
 }
 
