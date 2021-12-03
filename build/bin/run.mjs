@@ -346,13 +346,13 @@ async function launchFirefox(url, opts) {
 // https://w3c.github.io/webdriver/
 
 async function beginWebdriverSession(host, browser, urlOptions, path, expectedTitle) {
-	const { value: { sessionId } } = await sendJSON('POST', `${host}/session`, {
+	const { value: { sessionId } } = await withRetry(() => sendJSON('POST', `${host}/session`, {
 		capabilities: {
 			firstMatch: [{ browserName: browser }]
 		},
-	});
+	}), 20000);
 	const sessionBase = `${host}/session/${encodeURIComponent(sessionId)}`;
-	const close = () => sendJSON('DELETE', sessionBase);
+	const close = () => withRetry(() => sendJSON('DELETE', sessionBase), 5000);
 
 	let lastError = null;
 	for (const url of urlOptions) {
@@ -368,6 +368,21 @@ async function beginWebdriverSession(host, browser, urlOptions, path, expectedTi
 }
 
 const get = async (url) => (await sendJSON('GET', url)).value;
+
+async function withRetry(fn, timeout) {
+	const delay = 100;
+	const begin = Date.now();
+	while (true) {
+		try {
+			return await fn();
+		} catch (e) {
+			if (Date.now() + delay >= begin + timeout) {
+				throw e;
+			}
+		}
+		await new Promise((resolve) => setTimeout(resolve, delay));
+	}
+}
 
 async function navigateAndWaitForTitle(sessionBase, url, expectedTitle) {
 	await sendJSON('POST', `${sessionBase}/url`, { url });
