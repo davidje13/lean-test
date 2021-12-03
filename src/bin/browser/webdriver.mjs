@@ -2,7 +2,7 @@ import { request } from 'http';
 
 // https://w3c.github.io/webdriver/
 
-export async function beginWebdriverSession(host, browser, urlOptions, path) {
+export async function beginWebdriverSession(host, browser, urlOptions, path, expectedTitle) {
 	const { value: { sessionId } } = await sendJSON('POST', `${host}/session`, {
 		capabilities: {
 			firstMatch: [{ browserName: browser }]
@@ -14,7 +14,7 @@ export async function beginWebdriverSession(host, browser, urlOptions, path) {
 	let lastError = null;
 	for (const url of urlOptions) {
 		try {
-			await sendJSON('POST', `${sessionBase}/url`, { url: url + path });
+			await navigateAndWaitForTitle(sessionBase, url + path, expectedTitle);
 			return { close, debug: () => debug(sessionBase) };
 		} catch (e) {
 			lastError = e;
@@ -24,11 +24,25 @@ export async function beginWebdriverSession(host, browser, urlOptions, path) {
 	throw lastError;
 }
 
-async function debug(sessionBase) {
-	const { value: url } = await sendJSON('GET', `${sessionBase}/url`);
-	const { value: title } = await sendJSON('GET', `${sessionBase}/title`);
+const get = async (url) => (await sendJSON('GET', url)).value;
 
-	return `URL='${url}' Title='${title}'`;
+async function navigateAndWaitForTitle(sessionBase, url, expectedTitle) {
+	await sendJSON('POST', `${sessionBase}/url`, { url });
+
+	const begin = Date.now();
+	do {
+		const title = await get(`${sessionBase}/title`);
+		if (title.startsWith(expectedTitle)) {
+			return;
+		}
+		await new Promise((resolve) => setTimeout(resolve, 100));
+	} while (Date.now() < begin + 1000);
+
+	throw new Error(`Unexpected page title at URL ${url}: '${title}'`);
+}
+
+async function debug(sessionBase) {
+	return `URL='${await get(`${sessionBase}/url`)}' Title='${await get(`${sessionBase}/title`)}'`;
 }
 
 function sendJSON(method, path, data) {

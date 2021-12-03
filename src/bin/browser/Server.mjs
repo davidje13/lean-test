@@ -11,8 +11,8 @@ export default class Server {
 		this.postListener = postListener;
 		this.directories = directories;
 		this.mimes = new Map([
-			['js', 'application/javascript'],
-			['mjs', 'application/javascript'],
+			['js', 'text/javascript'],
+			['mjs', 'text/javascript'],
 			['css', 'text/css'],
 			['htm', 'text/html'],
 			['html', 'text/html'],

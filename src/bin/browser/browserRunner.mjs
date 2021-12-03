@@ -62,7 +62,7 @@ async function run(server, browser, webdriver, arg, runner) {
 				.filter((i) => !i.internal)
 				.map((i) => server.baseurl(i)),
 		]);
-		const session = await beginWebdriverSession(webdriver, browser, urls, arg);
+		const session = await beginWebdriverSession(webdriver, browser, urls, arg, 'Lean Test Runner');
 		return runWithSession(session, runner);
 	} else {
 		const launched = await launchBrowser(browser, server.baseurl() + arg, { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -126,11 +126,11 @@ async function runWithProcess(launched, runner) {
 const INDEX = `<!DOCTYPE html>
 <html lang="en">
 <head>
-<title>Lean Test Runner</title>
+<title>Lean Test Runner - loading</title>
 <script type="module">
 import run from '/.lean-test/browser-runtime.mjs';
 const id = window.location.hash.substr(1);
-await run(id, /*CONFIG*/, /*SUITES*/);
+run(id, /*CONFIG*/, /*SUITES*/);
 </script>
 </head>
 <body></body>

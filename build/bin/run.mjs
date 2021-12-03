@@ -345,7 +345,7 @@ async function launchFirefox(url, opts) {
 
 // https://w3c.github.io/webdriver/
 
-async function beginWebdriverSession(host, browser, urlOptions, path) {
+async function beginWebdriverSession(host, browser, urlOptions, path, expectedTitle) {
 	const { value: { sessionId } } = await sendJSON('POST', `${host}/session`, {
 		capabilities: {
 			firstMatch: [{ browserName: browser }]
@@ -357,7 +357,7 @@ async function beginWebdriverSession(host, browser, urlOptions, path) {
 	let lastError = null;
 	for (const url of urlOptions) {
 		try {
-			await sendJSON('POST', `${sessionBase}/url`, { url: url + path });
+			await navigateAndWaitForTitle(sessionBase, url + path, expectedTitle);
 			return { close, debug: () => debug(sessionBase) };
 		} catch (e) {
 			lastError = e;
@@ -367,11 +367,25 @@ async function beginWebdriverSession(host, browser, urlOptions, path) {
 	throw lastError;
 }
 
-async function debug(sessionBase) {
-	const { value: url } = await sendJSON('GET', `${sessionBase}/url`);
-	const { value: title } = await sendJSON('GET', `${sessionBase}/title`);
+const get = async (url) => (await sendJSON('GET', url)).value;
 
-	return `URL='${url}' Title='${title}'`;
+async function navigateAndWaitForTitle(sessionBase, url, expectedTitle) {
+	await sendJSON('POST', `${sessionBase}/url`, { url });
+
+	const begin = Date.now();
+	do {
+		const title = await get(`${sessionBase}/title`);
+		if (title.startsWith(expectedTitle)) {
+			return;
+		}
+		await new Promise((resolve) => setTimeout(resolve, 100));
+	} while (Date.now() < begin + 1000);
+
+	throw new Error(`Unexpected page title at URL ${url}: '${title}'`);
+}
+
+async function debug(sessionBase) {
+	return `URL='${await get(`${sessionBase}/url`)}' Title='${await get(`${sessionBase}/title`)}'`;
 }
 
 function sendJSON(method, path, data) {
@@ -464,8 +478,8 @@ class Server {
 		this.postListener = postListener;
 		this.directories = directories;
 		this.mimes = new Map([
-			['js', 'application/javascript'],
-			['mjs', 'application/javascript'],
+			['js', 'text/javascript'],
+			['mjs', 'text/javascript'],
 			['css', 'text/css'],
 			['htm', 'text/html'],
 			['html', 'text/html'],
@@ -635,7 +649,7 @@ async function run(server, browser, webdriver, arg, runner) {
 				.filter((i) => !i.internal)
 				.map((i) => server.baseurl(i)),
 		]);
-		const session = await beginWebdriverSession(webdriver, browser, urls, arg);
+		const session = await beginWebdriverSession(webdriver, browser, urls, arg, 'Lean Test Runner');
 		return runWithSession(session, runner);
 	} else {
 		const launched = await launchBrowser(browser, server.baseurl() + arg, { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -699,11 +713,11 @@ async function runWithProcess(launched, runner) {
 const INDEX = `<!DOCTYPE html>
 <html lang="en">
 <head>
-<title>Lean Test Runner</title>
+<title>Lean Test Runner - loading</title>
 <script type="module">
 import run from '/.lean-test/browser-runtime.mjs';
 const id = window.location.hash.substr(1);
-await run(id, /*CONFIG*/, /*SUITES*/);
+run(id, /*CONFIG*/, /*SUITES*/);
 </script>
 </head>
 <body></body>
