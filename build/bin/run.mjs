@@ -438,6 +438,13 @@ class EventListener {
 			this.eventQueue.push({ id: normID, events });
 		}
 	}
+
+	unhandled() {
+		if (!this.eventQueue.length) {
+			return 'none';
+		}
+		return this.eventQueue.map(({ id, events }) => `'${id}' (${events.length})`).join(', ');
+	}
 }
 
 const CHARSET = '; charset=utf-8';
@@ -585,7 +592,7 @@ async function browserRunner(config, paths, listener) {
 			const webdriver = process.env[`WEBDRIVER_HOST_${webdriverEnv}`] || process.env.WEBDRIVER_HOST;
 
 			return run(server, browser, webdriver, '#' + browserID, () => new Promise((res, rej) => {
-				let timeout = setTimeout(() => rej(new Error('browser launch timed out')), 30000);
+				let timeout = setTimeout(() => rej(new Error(`browser launch timed out (unhandled events: ${postListener.unhandled()})`)), 30000);
 				postListener.addListener(browserID, (event) => {
 					if (timeout) {
 						clearTimeout(timeout);

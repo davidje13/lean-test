@@ -29,4 +29,11 @@ export default class EventListener {
 			this.eventQueue.push({ id: normID, events });
 		}
 	}
+
+	unhandled() {
+		if (!this.eventQueue.length) {
+			return 'none';
+		}
+		return this.eventQueue.map(({ id, events }) => `'${id}' (${events.length})`).join(', ');
+	}
 }
