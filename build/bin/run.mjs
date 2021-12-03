@@ -343,6 +343,8 @@ async function launchFirefox(url, opts) {
 	};
 }
 
+// https://w3c.github.io/webdriver/
+
 async function beginWebdriverSession(host, browser, urlOptions, path) {
 	const { value: { sessionId } } = await sendJSON('POST', `${host}/session`, {
 		capabilities: {
@@ -356,13 +358,20 @@ async function beginWebdriverSession(host, browser, urlOptions, path) {
 	for (const url of urlOptions) {
 		try {
 			await sendJSON('POST', `${sessionBase}/url`, { url: url + path });
-			return close;
+			return { close, debug: () => debug(sessionBase) };
 		} catch (e) {
 			lastError = e;
 		}
 	}
 	await close();
 	throw lastError;
+}
+
+async function debug(sessionBase) {
+	const { value: url } = await sendJSON('GET', `${sessionBase}/url`);
+	const { value: title } = await sendJSON('GET', `${sessionBase}/title`);
+
+	return `URL='${url}' Title='${title}'`;
 }
 
 function sendJSON(method, path, data) {
@@ -600,6 +609,8 @@ async function browserRunner(config, paths, listener) {
 					}
 					if (event.type === 'browser-end') {
 						res(event.result);
+					} else if (event.type === 'browser-error') {
+						rej(new Error(`Browser error: ${event.error}`));
 					} else {
 						subListener(event);
 					}
@@ -624,17 +635,17 @@ async function run(server, browser, webdriver, arg, runner) {
 				.filter((i) => !i.internal)
 				.map((i) => server.baseurl(i)),
 		]);
-		const close = await beginWebdriverSession(webdriver, browser, urls, arg);
-		return runWithSession(close, runner);
+		const session = await beginWebdriverSession(webdriver, browser, urls, arg);
+		return runWithSession(session, runner);
 	} else {
 		const launched = await launchBrowser(browser, server.baseurl() + arg, { stdio: ['ignore', 'pipe', 'pipe'] });
 		return runWithProcess(launched, runner);
 	}
 }
 
-async function runWithSession(close, runner) {
+async function runWithSession(session, runner) {
 	const end = async () => {
-		await close();
+		await session.close();
 		// mimick default SIGINT/SIGTERM behaviour
 		if (process.stderr.isTTY) {
 			process.stderr.write('\u001B[0m');
@@ -646,10 +657,12 @@ async function runWithSession(close, runner) {
 		process.addListener('SIGTERM', end);
 		process.addListener('SIGINT', end);
 		return await runner();
+	} catch (e) {
+		throw new Error(`Error running webdriver browser: ${e}\nWebdriver info: ${await session.debug()}`);
 	} finally {
 		process.removeListener('SIGTERM', end);
 		process.removeListener('SIGINT', end);
-		await close();
+		await session.close();
 	}
 }
 

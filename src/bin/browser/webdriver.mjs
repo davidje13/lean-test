@@ -1,5 +1,7 @@
 import { request } from 'http';
 
+// https://w3c.github.io/webdriver/
+
 export async function beginWebdriverSession(host, browser, urlOptions, path) {
 	const { value: { sessionId } } = await sendJSON('POST', `${host}/session`, {
 		capabilities: {
@@ -13,13 +15,20 @@ export async function beginWebdriverSession(host, browser, urlOptions, path) {
 	for (const url of urlOptions) {
 		try {
 			await sendJSON('POST', `${sessionBase}/url`, { url: url + path });
-			return close;
+			return { close, debug: () => debug(sessionBase) };
 		} catch (e) {
 			lastError = e;
 		}
 	}
 	await close();
 	throw lastError;
+}
+
+async function debug(sessionBase) {
+	const { value: url } = await sendJSON('GET', `${sessionBase}/url`);
+	const { value: title } = await sendJSON('GET', `${sessionBase}/title`);
+
+	return `URL='${url}' Title='${title}'`;
 }
 
 function sendJSON(method, path, data) {

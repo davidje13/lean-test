@@ -44,30 +44,39 @@ class Aggregator {
 }
 
 export default async function run(id, config, suites) {
-	setIdNamespace(id);
-
+	window.title = 'Lean Test Runner (' + id + ') - running';
 	const eventDispatcher = new Aggregator((events) => fetch('/', {
 		method: 'POST',
 		body: JSON.stringify({ id, events }),
 	}));
 
-	const builder = standardRunner()
-		.useParallelDiscovery(false)
-		.useParallelSuites(config.parallelSuites);
+	try {
+		setIdNamespace(id);
 
-	suites.forEach(([name, path]) => {
-		builder.addSuite(name, async (globals) => {
-			Object.assign(window, globals);
-			const result = await import(path);
-			return result.default;
+		const builder = standardRunner()
+			.useParallelDiscovery(false)
+			.useParallelSuites(config.parallelSuites);
+
+		suites.forEach(([name, path]) => {
+			builder.addSuite(name, async (globals) => {
+				Object.assign(window, globals);
+				const result = await import(path);
+				return result.default;
+			});
 		});
-	});
 
-	const runner = await builder.build();
-	const result = await runner.run(eventDispatcher.invoke);
+		const runner = await builder.build();
+		const result = await runner.run(eventDispatcher.invoke);
 
-	document.body.innerText = 'Test run complete.';
-	eventDispatcher.invoke({ type: 'browser-end', result });
-	await eventDispatcher.wait();
-	window.close();
+		window.title = 'Lean Test Runner (' + id + ') - complete';
+		document.body.innerText = 'Test run complete.';
+		eventDispatcher.invoke({ type: 'browser-end', result });
+		await eventDispatcher.wait();
+		window.close();
+	} catch (e) {
+		window.title = 'Lean Test Runner (' + id + ') - error';
+		console.error(e);
+		eventDispatcher.invoke({ type: 'browser-error', error: String(error) });
+		await eventDispatcher.wait();
+	}
 }
