@@ -54,11 +54,11 @@ Tests can be writen in a variety of ways; the classic "globals" approach:
 // myThing.spec.mjs
 
 describe('my thing', () => {
-	it('does another thing', () => {
+	it('does something', () => {
 		expect(3 * 3).equals(9); // fluent-style
 	});
 
-	it('does something', () => {
+	it('does another thing', () => {
 		expect(2 + 2, equals(4)); // matcher-style
 	});
 
@@ -124,7 +124,7 @@ Most features are provided by plugins. The standard plugins are enabled by defau
 offer the following features. You can also create your own plugins if you have bespoke
 needs.
 
-### Fail
+### fail
 
 ```javascript
 fail();
@@ -133,7 +133,7 @@ fail('message');
 
 Throws a `TestAssertionError` (marking the test as failed).
 
-### Skip
+### skip
 
 ```javascript
 skip();
@@ -142,7 +142,7 @@ skip('message');
 
 Throws a `TestAssumptionError` (marking the test as skipped).
 
-### Expect
+### expect
 
 ```javascript
 expect(2, equals(2));
@@ -152,7 +152,7 @@ expect(2).equals(2);
 Checks a condition, throwing a `TestAssertionError` if it fails (marking the test as
 failed).
 
-### Assume
+### assume
 
 ```javascript
 assume(2, equals(2));
@@ -162,7 +162,7 @@ assume(2).equals(2);
 Checks a condition, throwing a `TestAssumptionError` if it fails (marking the test as
 skipped). Can use all the same matchers as `expect`.
 
-### ExtendExpect
+### expect.extend
 
 ```javascript
 const isSeven = () => (actual) => {
@@ -190,7 +190,7 @@ expect(7).isSeven();
 
 Globally registers new fluent checks.
 
-### Get stdout / stderr
+### getStdout / setStderr
 
 ```javascript
 const textStdout = getStdout();
@@ -208,7 +208,7 @@ stack traces, which will not work inside event callbacks such as `setTimeout` et
 
 In NodeJS, `console.*` will produce content in `stdout`.
 
-### Ignore
+### ignore
 
 ```javascript
 it.ignore('will not run', () => { /* ... */ });
@@ -222,7 +222,7 @@ describe('will not run', () => { /* ... */ }, { ignore: true });
 
 Ignores a test or block. This will be reported as a skipped test.
 
-### Focus
+### focus
 
 ```javascript
 it.focus('only this will run', () => { /* ... */ });
@@ -237,7 +237,7 @@ describe('only this will run', () => { /* ... */ }, { focus: true });
 Focuses a test or block. If any tests or blocks are focused, only the marked tests
 will run, and the rest will be reported as skipped.
 
-### Repeat
+### repeat
 
 ```javascript
 it('will run multiple times', () => { /* ... */ }, { repeat: 3 });
@@ -252,7 +252,7 @@ it('will run multiple times', () => {
 }, { repeat: { total: 3, maxFailures: 1 } });
 ```
 
-### Retry
+### retry
 
 ```javascript
 it('will retry on failure', () => { /* ... */ }, { retry: 3 });
@@ -261,7 +261,7 @@ it('will retry on failure', () => { /* ... */ }, { retry: 3 });
 Runs a test multiple times until it succeeds. If any attempt succeeds, the test is
 considered a success.
 
-### Timeout
+### timeout
 
 ```javascript
 it('will time out', () => { /* ... */ }, { timeout: 1000 });
@@ -274,7 +274,7 @@ and will not terminate tasks which are running (so the test code may continue to
 execute even though the timeout has triggered), but any further exceptions will be
 ignored.
 
-### Stop at First Failure
+### stopAtFirstFailure
 
 ```javascript
 describe('my flow test', () => {
@@ -446,7 +446,7 @@ The `lean-test` executable can be configured in various ways:
 	docker run -d -p 4445:4444 --shm-size="2g" selenium/standalone-firefox
 	export WEBDRIVER_HOST_CHROME=localhost:4444
 	export WEBDRIVER_HOST_FIREFOX=localhost:4445
-	lean-test --browser=chrome && lean-test --browser=firefox
+	lean-test --browser=chrome --browser=firefox
 	```
 
 	If you are using a remote browser, you will also need to set
