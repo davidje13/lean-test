@@ -388,8 +388,9 @@ async function navigateAndWaitForTitle(sessionBase, url, expectedTitle) {
 	await sendJSON('POST', `${sessionBase}/url`, { url });
 
 	const begin = Date.now();
+	let title;
 	do {
-		const title = await get(`${sessionBase}/title`);
+		title = await get(`${sessionBase}/title`);
 		if (title.startsWith(expectedTitle)) {
 			return;
 		}
