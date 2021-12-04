@@ -9,16 +9,22 @@ const [red, green] = makeColours(process.stdout, [31], [32]);
 
 process.stdout.write('Running integration tests...\n\n');
 
-const results = await Promise.all([
+const results = [];
+results.push(...await Promise.all([
 	runIntegrationTest('discovery'),
 	runIntegrationTest('discovery', 'expected.txt', '--parallel-discovery'),
 	runIntegrationTest('basics'),
 	runIntegrationTest('reporting'),
+	runIntegrationTest('browser-broken', 'expected.txt', '--browser=chrome'), // slow
+]));
+// run separately to avoid needing multiple browser sessions for the same browser at a time on CI
+results.push(...await Promise.all([
 	runIntegrationTest('browser', 'expected.txt', '--browser=chrome'),
 	runIntegrationTest('browser', 'expected-ff.txt', '--browser=firefox'), // firefox stack traces do not handle async chains but are still OK
-]);
-// run separately to avoid needing multiple browser sessions for the same browser at a time on CI
-results.push(await runIntegrationTest('multibrowser', 'expected.txt', '--browser=chrome,firefox'));
+]));
+results.push(...await Promise.all([
+	runIntegrationTest('multibrowser', 'expected.txt', '--browser=chrome,firefox'),
+]));
 
 process.stdout.write('\nIntegration tests: ');
 if (results.some((result) => !result)) {

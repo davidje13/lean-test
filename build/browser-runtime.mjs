@@ -44,11 +44,13 @@ class Aggregator {
 }
 
 async function run(id, config, suites) {
-	window.title = 'Lean Test Runner (' + id + ') - running';
+	window.title = `Lean Test Runner (${id}) - running`;
 	const eventDispatcher = new Aggregator((events) => fetch('/', {
 		method: 'POST',
 		body: JSON.stringify({ id, events }),
 	}));
+	eventDispatcher.invoke({ type: 'browser-connect' });
+	const ping = setInterval(() => eventDispatcher.invoke({ type: 'browser-ping' }), 500);
 
 	try {
 		setIdNamespace(id);
@@ -68,17 +70,17 @@ async function run(id, config, suites) {
 		const runner = await builder.build();
 		const result = await runner.run(eventDispatcher.invoke);
 
-		window.title = 'Lean Test Runner (' + id + ') - complete';
+		window.title = `Lean Test Runner (${id}) - complete`;
 		document.body.innerText = 'Test run complete.';
 		eventDispatcher.invoke({ type: 'browser-end', result });
-		await eventDispatcher.wait();
-		window.close();
 	} catch (e) {
-		window.title = 'Lean Test Runner (' + id + ') - error';
+		window.title = `Lean Test Runner (${id}) - error`;
 		console.error(e);
 		eventDispatcher.invoke({ type: 'browser-error', error: String(error) });
-		await eventDispatcher.wait();
+	} finally {
+		clearInterval(ping);
 	}
+	await eventDispatcher.wait();
 }
 
 export { run as default };

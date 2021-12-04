@@ -8,6 +8,9 @@ import { beginWebdriverSession } from './webdriver.mjs';
 import EventListener from './EventListener.mjs';
 import Server from './Server.mjs';
 
+const INITIAL_CONNECT_TIMEOUT = 30000;
+const PING_TIMEOUT = 2000;
+
 export default async function browserRunner(config, paths, listener) {
 	// must use realpath because npm will install the binary as a symlink in a different folder (.bin)
 	const selfPath = dirname(await realpath(process.argv[1]));
@@ -26,20 +29,52 @@ export default async function browserRunner(config, paths, listener) {
 		config.browser.forEach((browser, browserID) => multi.add(browser, (subListener) => {
 			const webdriverEnv = browser.toUpperCase().replace(/[^A-Z]+/g, '_');
 			const webdriver = process.env[`WEBDRIVER_HOST_${webdriverEnv}`] || process.env.WEBDRIVER_HOST;
+			const tracker = new ActiveTestTracker();
+			const activeTests = () => {
+				const tests = tracker.get();
+				if (tests.length) {
+					return 'Active tests:\n' + tests.map((p) => '- ' + p.join(' -> ')).join('\n');
+				} else {
+					return 'No active tests.';
+				}
+			};
 
 			return run(server, browser, webdriver, '#' + browserID, () => new Promise((res, rej) => {
-				let timeout = setTimeout(() => rej(new Error(`browser launch timed out (unhandled events: ${postListener.unhandled()})`)), 30000);
-				postListener.addListener(browserID, (event) => {
-					if (timeout) {
-						clearTimeout(timeout);
-						timeout = null;
+				let connectedUntil = Date.now() + INITIAL_CONNECT_TIMEOUT;
+				let connected = false;
+				const checkPing = setInterval(() => {
+					if (Date.now() > connectedUntil) {
+						clearInterval(checkPing);
+						if (!connected) {
+							rej(new LaunchError(`browser launch timed out (unhandled events: ${postListener.unhandled()})`));
+						} else {
+							rej(new Error(`browser disconnected (did a test change window.location?)\n${activeTests()}`));
+						}
 					}
-					if (event.type === 'browser-end') {
-						res(event.result);
-					} else if (event.type === 'browser-error') {
-						rej(new Error(`Browser error: ${event.error}`));
-					} else {
-						subListener(event);
+				}, 250);
+				postListener.addListener(browserID, (event) => {
+					connectedUntil = Date.now() + PING_TIMEOUT;
+					switch (event.type) {
+						case 'ping':
+							break;
+						case 'browser-connect':
+							if (connected) {
+								clearInterval(checkPing);
+								rej(new Error(`Multiple browser connections (maybe page reloaded?)\n${activeTests()}`));
+							}
+							connected = true;
+							break;
+						case 'browser-end':
+							clearInterval(checkPing);
+							res(event.result);
+							break;
+						case 'browser-error':
+							clearInterval(checkPing);
+							rej(new Error(`Browser error: ${event.error}\n${activeTests()}`));
+							break;
+						default:
+							tracker.eventListener(event);
+							subListener(event);
 					}
 				});
 			}));
@@ -47,6 +82,41 @@ export default async function browserRunner(config, paths, listener) {
 		return await multi.run(listener);
 	} finally {
 		server.close();
+	}
+}
+
+class LaunchError extends Error {
+	constructor(message) {
+		super(message);
+	}
+}
+
+class ActiveTestTracker {
+	constructor() {
+		this.active = new Map();
+		this.eventListener = (event) => {
+			if (event.type === 'begin') {
+				this.active.set(event.id, event);
+			} else if (event.type === 'complete') {
+				this.active.delete(event.id);
+			}
+		};
+	}
+
+	get() {
+		const result = [];
+		this.active.forEach((beginEvent) => {
+			if (!beginEvent.isBlock) {
+				const parts = [];
+				for (let e = beginEvent; e; e = this.active.get(e.parent)) {
+					if (e.label !== null) {
+						parts.push(e.label);
+					}
+				}
+				result.push(parts.reverse());
+			}
+		});
+		return result;
 	}
 }
 
@@ -112,10 +182,14 @@ async function runWithProcess(launched, runner) {
 			runner(),
 		]);
 	} catch (e) {
-		throw new Error(
-			`failed to launch browser: ${e.message}\n` +
-			`stderr:\n${Buffer.concat(stderr).toString('utf-8')}\n` +
-			`stdout:\n${Buffer.concat(stdout).toString('utf-8')}\n`);
+		if (e instanceof LaunchError) {
+			throw new Error(
+				`failed to launch browser: ${e.message}\n` +
+				`stderr:\n${Buffer.concat(stderr).toString('utf-8')}\n` +
+				`stdout:\n${Buffer.concat(stdout).toString('utf-8')}\n`);
+		} else {
+			throw e;
+		}
 	} finally {
 		proc.kill();
 		process.removeListener('exit', end);
@@ -130,7 +204,8 @@ const INDEX = `<!DOCTYPE html>
 <script type="module">
 import run from '/.lean-test/browser-runtime.mjs';
 const id = window.location.hash.substr(1);
-run(id, /*CONFIG*/, /*SUITES*/);
+window.location.hash = '';
+run(id, /*CONFIG*/, /*SUITES*/).then(() => window.close());
 </script>
 </head>
 <body></body>

@@ -1,12 +1,13 @@
 [FAIL] suite: browser.spec.mjs [xx]
 [PASS]   test: runs in the browser [xx]
+[PASS]   test: search and hash default to blank [xx]
 [FAIL]   describe: console [xx]
 [PASS]     test: hidden if successful [xx]
 [FAIL]     test: displayed if unsuccessful [xx]
              should be seen
 
              Failure: oops
-              at browser.spec.mjs:15:3
+              at browser.spec.mjs:20:3
 [ERRO] suite: stacktrace.spec.mjs [xx]
 [ERRO]   describe: stack traces [xx]
 [ERRO]     test: error [xx]
@@ -36,8 +37,8 @@
 [ERRO]       with xx timeout [xx]
                Error: timeout after xx
 
-Total:    11
-Pass:     2
+Total:    12
+Pass:     3
 Errors:   2
 Failures: 7
 Skipped:  0

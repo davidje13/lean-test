@@ -5,6 +5,11 @@ test('runs in the browser', () => {
 	expect(o.innerText, equals('hello'));
 });
 
+test('search and hash default to blank', () => {
+	expect(window.location.search, equals(''));
+	expect(window.location.hash, equals(''));
+});
+
 describe('console', () => {
 	test('hidden if successful', () => {
 		console.log('should not be seen');

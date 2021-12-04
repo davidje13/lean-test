@@ -53,6 +53,6 @@ try {
 	if (!(e instanceof Error)) {
 		throw e;
 	}
-	process.stderr.write(`${e.message}\n`);
+	process.stdout.write(`\n${e.message}\n`);
 	process.exit(1);
 }
