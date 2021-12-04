@@ -1244,11 +1244,11 @@ var lifecycle = ({ order = 0 } = {}) => (builder) => {
 			return await next(skip);
 		} finally {
 			while ((i--) > 0) {
-				for (const { name, fn } of allTeardowns[i]) {
-					await result.createStage({ fail: true, noCancel: true }, `teardown ${name}`, fn);
-				}
 				for (const { name, fn } of after[i]) {
 					await result.createStage({ fail: true, noCancel: true }, `after ${name}`, fn);
+				}
+				for (const { name, fn } of allTeardowns[i]) {
+					await result.createStage({ fail: true, noCancel: true }, `teardown ${name}`, fn);
 				}
 			}
 		}

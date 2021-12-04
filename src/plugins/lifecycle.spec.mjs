@@ -23,9 +23,9 @@ describe('lifecycle', {
 
 		expect(invoked, equals([
 			'ba1', 'ba2',
-			'be1', 'be2', 'test 1', 'end-be2', 'end-be1', 'ae1', 'ae2',
-			'be1', 'be2', 'test 2', 'end-be2', 'end-be1', 'ae1', 'ae2',
-			'end-ba2', 'end-ba1', 'aa1', 'aa2',
+			'be1', 'be2', 'test 1', 'ae1', 'ae2', 'end-be2', 'end-be1',
+			'be1', 'be2', 'test 2', 'ae1', 'ae2', 'end-be2', 'end-be1',
+			'aa1', 'aa2', 'end-ba2', 'end-ba1',
 		]));
 	},
 
@@ -47,12 +47,12 @@ describe('lifecycle', {
 		expect(invoked, equals([
 			'ba1', 'ba2',
 			'ba3',
-			'be1', 'be2', 'be3', 'test 1', 'end-be3', 'ae3', 'end-be2', 'end-be1', 'ae1', 'ae2',
-			'be1', 'be2', 'be3', 'test 2', 'end-be3', 'ae3', 'end-be2', 'end-be1', 'ae1', 'ae2',
-			'end-ba3',
+			'be1', 'be2', 'be3', 'test 1', 'ae3', 'end-be3', 'ae1', 'ae2', 'end-be2', 'end-be1',
+			'be1', 'be2', 'be3', 'test 2', 'ae3', 'end-be3', 'ae1', 'ae2', 'end-be2', 'end-be1',
 			'aa3',
-			'be1', 'be2', 'test 3', 'end-be2', 'end-be1', 'ae1', 'ae2',
-			'end-ba2', 'end-ba1', 'aa1', 'aa2',
+			'end-ba3',
+			'be1', 'be2', 'test 3', 'ae1', 'ae2', 'end-be2', 'end-be1',
+			'aa1', 'aa2', 'end-ba2', 'end-ba1',
 		]));
 	},
 
@@ -64,9 +64,9 @@ describe('lifecycle', {
 
 		expect(invoked, equals([
 			'ba1', 'ba2',
-			'be1', 'be2', 'test 1', 'end-be2', 'end-be1', 'ae1', 'ae2',
-			'be1', 'be2', 'test 2', 'end-be2', 'end-be1', 'ae1', 'ae2',
-			'end-ba2', 'end-ba1', 'aa1', 'aa2',
+			'be1', 'be2', 'test 1', 'ae1', 'ae2', 'end-be2', 'end-be1',
+			'be1', 'be2', 'test 2', 'ae1', 'ae2', 'end-be2', 'end-be1',
+			'aa1', 'aa2', 'end-ba2', 'end-ba1',
 		]));
 	},
 
@@ -79,9 +79,9 @@ describe('lifecycle', {
 
 		expect(invoked, equals([
 			'ba1', 'ba2',
-			'be1', 'be2', 'test 2', 'end-be2', 'end-be1', 'ae1', 'ae2',
-			'be1', 'be2', 'test 3', 'end-be2', 'end-be1', 'ae1', 'ae2',
-			'end-ba2', 'end-ba1', 'aa1', 'aa2',
+			'be1', 'be2', 'test 2', 'ae1', 'ae2', 'end-be2', 'end-be1',
+			'be1', 'be2', 'test 3', 'ae1', 'ae2', 'end-be2', 'end-be1',
+			'aa1', 'aa2', 'end-ba2', 'end-ba1',
 		]));
 	},
 
@@ -112,10 +112,10 @@ describe('lifecycle', {
 		expect(invoked, equals([
 			'ba1', 'ba2',
 			'ba3',
-			'be1', 'be2', 'be3', 'test 2', 'end-be3', 'ae3', 'end-be2', 'end-be1', 'ae1', 'ae2',
-			'end-ba3',
+			'be1', 'be2', 'be3', 'test 2', 'ae3', 'end-be3', 'ae1', 'ae2', 'end-be2', 'end-be1',
 			'aa3',
-			'end-ba2', 'end-ba1', 'aa1', 'aa2',
+			'end-ba3',
+			'aa1', 'aa2', 'end-ba2', 'end-ba1',
 		]));
 	},
 
@@ -130,7 +130,7 @@ describe('lifecycle', {
 
 		expect(invoked, equals([
 			'ba1', 'ba2',
-			'end-ba2', 'end-ba1', 'aa1', 'aa2',
+			'aa1', 'aa2', 'end-ba2', 'end-ba1',
 		]));
 	},
 
@@ -145,7 +145,7 @@ describe('lifecycle', {
 
 		expect(invoked, equals([
 			'ba1', 'ba2',
-			'end-ba2', 'end-ba1', 'aa1', 'aa2',
+			'aa1', 'aa2', 'end-ba2', 'end-ba1',
 		]));
 	},
 
@@ -160,9 +160,9 @@ describe('lifecycle', {
 
 		expect(invoked, equals([
 			'ba1', 'ba2',
-			'be1', 'be2', 'end-be2', 'end-be1', 'ae1', 'ae2',
-			'be1', 'be2', 'end-be2', 'end-be1', 'ae1', 'ae2',
-			'end-ba2', 'end-ba1', 'aa1', 'aa2',
+			'be1', 'be2', 'ae1', 'ae2', 'end-be2', 'end-be1',
+			'be1', 'be2', 'ae1', 'ae2', 'end-be2', 'end-be1',
+			'aa1', 'aa2', 'end-ba2', 'end-ba1',
 		]));
 	},
 
@@ -177,9 +177,9 @@ describe('lifecycle', {
 
 		expect(invoked, equals([
 			'ba1', 'ba2',
-			'be1', 'be2', 'end-be2', 'end-be1', 'ae1', 'ae2',
-			'be1', 'be2', 'end-be2', 'end-be1', 'ae1', 'ae2',
-			'end-ba2', 'end-ba1', 'aa1', 'aa2',
+			'be1', 'be2', 'ae1', 'ae2', 'end-be2', 'end-be1',
+			'be1', 'be2', 'ae1', 'ae2', 'end-be2', 'end-be1',
+			'aa1', 'aa2', 'end-ba2', 'end-ba1',
 		]));
 	},
 
@@ -194,9 +194,9 @@ describe('lifecycle', {
 
 		expect(invoked, equals([
 			'ba1', 'ba2',
-			'be1', 'be2', 'test 1', 'end-be2', 'end-be1', 'ae1', 'ae2', 'ae3',
-			'be1', 'be2', 'test 2', 'end-be2', 'end-be1', 'ae1', 'ae2', 'ae3',
-			'end-ba2', 'end-ba1', 'aa1', 'aa2',
+			'be1', 'be2', 'test 1', 'ae1', 'ae2', 'ae3', 'end-be2', 'end-be1',
+			'be1', 'be2', 'test 2', 'ae1', 'ae2', 'ae3', 'end-be2', 'end-be1',
+			'aa1', 'aa2', 'end-ba2', 'end-ba1',
 		]));
 	},
 
@@ -211,9 +211,9 @@ describe('lifecycle', {
 
 		expect(invoked, equals([
 			'ba1', 'ba2',
-			'be1', 'be2', 'test 1', 'end-be2', 'end-be1', 'ae1', 'ae2', 'ae3',
-			'be1', 'be2', 'test 2', 'end-be2', 'end-be1', 'ae1', 'ae2', 'ae3',
-			'end-ba2', 'end-ba1', 'aa1', 'aa2',
+			'be1', 'be2', 'test 1', 'ae1', 'ae2', 'ae3', 'end-be2', 'end-be1',
+			'be1', 'be2', 'test 2', 'ae1', 'ae2', 'ae3', 'end-be2', 'end-be1',
+			'aa1', 'aa2', 'end-ba2', 'end-ba1',
 		]));
 	},
 
@@ -228,9 +228,9 @@ describe('lifecycle', {
 
 		expect(invoked, equals([
 			'ba1', 'ba2',
-			'be1', 'be2', 'test 1', 'end-be2', 'end-be1', 'ae1', 'ae2',
-			'be1', 'be2', 'test 2', 'end-be2', 'end-be1', 'ae1', 'ae2',
-			'end-ba2', 'end-ba1', 'aa1', 'aa2', 'aa3',
+			'be1', 'be2', 'test 1', 'ae1', 'ae2', 'end-be2', 'end-be1',
+			'be1', 'be2', 'test 2', 'ae1', 'ae2', 'end-be2', 'end-be1',
+			'aa1', 'aa2', 'aa3', 'end-ba2', 'end-ba1',
 		]));
 	},
 
@@ -245,9 +245,9 @@ describe('lifecycle', {
 
 		expect(invoked, equals([
 			'ba1', 'ba2',
-			'be1', 'be2', 'test 1', 'end-be2', 'end-be1', 'ae1', 'ae2',
-			'be1', 'be2', 'test 2', 'end-be2', 'end-be1', 'ae1', 'ae2',
-			'end-ba2', 'end-ba1', 'aa1', 'aa2', 'aa3',
+			'be1', 'be2', 'test 1', 'ae1', 'ae2', 'end-be2', 'end-be1',
+			'be1', 'be2', 'test 2', 'ae1', 'ae2', 'end-be2', 'end-be1',
+			'aa1', 'aa2', 'aa3', 'end-ba2', 'end-ba1',
 		]));
 	},
 
@@ -263,10 +263,10 @@ describe('lifecycle', {
 
 		expect(invoked, equals([
 			'ba1', 'ba2',
-			'be1', 'be2', 'test 1 attempt 1', 'end-be2', 'end-be1', 'ae1', 'ae2',
-			'be1', 'be2', 'test 1 attempt 2', 'end-be2', 'end-be1', 'ae1', 'ae2',
-			'be1', 'be2', 'test 1 attempt 3', 'end-be2', 'end-be1', 'ae1', 'ae2',
-			'end-ba2', 'end-ba1', 'aa1', 'aa2',
+			'be1', 'be2', 'test 1 attempt 1', 'ae1', 'ae2', 'end-be2', 'end-be1',
+			'be1', 'be2', 'test 1 attempt 2', 'ae1', 'ae2', 'end-be2', 'end-be1',
+			'be1', 'be2', 'test 1 attempt 3', 'ae1', 'ae2', 'end-be2', 'end-be1',
+			'aa1', 'aa2', 'end-ba2', 'end-ba1',
 		]));
 	},
 });
