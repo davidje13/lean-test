@@ -29,9 +29,9 @@ export default async function browserRunner(config, paths, listener) {
 
 	try {
 		const multi = new MultiRunner();
-		config.browser.forEach((browser, browserID) => multi.add(
+		config.browser.forEach((browser) => multi.add(
 			browser,
-			(subListener) => addBrowser(server, browser, browserID, postListener, subListener),
+			(subListener) => addBrowser(server, browser, postListener, subListener),
 		));
 		return await multi.run(listener);
 	} finally {
@@ -39,13 +39,13 @@ export default async function browserRunner(config, paths, listener) {
 	}
 }
 
-async function addBrowser(server, browser, browserID, postListener, listener) {
+async function addBrowser(server, browser, postListener, listener) {
 	const tracker = new ActiveTestTracker();
 
 	const webdriver = getConfiguredWebdriverHost(browser);
 	const runner = webdriver ? new WebDriverRunner(webdriver) : new ProcessRunner();
 	try {
-		return await runner.run(server, browser, browserID, () => new Promise((res, reject) => {
+		return await runner.run(server, browser, postListener, (browserID) => new Promise((res, reject) => {
 			let connectedUntil = Date.now() + INITIAL_CONNECT_TIMEOUT;
 			let connected = false;
 			const checkPing = setInterval(() => {
@@ -100,11 +100,11 @@ class WebDriverRunner {
 		this.finalTitle = null;
 	}
 
-	async run(server, browser, browserID, runner) {
+	async run(server, browser, postListener, runner) {
 		this.session = await WebdriverSession.create(this.webdriverHost, browser);
 		return alwaysFinally(async () => {
-			await this.findValidUrl(server, browserID);
-			return runner();
+			const browserID = await this.makeConnection(server, postListener);
+			return runner(browserID);
 		}, async () => {
 			this.finalURL = await this.session.getUrl();
 			this.finalTitle = await this.session.getTitle();
@@ -112,7 +112,7 @@ class WebDriverRunner {
 		});
 	}
 
-	async findValidUrl(server, browserID) {
+	async makeConnection(server, postListener) {
 		// try various URLs until something works, because we don't know what environment we're in
 		const urls = [...new Set([
 			server.baseurl(process.env.WEBDRIVER_TESTRUNNER_HOST),
@@ -126,9 +126,21 @@ class WebDriverRunner {
 
 		let lastError = null;
 		for (const url of urls) {
+			const browserID = postListener.getUniqueID();
 			try {
 				await this.session.setUrl(url + '#' + browserID);
-				return url;
+				// Firefox via webdriver lies about the connection, returning success
+				// even if it fails, so we have to check that it actually did connect.
+				// Unfortunately there's no synchronous way of doing this (Firefox
+				// returns from POST url before it has reached DOMContentLoaded), so
+				// we need to poll.
+				const tm0 = Date.now();
+				do {
+					if (postListener.hasQueuedEvents(browserID)) {
+						return browserID;
+					}
+					await new Promise((resolve) => setTimeout(resolve, 50));
+				} while (Date.now() < tm0 + 1000);
 			} catch (e) {
 				lastError = e;
 			}
@@ -153,10 +165,11 @@ class ProcessRunner {
 		this.stderr = () => '';
 	}
 
-	async run(server, browser, browserID, runner) {
+	async run(server, browser, postListener, runner) {
+		const browserID = postListener.getUniqueID();
 		const launched = await launchBrowser(browser, server.baseurl() + '#' + browserID, { stdio: ['ignore', 'pipe', 'pipe'] });
 		if (!launched) {
-			return runner();
+			return runner(browserID);
 		}
 
 		this.stdout = addDataListener(launched.proc.stdout);
@@ -164,7 +177,7 @@ class ProcessRunner {
 		return alwaysFinally(() => {
 			return Promise.race([
 				new Promise((_, reject) => launched.proc.once('error', (err) => reject(err))),
-				runner(),
+				runner(browserID),
 			]);
 		}, () => {
 			launched.proc.kill();

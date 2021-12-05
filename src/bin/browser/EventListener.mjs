@@ -2,8 +2,13 @@ export default class EventListener {
 	constructor() {
 		this.listeners = new Map();
 		this.eventQueue = [];
+		this.nextID = 0;
 
 		this.handle = this.handle.bind(this);
+	}
+
+	getUniqueID() {
+		return (this.nextID++);
 	}
 
 	hasQueuedEvents(id) {
