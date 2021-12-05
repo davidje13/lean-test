@@ -1,7 +1,7 @@
 import { readFile } from 'fs/promises';
 import { resolve } from 'path';
 import { createServer } from 'http';
-import process from 'process';
+import { addExitHook, removeExitHook } from '../shutdown.mjs';
 
 const CHARSET = '; charset=utf-8';
 
@@ -31,8 +31,9 @@ export default class Server {
 	}
 
 	async _handleRequest(req, res) {
+		const url = req.url.split('?')[0];
 		try {
-			if (req.url === '/') {
+			if (url === '/') {
 				if (req.method === 'POST') {
 					const all = [];
 					for await (const part of req) {
@@ -47,12 +48,12 @@ export default class Server {
 				}
 				return;
 			}
-			if (req.url.includes('..')) {
+			if (url.includes('..')) {
 				throw new HttpError(400, 'Invalid resource path');
 			}
 			for (const [base, dir] of this.directories) {
-				if (req.url.startsWith(base)) {
-					const path = resolve(dir, req.url.substr(base.length));
+				if (url.startsWith(base)) {
+					const path = resolve(dir, url.substr(base.length));
 					if (!path.startsWith(dir)) {
 						throw new HttpError(400, 'Invalid resource path');
 					}
@@ -75,8 +76,8 @@ export default class Server {
 				status = e.status || 400;
 				message = e.message;
 			}
-			if (!this.ignore404.includes(req.url)) {
-				console.warn(`Error while serving ${req.url} - returning ${status} ${message}`);
+			if (!this.ignore404.includes(url)) {
+				console.warn(`Error while serving ${url} - returning ${status} ${message}`);
 			}
 			res.statusCode = status;
 			res.setHeader('Content-Type', this.getContentType('txt'));
@@ -107,17 +108,17 @@ export default class Server {
 			throw new Exception(`Server.address unexpectedly returned ${addr}; aborting`);
 		}
 		this.address = addr;
-		process.addListener('SIGINT', this.close);
+		addExitHook(this.close);
 	}
 
 	async close() {
 		if (!this.address) {
 			return;
 		}
+		removeExitHook(this.close);
 		this.address = null;
 		this.port = null;
 		await new Promise((resolve) => this.server.close(resolve));
-		process.removeListener('SIGINT', this.close);
 	}
 }
 

@@ -1,5 +1,6 @@
 
-browser disconnected (did a test change window.location?)
+Browser disconnected: unknown disconnect (did a test change window.location?)
 Active tests:
 - suite: disconnect.spec.mjs -> test: changing URL is detected and reported
+
 EXIT: 1

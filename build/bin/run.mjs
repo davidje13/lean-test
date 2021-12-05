@@ -185,17 +185,126 @@ function split2(v, s) {
 	}
 }
 
+let hasRun = null;
+const exitHooks = [];
+async function runExitHooks() {
+	if (hasRun !== null) {
+		if (Date.now() > hasRun + 1000) {
+			// user got impatient and fired signal again; do as they say
+			process.stderr.write(`\nWarning: teardown did not complete\n`);
+			process.exit(1);
+		}
+		return;
+	}
+	hasRun = Date.now();
+
+	const hooks = exitHooks.slice();
+
+	// mimick default SIGINT/SIGTERM behaviour
+	if (process.stderr.isTTY) {
+		process.stderr.write('\u001B[0m');
+	}
+
+	var info = setTimeout(() => process.stderr.write(`\nTeardown in progress; please wait (warning: forcing exit could result in left-over processes)\n`), 200);
+
+	// run hooks
+	for (const hook of hooks) {
+		try {
+			await hook();
+		} catch (e) {
+			process.stderr.write(`\nWarning: error during teardown ${e}\n`);
+		}
+	}
+	clearTimeout(info);
+	process.exit(1);
+}
+
+function checkExit() {
+	if (hasRun !== null) {
+		return;
+	}
+
+	const hooks = exitHooks.slice();
+	if (process.stderr.isTTY) {
+		process.stderr.write('\u001B[0m');
+	}
+
+	// run all hooks "fire-and-forget" style for best-effort teardown
+	for (const hook of hooks) {
+		try {
+			hook();
+		} catch (e) {
+			process.stderr.write(`\nWarning: error during teardown ${e}\n`);
+		}
+	}
+
+	process.stderr.write('\nWarning: exit teardown was possibly incomplete\n');
+}
+
+function addExitHook(fn) {
+	exitHooks.unshift(fn);
+	if (exitHooks.length === 1) {
+		process.addListener('SIGTERM', runExitHooks);
+		process.addListener('SIGINT', runExitHooks);
+		process.addListener('exit', checkExit);
+	}
+}
+
+function clearListeners() {
+	exitHooks.length = 0;
+	process.removeListener('SIGTERM', runExitHooks);
+	process.removeListener('SIGINT', runExitHooks);
+	process.removeListener('exit', checkExit);
+}
+
+function removeExitHook(fn) {
+	const p = exitHooks.indexOf(fn);
+	if (p !== -1) {
+		exitHooks.splice(p, 1);
+		if (exitHooks.length === 0) {
+			clearListeners();
+		}
+	}
+}
+
+async function ifKilled(fn, fin) {
+	try {
+		addExitHook(fin);
+		return await fn();
+	} finally {
+		removeExitHook(fin);
+	}
+}
+
+async function alwaysFinally(fn, fin) {
+	try {
+		addExitHook(fin);
+		return await fn();
+	} finally {
+		removeExitHook(fin);
+		try {
+			await fin();
+		} catch (e) {
+			process.stderr.write(`\nWarning: error during teardown ${e}\n`);
+		}
+	}
+}
+
+function addDataListener(target) {
+	const store = [];
+	target.addListener('data', (d) => store.push(d));
+	return () => Buffer.concat(store);
+}
+
 const invoke = (exec, args, opts = {}) => new Promise((resolve, reject) => {
-	const stdout = [];
-	const stderr = [];
 	const proc = spawn(exec, args, { ...opts, stdio: ['ignore', 'pipe', 'pipe'] });
-	proc.stdout.addListener('data', (d) => stdout.push(d));
-	proc.stderr.addListener('data', (d) => stderr.push(d));
+	const stdout = addDataListener(proc.stdout);
+	const stderr = addDataListener(proc.stderr);
 	proc.addListener('error', reject);
 	proc.addListener('close', (exitCode) => resolve({
 		exitCode,
-		stdout: Buffer.concat(stdout).toString('utf-8'),
-		stderr: Buffer.concat(stderr).toString('utf-8'),
+		stdout: stdout().toString('utf-8'),
+		stderr: stderr().toString('utf-8'),
 	}));
 });
 
@@ -345,29 +454,43 @@ async function launchFirefox(url, opts) {
 
 // https://w3c.github.io/webdriver/
 
-async function beginWebdriverSession(host, browser, urlOptions, path, expectedTitle) {
-	const { value: { sessionId } } = await withRetry(() => sendJSON('POST', `${host}/session`, {
+class WebdriverSession {
+	constructor(sessionBase) {
+		this.sessionBase = sessionBase;
+	}
+
+	setUrl(url) {
+		return sendJSON('POST', `${this.sessionBase}/url`, { url });
+	}
+
+	getUrl() {
+		return get(`${this.sessionBase}/url`);
+	}
+
+	getTitle() {
+		return get(`${this.sessionBase}/title`);
+	}
+
+	close() {
+		return withRetry(() => sendJSON('DELETE', this.sessionBase), 5000);
+	}
+}
+
+WebdriverSession.create = function(host, browser) {
+	const promise = withRetry(() => sendJSON('POST', `${host}/session`, {
 		capabilities: {
 			firstMatch: [{ browserName: browser }]
 		},
 	}), 20000);
-	const sessionBase = `${host}/session/${encodeURIComponent(sessionId)}`;
-	const close = () => withRetry(() => sendJSON('DELETE', sessionBase), 5000);
-
-	let lastError = null;
-	for (const url of urlOptions) {
-		try {
-			await navigateAndWaitForTitle(sessionBase, url + path, expectedTitle);
-			return { close, debug: () => debug(sessionBase) };
-		} catch (e) {
-			lastError = e;
-		}
-	}
-	await close();
-	throw lastError;
-}
-
-const get = async (url) => (await sendJSON('GET', url)).value;
+	return ifKilled(async () => {
+		const { value: { sessionId } } = await promise;
+		return new WebdriverSession(`${host}/session/${encodeURIComponent(sessionId)}`);
+	}, async () => {
+		const { value: { sessionId } } = await promise;
+		const session = new WebdriverSession(`${host}/session/${encodeURIComponent(sessionId)}`);
+		return session.close();
+	});
+};
 
 async function withRetry(fn, timeout) {
 	const delay = 100;
@@ -384,25 +507,7 @@ async function withRetry(fn, timeout) {
 	}
 }
 
-async function navigateAndWaitForTitle(sessionBase, url, expectedTitle) {
-	await sendJSON('POST', `${sessionBase}/url`, { url });
-
-	const begin = Date.now();
-	let title;
-	do {
-		title = await get(`${sessionBase}/title`);
-		if (title.startsWith(expectedTitle)) {
-			return;
-		}
-		await new Promise((resolve) => setTimeout(resolve, 100));
-	} while (Date.now() < begin + 1000);
-
-	throw new Error(`Unexpected page title at URL ${url}: '${title}'`);
-}
-
-async function debug(sessionBase) {
-	return `URL='${await get(`${sessionBase}/url`)}' Title='${await get(`${sessionBase}/title`)}'`;
-}
+const get = async (url) => (await sendJSON('GET', url)).value;
 
 function sendJSON(method, path, data) {
 	const errorInfo = `WebDriver error for ${method} ${path}: `;
@@ -421,13 +526,12 @@ function sendJSON(method, path, data) {
 			},
 		};
 		const req = request(opts, (res) => {
-			const data = [];
 			clearTimeout(timeout);
 			timeout = setTimeout(() => reject(new Error(`${errorInfo}timeout receiving data (got HTTP ${res.statusCode})`)), 10000);
-			res.addListener('data', (d) => data.push(d));
+			const resultData = addDataListener(res);
 			res.addListener('close', () => {
 				clearTimeout(timeout);
-				const dataString = Buffer.concat(data).toString('utf-8');
+				const dataString = resultData().toString('utf-8');
 				if (res.statusCode >= 300) {
 					reject(new Error(`${errorInfo}${res.statusCode}\n\n${dataString}`));
 				} else {
@@ -452,6 +556,11 @@ class EventListener {
 		this.eventQueue = [];
 
 		this.handle = this.handle.bind(this);
+	}
+
+	hasQueuedEvents(id) {
+		const normID = String(id);
+		return this.eventQueue.some((e) => (e.id === normID));
 	}
 
 	addListener(id, fn) {
@@ -486,6 +595,35 @@ class EventListener {
 	}
 }
 
+class ActiveTestTracker {
+	constructor() {
+		this.active = new Map();
+		this.eventListener = (event) => {
+			if (event.type === 'begin') {
+				this.active.set(event.id, event);
+			} else if (event.type === 'complete') {
+				this.active.delete(event.id);
+			}
+		};
+	}
+
+	get() {
+		const result = [];
+		this.active.forEach((beginEvent) => {
+			if (!beginEvent.isBlock) {
+				const parts = [];
+				for (let e = beginEvent; e; e = this.active.get(e.parent)) {
+					if (e.label !== null) {
+						parts.push(e.label);
+					}
+				}
+				result.push(parts.reverse());
+			}
+		});
+		return result;
+	}
+}
+
 const CHARSET = '; charset=utf-8';
 
 class Server {
@@ -514,8 +652,9 @@ class Server {
 	}
 
 	async _handleRequest(req, res) {
+		const url = req.url.split('?')[0];
 		try {
-			if (req.url === '/') {
+			if (url === '/') {
 				if (req.method === 'POST') {
 					const all = [];
 					for await (const part of req) {
@@ -530,12 +669,12 @@ class Server {
 				}
 				return;
 			}
-			if (req.url.includes('..')) {
+			if (url.includes('..')) {
 				throw new HttpError(400, 'Invalid resource path');
 			}
 			for (const [base, dir] of this.directories) {
-				if (req.url.startsWith(base)) {
-					const path = resolve(dir, req.url.substr(base.length));
+				if (url.startsWith(base)) {
+					const path = resolve(dir, url.substr(base.length));
 					if (!path.startsWith(dir)) {
 						throw new HttpError(400, 'Invalid resource path');
 					}
@@ -558,8 +697,8 @@ class Server {
 				status = e.status || 400;
 				message = e.message;
 			}
-			if (!this.ignore404.includes(req.url)) {
-				console.warn(`Error while serving ${req.url} - returning ${status} ${message}`);
+			if (!this.ignore404.includes(url)) {
+				console.warn(`Error while serving ${url} - returning ${status} ${message}`);
 			}
 			res.statusCode = status;
 			res.setHeader('Content-Type', this.getContentType('txt'));
@@ -590,17 +729,17 @@ class Server {
 			throw new Exception(`Server.address unexpectedly returned ${addr}; aborting`);
 		}
 		this.address = addr;
-		process.addListener('SIGINT', this.close);
+		addExitHook(this.close);
 	}
 
 	async close() {
 		if (!this.address) {
 			return;
 		}
+		removeExitHook(this.close);
 		this.address = null;
 		this.port = null;
 		await new Promise((resolve) => this.server.close(resolve));
-		process.removeListener('SIGINT', this.close);
 	}
 }
 
@@ -629,104 +768,92 @@ async function browserRunner(config, paths, listener) {
 
 	try {
 		const multi = new MultiRunner();
-		config.browser.forEach((browser, browserID) => multi.add(browser, (subListener) => {
-			const webdriverEnv = browser.toUpperCase().replace(/[^A-Z]+/g, '_');
-			const webdriver = process.env[`WEBDRIVER_HOST_${webdriverEnv}`] || process.env.WEBDRIVER_HOST;
-			const tracker = new ActiveTestTracker();
-			const activeTests = () => {
-				const tests = tracker.get();
-				if (tests.length) {
-					return 'Active tests:\n' + tests.map((p) => '- ' + p.join(' -> ')).join('\n');
-				} else {
-					return 'No active tests.';
-				}
-			};
-
-			return run(server, browser, webdriver, '#' + browserID, () => new Promise((res, rej) => {
-				let connectedUntil = Date.now() + INITIAL_CONNECT_TIMEOUT;
-				let connected = false;
-				const checkPing = setInterval(() => {
-					if (Date.now() > connectedUntil) {
-						clearInterval(checkPing);
-						if (!connected) {
-							rej(new LaunchError(`browser launch timed out (unhandled events: ${postListener.unhandled()})`));
-						} else {
-							rej(new Error(`browser disconnected (did a test change window.location?)\n${activeTests()}`));
-						}
-					}
-				}, 250);
-				postListener.addListener(browserID, (event) => {
-					connectedUntil = Date.now() + PING_TIMEOUT;
-					switch (event.type) {
-						case 'ping':
-							break;
-						case 'browser-connect':
-							if (connected) {
-								clearInterval(checkPing);
-								rej(new Error(`Multiple browser connections (maybe page reloaded?)\n${activeTests()}`));
-							}
-							connected = true;
-							break;
-						case 'browser-end':
-							clearInterval(checkPing);
-							res(event.result);
-							break;
-						case 'browser-error':
-							clearInterval(checkPing);
-							rej(new Error(`Browser error: ${event.error}\n${activeTests()}`));
-							break;
-						default:
-							tracker.eventListener(event);
-							subListener(event);
-					}
-				});
-			}));
-		}));
+		config.browser.forEach((browser, browserID) => multi.add(
+			browser,
+			(subListener) => addBrowser(server, browser, browserID, postListener, subListener),
+		));
 		return await multi.run(listener);
 	} finally {
 		server.close();
 	}
 }
 
-class LaunchError extends Error {
-	constructor(message) {
-		super(message);
-	}
-}
+async function addBrowser(server, browser, browserID, postListener, listener) {
+	const tracker = new ActiveTestTracker();
 
-class ActiveTestTracker {
-	constructor() {
-		this.active = new Map();
-		this.eventListener = (event) => {
-			if (event.type === 'begin') {
-				this.active.set(event.id, event);
-			} else if (event.type === 'complete') {
-				this.active.delete(event.id);
-			}
-		};
-	}
-
-	get() {
-		const result = [];
-		this.active.forEach((beginEvent) => {
-			if (!beginEvent.isBlock) {
-				const parts = [];
-				for (let e = beginEvent; e; e = this.active.get(e.parent)) {
-					if (e.label !== null) {
-						parts.push(e.label);
+	const webdriver = getConfiguredWebdriverHost(browser);
+	const runner = webdriver ? new WebDriverRunner(webdriver) : new ProcessRunner();
+	try {
+		return await runner.run(server, browser, browserID, () => new Promise((res, reject) => {
+			let connectedUntil = Date.now() + INITIAL_CONNECT_TIMEOUT;
+			let connected = false;
+			const checkPing = setInterval(() => {
+				if (Date.now() > connectedUntil) {
+					clearInterval(checkPing);
+					if (!connected) {
+						reject(new Error('browser launch timed out'));
+					} else {
+						reject(new DisconnectError('unknown disconnect (did a test change window.location?)'));
 					}
 				}
-				result.push(parts.reverse());
-			}
-		});
-		return result;
+			}, 250);
+			postListener.addListener(browserID, (event) => {
+				connectedUntil = Date.now() + PING_TIMEOUT;
+				switch (event.type) {
+					case 'ping':
+						break;
+					case 'browser-connect':
+						if (connected) {
+							clearInterval(checkPing);
+							reject(new DisconnectError('multiple browser connections (maybe page reloaded?)'));
+						}
+						connected = true;
+						break;
+					case 'browser-end':
+						clearInterval(checkPing);
+						res(event.result);
+						break;
+					case 'browser-error':
+						clearInterval(checkPing);
+						reject(new DisconnectError(`browser error: ${event.error}`));
+						break;
+					default:
+						tracker.eventListener(event);
+						listener(event);
+				}
+			});
+		}));
+	} catch (e) {
+		if (e instanceof DisconnectError) {
+			throw new Error(`Browser disconnected: ${e.message}\nActive tests:\n${tracker.get().map((p) => '- ' + p.join(' -> ')).join('\n') || 'none'}\n`);
+		}
+		throw new Error(`Error running browser: ${e}\n${await runner.debug()}\nUnhandled events: ${postListener.unhandled()}\n`);
 	}
 }
 
-async function run(server, browser, webdriver, arg, runner) {
-	if (webdriver) {
+class WebDriverRunner {
+	constructor(webdriverHost) {
+		this.webdriverHost = webdriverHost;
+		this.session = null;
+		this.finalURL = null;
+		this.finalTitle = null;
+	}
+
+	async run(server, browser, browserID, runner) {
+		this.session = await WebdriverSession.create(this.webdriverHost, browser);
+		return alwaysFinally(async () => {
+			await this.findValidUrl(server, browserID);
+			return runner();
+		}, async () => {
+			this.finalURL = await this.session.getUrl();
+			this.finalTitle = await this.session.getTitle();
+			await this.session.close();
+		});
+	}
+
+	async findValidUrl(server, browserID) {
 		// try various URLs until something works, because we don't know what environment we're in
-		const urls = new Set([
+		const urls = [...new Set([
 			server.baseurl(process.env.WEBDRIVER_TESTRUNNER_HOST),
 			server.baseurl(),
 			server.baseurl('host.docker.internal'), // See https://stackoverflow.com/a/43541732/1180785
@@ -734,69 +861,69 @@ async function run(server, browser, webdriver, arg, runner) {
 				.flatMap((i) => i)
 				.filter((i) => !i.internal)
 				.map((i) => server.baseurl(i)),
-		]);
-		const session = await beginWebdriverSession(webdriver, browser, urls, arg, 'Lean Test Runner');
-		return runWithSession(session, runner);
-	} else {
-		const launched = await launchBrowser(browser, server.baseurl() + arg, { stdio: ['ignore', 'pipe', 'pipe'] });
-		return runWithProcess(launched, runner);
+		])];
+
+		let lastError = null;
+		for (const url of urls) {
+			try {
+				await this.session.setUrl(url + '#' + browserID);
+				return url;
+			} catch (e) {
+				lastError = e;
+			}
+		}
+		if (!lastError) {
+			throw new Error(`unable to access test server\n(tried ${urls.join(', ')})`)
+		}
+		throw new Error(`error accessing test server ${lastError}\n(tried ${urls.join(', ')})`);
+	}
+
+	async debug() {
+		if (this.finalURL === null) {
+			return 'failed to create session';
+		}
+		return `URL='${this.finalURL}' Title='${this.finalTitle}'`;
 	}
 }
 
-async function runWithSession(session, runner) {
-	const end = async () => {
-		await session.close();
-		// mimick default SIGINT/SIGTERM behaviour
-		if (process.stderr.isTTY) {
-			process.stderr.write('\u001B[0m');
+class ProcessRunner {
+	constructor() {
+		this.stdout = () => '';
+		this.stderr = () => '';
+	}
+
+	async run(server, browser, browserID, runner) {
+		const launched = await launchBrowser(browser, server.baseurl() + '#' + browserID, { stdio: ['ignore', 'pipe', 'pipe'] });
+		if (!launched) {
+			return runner();
 		}
-		process.exit(1);
-	};
-	try {
-		// cannot use 'exit' because end is async
-		process.addListener('SIGTERM', end);
-		process.addListener('SIGINT', end);
-		return await runner();
-	} catch (e) {
-		throw new Error(`Error running webdriver browser: ${e}\nWebdriver info: ${await session.debug()}`);
-	} finally {
-		process.removeListener('SIGTERM', end);
-		process.removeListener('SIGINT', end);
-		await session.close();
+
+		this.stdout = addDataListener(launched.proc.stdout);
+		this.stderr = addDataListener(launched.proc.stderr);
+		return alwaysFinally(() => {
+			return Promise.race([
+				new Promise((_, reject) => launched.proc.once('error', (err) => reject(err))),
+				runner(),
+			]);
+		}, () => {
+			launched.proc.kill();
+			return launched.teardown?.();
+		});
+	}
+
+	debug() {
+		return `stderr:\n${this.stdout().toString('utf-8')}\nstdout:\n${this.stderr().toString('utf-8')}`;
 	}
 }
 
-async function runWithProcess(launched, runner) {
-	if (!launched) {
-		return runner();
-	}
+function getConfiguredWebdriverHost(browser) {
+	const webdriverEnv = browser.toUpperCase().replace(/[^A-Z]+/g, '_');
+	return process.env[`WEBDRIVER_HOST_${webdriverEnv}`] || process.env.WEBDRIVER_HOST || null;
+}
 
-	const { proc, teardown } = launched;
-
-	const stdout = [];
-	const stderr = [];
-	const end = () => proc.kill();
-	try {
-		process.addListener('exit', end);
-		proc.stdout.addListener('data', (d) => stdout.push(d));
-		proc.stderr.addListener('data', (d) => stderr.push(d));
-		return await Promise.race([
-			new Promise((_, reject) => proc.once('error', (err) => reject(err))),
-			runner(),
-		]);
-	} catch (e) {
-		if (e instanceof LaunchError) {
-			throw new Error(
-				`failed to launch browser: ${e.message}\n` +
-				`stderr:\n${Buffer.concat(stderr).toString('utf-8')}\n` +
-				`stdout:\n${Buffer.concat(stdout).toString('utf-8')}\n`);
-		} else {
-			throw e;
-		}
-	} finally {
-		proc.kill();
-		process.removeListener('exit', end);
-		await teardown?.();
+class DisconnectError extends Error {
+	constructor(message) {
+		super(message);
 	}
 }
 

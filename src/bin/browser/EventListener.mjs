@@ -6,6 +6,11 @@ export default class EventListener {
 		this.handle = this.handle.bind(this);
 	}
 
+	hasQueuedEvents(id) {
+		const normID = String(id);
+		return this.eventQueue.some((e) => (e.id === normID));
+	}
+
 	addListener(id, fn) {
 		const normID = String(id);
 		this.listeners.set(normID, fn);

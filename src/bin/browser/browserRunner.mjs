@@ -3,9 +3,12 @@ import { realpath } from 'fs/promises';
 import process from 'process';
 import { networkInterfaces } from 'os';
 import { MultiRunner } from '../../lean-test.mjs';
+import { alwaysFinally } from '../shutdown.mjs';
+import { addDataListener } from '../utils.mjs';
 import launchBrowser from './launchBrowser.mjs';
-import { beginWebdriverSession } from './webdriver.mjs';
+import WebdriverSession from './WebdriverSession.mjs';
 import EventListener from './EventListener.mjs';
+import ActiveTestTracker from './ActiveTestTracker.mjs';
 import Server from './Server.mjs';
 
 const INITIAL_CONNECT_TIMEOUT = 30000;
@@ -26,104 +29,92 @@ export default async function browserRunner(config, paths, listener) {
 
 	try {
 		const multi = new MultiRunner();
-		config.browser.forEach((browser, browserID) => multi.add(browser, (subListener) => {
-			const webdriverEnv = browser.toUpperCase().replace(/[^A-Z]+/g, '_');
-			const webdriver = process.env[`WEBDRIVER_HOST_${webdriverEnv}`] || process.env.WEBDRIVER_HOST;
-			const tracker = new ActiveTestTracker();
-			const activeTests = () => {
-				const tests = tracker.get();
-				if (tests.length) {
-					return 'Active tests:\n' + tests.map((p) => '- ' + p.join(' -> ')).join('\n');
-				} else {
-					return 'No active tests.';
-				}
-			};
-
-			return run(server, browser, webdriver, '#' + browserID, () => new Promise((res, rej) => {
-				let connectedUntil = Date.now() + INITIAL_CONNECT_TIMEOUT;
-				let connected = false;
-				const checkPing = setInterval(() => {
-					if (Date.now() > connectedUntil) {
-						clearInterval(checkPing);
-						if (!connected) {
-							rej(new LaunchError(`browser launch timed out (unhandled events: ${postListener.unhandled()})`));
-						} else {
-							rej(new Error(`browser disconnected (did a test change window.location?)\n${activeTests()}`));
-						}
-					}
-				}, 250);
-				postListener.addListener(browserID, (event) => {
-					connectedUntil = Date.now() + PING_TIMEOUT;
-					switch (event.type) {
-						case 'ping':
-							break;
-						case 'browser-connect':
-							if (connected) {
-								clearInterval(checkPing);
-								rej(new Error(`Multiple browser connections (maybe page reloaded?)\n${activeTests()}`));
-							}
-							connected = true;
-							break;
-						case 'browser-end':
-							clearInterval(checkPing);
-							res(event.result);
-							break;
-						case 'browser-error':
-							clearInterval(checkPing);
-							rej(new Error(`Browser error: ${event.error}\n${activeTests()}`));
-							break;
-						default:
-							tracker.eventListener(event);
-							subListener(event);
-					}
-				});
-			}));
-		}));
+		config.browser.forEach((browser, browserID) => multi.add(
+			browser,
+			(subListener) => addBrowser(server, browser, browserID, postListener, subListener),
+		));
 		return await multi.run(listener);
 	} finally {
 		server.close();
 	}
 }
 
-class LaunchError extends Error {
-	constructor(message) {
-		super(message);
-	}
-}
+async function addBrowser(server, browser, browserID, postListener, listener) {
+	const tracker = new ActiveTestTracker();
 
-class ActiveTestTracker {
-	constructor() {
-		this.active = new Map();
-		this.eventListener = (event) => {
-			if (event.type === 'begin') {
-				this.active.set(event.id, event);
-			} else if (event.type === 'complete') {
-				this.active.delete(event.id);
-			}
-		};
-	}
-
-	get() {
-		const result = [];
-		this.active.forEach((beginEvent) => {
-			if (!beginEvent.isBlock) {
-				const parts = [];
-				for (let e = beginEvent; e; e = this.active.get(e.parent)) {
-					if (e.label !== null) {
-						parts.push(e.label);
+	const webdriver = getConfiguredWebdriverHost(browser);
+	const runner = webdriver ? new WebDriverRunner(webdriver) : new ProcessRunner();
+	try {
+		return await runner.run(server, browser, browserID, () => new Promise((res, reject) => {
+			let connectedUntil = Date.now() + INITIAL_CONNECT_TIMEOUT;
+			let connected = false;
+			const checkPing = setInterval(() => {
+				if (Date.now() > connectedUntil) {
+					clearInterval(checkPing);
+					if (!connected) {
+						reject(new Error('browser launch timed out'));
+					} else {
+						reject(new DisconnectError('unknown disconnect (did a test change window.location?)'));
 					}
 				}
-				result.push(parts.reverse());
-			}
-		});
-		return result;
+			}, 250);
+			postListener.addListener(browserID, (event) => {
+				connectedUntil = Date.now() + PING_TIMEOUT;
+				switch (event.type) {
+					case 'ping':
+						break;
+					case 'browser-connect':
+						if (connected) {
+							clearInterval(checkPing);
+							reject(new DisconnectError('multiple browser connections (maybe page reloaded?)'));
+						}
+						connected = true;
+						break;
+					case 'browser-end':
+						clearInterval(checkPing);
+						res(event.result);
+						break;
+					case 'browser-error':
+						clearInterval(checkPing);
+						reject(new DisconnectError(`browser error: ${event.error}`));
+						break;
+					default:
+						tracker.eventListener(event);
+						listener(event);
+				}
+			});
+		}));
+	} catch (e) {
+		if (e instanceof DisconnectError) {
+			throw new Error(`Browser disconnected: ${e.message}\nActive tests:\n${tracker.get().map((p) => '- ' + p.join(' -> ')).join('\n') || 'none'}\n`);
+		}
+		throw new Error(`Error running browser: ${e}\n${await runner.debug()}\nUnhandled events: ${postListener.unhandled()}\n`);
 	}
 }
 
-async function run(server, browser, webdriver, arg, runner) {
-	if (webdriver) {
+class WebDriverRunner {
+	constructor(webdriverHost) {
+		this.webdriverHost = webdriverHost;
+		this.session = null;
+		this.finalURL = null;
+		this.finalTitle = null;
+	}
+
+	async run(server, browser, browserID, runner) {
+		this.session = await WebdriverSession.create(this.webdriverHost, browser);
+		return alwaysFinally(async () => {
+			await this.findValidUrl(server, browserID);
+			return runner();
+		}, async () => {
+			this.finalURL = await this.session.getUrl();
+			this.finalTitle = await this.session.getTitle();
+			await this.session.close();
+		});
+	}
+
+	async findValidUrl(server, browserID) {
 		// try various URLs until something works, because we don't know what environment we're in
-		const urls = new Set([
+		const urls = [...new Set([
 			server.baseurl(process.env.WEBDRIVER_TESTRUNNER_HOST),
 			server.baseurl(),
 			server.baseurl('host.docker.internal'), // See https://stackoverflow.com/a/43541732/1180785
@@ -131,69 +122,69 @@ async function run(server, browser, webdriver, arg, runner) {
 				.flatMap((i) => i)
 				.filter((i) => !i.internal)
 				.map((i) => server.baseurl(i)),
-		]);
-		const session = await beginWebdriverSession(webdriver, browser, urls, arg, 'Lean Test Runner');
-		return runWithSession(session, runner);
-	} else {
-		const launched = await launchBrowser(browser, server.baseurl() + arg, { stdio: ['ignore', 'pipe', 'pipe'] });
-		return runWithProcess(launched, runner);
+		])];
+
+		let lastError = null;
+		for (const url of urls) {
+			try {
+				await this.session.setUrl(url + '#' + browserID);
+				return url;
+			} catch (e) {
+				lastError = e;
+			}
+		}
+		if (!lastError) {
+			throw new Error(`unable to access test server\n(tried ${urls.join(', ')})`)
+		}
+		throw new Error(`error accessing test server ${lastError}\n(tried ${urls.join(', ')})`);
+	}
+
+	async debug() {
+		if (this.finalURL === null) {
+			return 'failed to create session';
+		}
+		return `URL='${this.finalURL}' Title='${this.finalTitle}'`;
 	}
 }
 
-async function runWithSession(session, runner) {
-	const end = async () => {
-		await session.close();
-		// mimick default SIGINT/SIGTERM behaviour
-		if (process.stderr.isTTY) {
-			process.stderr.write('\u001B[0m');
+class ProcessRunner {
+	constructor() {
+		this.stdout = () => '';
+		this.stderr = () => '';
+	}
+
+	async run(server, browser, browserID, runner) {
+		const launched = await launchBrowser(browser, server.baseurl() + '#' + browserID, { stdio: ['ignore', 'pipe', 'pipe'] });
+		if (!launched) {
+			return runner();
 		}
-		process.exit(1);
-	};
-	try {
-		// cannot use 'exit' because end is async
-		process.addListener('SIGTERM', end);
-		process.addListener('SIGINT', end);
-		return await runner();
-	} catch (e) {
-		throw new Error(`Error running webdriver browser: ${e}\nWebdriver info: ${await session.debug()}`);
-	} finally {
-		process.removeListener('SIGTERM', end);
-		process.removeListener('SIGINT', end);
-		await session.close();
+
+		this.stdout = addDataListener(launched.proc.stdout);
+		this.stderr = addDataListener(launched.proc.stderr);
+		return alwaysFinally(() => {
+			return Promise.race([
+				new Promise((_, reject) => launched.proc.once('error', (err) => reject(err))),
+				runner(),
+			]);
+		}, () => {
+			launched.proc.kill();
+			return launched.teardown?.();
+		});
+	}
+
+	debug() {
+		return `stderr:\n${this.stdout().toString('utf-8')}\nstdout:\n${this.stderr().toString('utf-8')}`;
 	}
 }
 
-async function runWithProcess(launched, runner) {
-	if (!launched) {
-		return runner();
-	}
+function getConfiguredWebdriverHost(browser) {
+	const webdriverEnv = browser.toUpperCase().replace(/[^A-Z]+/g, '_');
+	return process.env[`WEBDRIVER_HOST_${webdriverEnv}`] || process.env.WEBDRIVER_HOST || null;
+}
 
-	const { proc, teardown } = launched;
-
-	const stdout = [];
-	const stderr = [];
-	const end = () => proc.kill();
-	try {
-		process.addListener('exit', end);
-		proc.stdout.addListener('data', (d) => stdout.push(d));
-		proc.stderr.addListener('data', (d) => stderr.push(d));
-		return await Promise.race([
-			new Promise((_, reject) => proc.once('error', (err) => reject(err))),
-			runner(),
-		]);
-	} catch (e) {
-		if (e instanceof LaunchError) {
-			throw new Error(
-				`failed to launch browser: ${e.message}\n` +
-				`stderr:\n${Buffer.concat(stderr).toString('utf-8')}\n` +
-				`stdout:\n${Buffer.concat(stdout).toString('utf-8')}\n`);
-		} else {
-			throw e;
-		}
-	} finally {
-		proc.kill();
-		process.removeListener('exit', end);
-		await teardown?.();
+class DisconnectError extends Error {
+	constructor(message) {
+		super(message);
 	}
 }
 

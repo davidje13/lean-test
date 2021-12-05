@@ -1,30 +1,46 @@
 import { request } from 'http';
+import { addDataListener } from '../utils.mjs';
+import { ifKilled } from '../shutdown.mjs';
 
 // https://w3c.github.io/webdriver/
 
-export async function beginWebdriverSession(host, browser, urlOptions, path, expectedTitle) {
-	const { value: { sessionId } } = await withRetry(() => sendJSON('POST', `${host}/session`, {
+export default class WebdriverSession {
+	constructor(sessionBase) {
+		this.sessionBase = sessionBase;
+	}
+
+	setUrl(url) {
+		return sendJSON('POST', `${this.sessionBase}/url`, { url });
+	}
+
+	getUrl() {
+		return get(`${this.sessionBase}/url`);
+	}
+
+	getTitle() {
+		return get(`${this.sessionBase}/title`);
+	}
+
+	close() {
+		return withRetry(() => sendJSON('DELETE', this.sessionBase), 5000);
+	}
+}
+
+WebdriverSession.create = function(host, browser) {
+	const promise = withRetry(() => sendJSON('POST', `${host}/session`, {
 		capabilities: {
 			firstMatch: [{ browserName: browser }]
 		},
 	}), 20000);
-	const sessionBase = `${host}/session/${encodeURIComponent(sessionId)}`;
-	const close = () => withRetry(() => sendJSON('DELETE', sessionBase), 5000);
-
-	let lastError = null;
-	for (const url of urlOptions) {
-		try {
-			await navigateAndWaitForTitle(sessionBase, url + path, expectedTitle);
-			return { close, debug: () => debug(sessionBase) };
-		} catch (e) {
-			lastError = e;
-		}
-	}
-	await close();
-	throw lastError;
+	return ifKilled(async () => {
+		const { value: { sessionId } } = await promise;
+		return new WebdriverSession(`${host}/session/${encodeURIComponent(sessionId)}`);
+	}, async () => {
+		const { value: { sessionId } } = await promise;
+		const session = new WebdriverSession(`${host}/session/${encodeURIComponent(sessionId)}`);
+		return session.close();
+	});
 }
-
-const get = async (url) => (await sendJSON('GET', url)).value;
 
 async function withRetry(fn, timeout) {
 	const delay = 100;
@@ -41,25 +57,7 @@ async function withRetry(fn, timeout) {
 	}
 }
 
-async function navigateAndWaitForTitle(sessionBase, url, expectedTitle) {
-	await sendJSON('POST', `${sessionBase}/url`, { url });
-
-	const begin = Date.now();
-	let title;
-	do {
-		title = await get(`${sessionBase}/title`);
-		if (title.startsWith(expectedTitle)) {
-			return;
-		}
-		await new Promise((resolve) => setTimeout(resolve, 100));
-	} while (Date.now() < begin + 1000);
-
-	throw new Error(`Unexpected page title at URL ${url}: '${title}'`);
-}
-
-async function debug(sessionBase) {
-	return `URL='${await get(`${sessionBase}/url`)}' Title='${await get(`${sessionBase}/title`)}'`;
-}
+const get = async (url) => (await sendJSON('GET', url)).value;
 
 function sendJSON(method, path, data) {
 	const errorInfo = `WebDriver error for ${method} ${path}: `;
@@ -78,13 +76,12 @@ function sendJSON(method, path, data) {
 			},
 		};
 		const req = request(opts, (res) => {
-			const data = [];
 			clearTimeout(timeout);
 			timeout = setTimeout(() => reject(new Error(`${errorInfo}timeout receiving data (got HTTP ${res.statusCode})`)), 10000);
-			res.addListener('data', (d) => data.push(d));
+			const resultData = addDataListener(res);
 			res.addListener('close', () => {
 				clearTimeout(timeout);
-				const dataString = Buffer.concat(data).toString('utf-8');
+				const dataString = resultData().toString('utf-8');
 				if (res.statusCode >= 300) {
 					reject(new Error(`${errorInfo}${res.statusCode}\n\n${dataString}`));
 				} else {
