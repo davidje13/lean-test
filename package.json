@@ -1,6 +1,6 @@
 {
   "name": "lean-test",
-  "version": "1.3.2",
+  "version": "1.4.0",
   "description": "a tiny, extensible test runner",
   "bin": "./build/bin/run.mjs",
   "main": "build/lean-test.mjs",
