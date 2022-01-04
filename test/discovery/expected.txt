@@ -13,6 +13,9 @@
 [PASS] suite: suite.spec.mjs [xx]
 [PASS]   describe: es6 .spec import [xx]
 [PASS]     test: is discovered and has globals available [xx]
+[PASS] suite: suite.test.cjs [xx]
+[PASS]   describe: explicitly commonjs .test import [xx]
+[PASS]     test: is discovered and has globals available [xx]
 [PASS] suite: suite.test.js [xx]
 [PASS]   describe: commonjs .test import [xx]
 [PASS]     test: is discovered and has globals available [xx]
@@ -20,8 +23,8 @@
 [PASS]   describe: es6 .test import [xx]
 [PASS]     test: is discovered and has globals available [xx]
 
-Total:    7
-Pass:     7
+Total:    8
+Pass:     8
 Errors:   0
 Failures: 0
 Skipped:  0

@@ -639,6 +639,7 @@ class Server {
 		this.mimes = new Map([
 			['js', 'text/javascript'],
 			['mjs', 'text/javascript'],
+			['cjs', 'text/javascript'],
 			['css', 'text/css'],
 			['htm', 'text/html'],
 			['html', 'text/html'],
@@ -989,7 +990,7 @@ async function nodeRunner(config, paths, listener) {
 const argparse = new ArgumentParser({
 	parallelDiscovery: { names: ['parallel-discovery', 'P'], env: 'PARALLEL_DISCOVERY', type: 'boolean', default: false },
 	parallelSuites: { names: ['parallel-suites', 'parallel', 'p'], env: 'PARALLEL_SUITES', type: 'boolean', default: false },
-	pathsInclude: { names: ['include', 'i'], type: 'array', default: ['**/*.{spec|test}.{js|mjs|jsx}'] },
+	pathsInclude: { names: ['include', 'i'], type: 'array', default: ['**/*.{spec|test}.{js|mjs|cjs|jsx}'] },
 	pathsExclude: { names: ['exclude', 'x'], type: 'array', default: ['**/node_modules', '**/.*'] },
 	browser: { names: ['browser', 'b'], env: 'BROWSER', type: 'array', default: [] },
 	colour: { names: ['colour', 'color'], env: 'OUTPUT_COLOUR', type: 'boolean', default: null },

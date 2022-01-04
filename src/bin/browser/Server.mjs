@@ -13,6 +13,7 @@ export default class Server {
 		this.mimes = new Map([
 			['js', 'text/javascript'],
 			['mjs', 'text/javascript'],
+			['cjs', 'text/javascript'],
 			['css', 'text/css'],
 			['htm', 'text/html'],
 			['html', 'text/html'],

@@ -480,7 +480,7 @@ The `lean-test` executable can be configured in various ways:
 
 - `--include <pattern>` / `-i <pattern>`:<br>
 	Configures the search pattern glob. Can be set multiple times. By default, this is
-	`**/*.{spec|test}.{js|mjs|jsx}`.
+	`**/*.{spec|test}.{js|mjs|cjs|jsx}`.
 
 - `--exclude <pattern>` / `-x <pattern>`:<br>
 	Configures the exclusion pattern glob. Can be set multiple times. By default, this is
