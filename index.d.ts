@@ -227,6 +227,11 @@ export namespace reporters {
 	}
 }
 
+type Precision =
+	(expected: number) => number |
+	{ tolerance: number } |
+	{ decimalPlaces: number };
+
 interface matchers {
 	equals: <T>(expected: T) => SyncMatcher<T>;
 	same: <T>(expected: T) => SyncMatcher<T>;
@@ -243,6 +248,7 @@ interface matchers {
 	isLessThan: (value: number) => SyncMatcher<number>;
 	isGreaterThanOrEqual: (value: number) => SyncMatcher<number>;
 	isLessThanOrEqual: (value: number) => SyncMatcher<number>;
+	isNear: (value: number, precision?: Precision) => SyncMatcher<number>;
 	resolves: <T>(expectation?: SyncMatcher<T> | T) => (
 		SyncMatcher<() => T> &
 		AsyncMatcher<Promise<T> | (() => Promise<T>)>
@@ -271,6 +277,7 @@ interface matchers {
 	toBeLessThan: (value: number) => SyncMatcher<number>;
 	toBeGreaterThanOrEqual: (value: number) => SyncMatcher<number>;
 	toBeLessThanOrEqual: (value: number) => SyncMatcher<number>;
+	toBeCloseTo: (value: number, precision?: Precision) => SyncMatcher<number>;
 	toHaveLength: (expectation?: SyncMatcher<number> | number) => SyncMatcher<LengthHaver>;
 	toContain: (expectation?: SyncMatcher<any> | string | unknown) => SyncMatcher<string | Array<unknown> | Set<unknown>>;
 	toHaveProperty: (name: Symbol | string | number, expectation?: SyncMatcher<any> | unknown) => SyncMatcher<unknown>;
@@ -331,6 +338,7 @@ declare global { // same as DiscoveryGlobals + matchers
 	const isLessThan: (value: number) => SyncMatcher<number>;
 	const isGreaterThanOrEqual: (value: number) => SyncMatcher<number>;
 	const isLessThanOrEqual: (value: number) => SyncMatcher<number>;
+	const isNear: (value: number, precision?: Precision) => SyncMatcher<number>;
 	const resolves: <T>(expectation?: SyncMatcher<T> | T) => (
 		SyncMatcher<() => T> &
 		AsyncMatcher<Promise<T> | (() => Promise<T>)>
@@ -359,6 +367,7 @@ declare global { // same as DiscoveryGlobals + matchers
 	const toBeLessThan: (value: number) => SyncMatcher<number>;
 	const toBeGreaterThanOrEqual: (value: number) => SyncMatcher<number>;
 	const toBeLessThanOrEqual: (value: number) => SyncMatcher<number>;
+	const toBeCloseTo: (value: number, precision?: Precision) => SyncMatcher<number>;
 	const toHaveLength: (expectation?: SyncMatcher<number> | number) => SyncMatcher<LengthHaver>;
 	const toContain: (expectation?: SyncMatcher<any> | string | unknown) => SyncMatcher<string | Array<unknown> | Set<unknown>>;
 	const toHaveProperty: (name: Symbol | string | number, expectation?: SyncMatcher<any> | unknown) => SyncMatcher<unknown>;

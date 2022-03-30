@@ -793,7 +793,10 @@ function seq(result, then) {
 
 const resolveMessage = (message) => String((typeof message === 'function' ? message() : message) || '');
 
-const print = (v) => v instanceof Symbol ? v.toString() : typeof v === 'function' ? v : JSON.stringify(v);
+const print = (v) =>
+	(v instanceof Symbol || v instanceof Error) ? v.toString() :
+	typeof v === 'function' ? v :
+	JSON.stringify(v);
 
 const ANY = Symbol();
 
@@ -1008,6 +1011,27 @@ const isLessThanOrEqual = (expected) => (actual) => {
 	}
 };
 
+const isNear = (expected, precision = { decimalPlaces: 2 }) => (actual) => {
+	if (typeof actual !== 'number') {
+		return { pass: false, message: `Expected a numeric value close to ${print(expected)}, but got ${print(actual)}.` };
+	}
+	let tolerance;
+	if (typeof precision === 'function') {
+		tolerance = precision(expected);
+	} else if (precision.tolerance !== undefined) {
+		tolerance = precision.tolerance;
+	} else if (precision.decimalPlaces !== undefined) {
+		tolerance = 0.5 * Math.pow(10, -precision.decimalPlaces);
+	} else {
+		throw new Error(`Unsupported precision type: ${print(precision)}`);
+	}
+	if (Math.abs(expected - actual) <= tolerance) {
+		return { pass: true, message: `Expected a value not within ${tolerance} of ${print(expected)}, but got ${print(actual)}.` };
+	} else {
+		return { pass: false, message: `Expected a value within ${tolerance} of ${print(expected)}, but got ${print(actual)}.` };
+	}
+};
+
 const getLength = (o) => (
 	((typeof o !== 'object' && typeof o !== 'string') || o === null) ? null :
 	typeof o.length === 'number' ? o.length :
@@ -1102,6 +1126,7 @@ var matchers = /*#__PURE__*/Object.freeze({
 	isLessThan: isLessThan,
 	isGreaterThanOrEqual: isGreaterThanOrEqual,
 	isLessThanOrEqual: isLessThanOrEqual,
+	isNear: isNear,
 	hasLength: hasLength,
 	isEmpty: isEmpty,
 	contains: contains,

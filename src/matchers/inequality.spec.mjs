@@ -31,3 +31,33 @@ describe('isLessThanOrEqual', {
 		expect(matchers.isLessThanOrEqual(3)(4).pass, isFalse());
 	},
 });
+
+describe('isNear', {
+	'checks if value is near to comparison'() {
+		expect(matchers.isNear(3)(2).pass, isFalse());
+		expect(matchers.isNear(3)(3).pass, isTrue());
+		expect(matchers.isNear(3)(3.0001).pass, isTrue());
+		expect(matchers.isNear(3)(2.9999).pass, isTrue());
+		expect(matchers.isNear(3)(4).pass, isFalse());
+	},
+
+	'accepts an explicit precision'() {
+		const matcher = matchers.isNear(3, { tolerance: 0.3 });
+		expect(matcher(2.65).pass, isFalse());
+		expect(matcher(2.75).pass, isTrue());
+		expect(matcher(3.25).pass, isTrue());
+		expect(matcher(3.35).pass, isFalse());
+	},
+
+	'accepts an explicit precision in decimal places'() {
+		const matcher = matchers.isNear(3, { decimalPlaces: 4 });
+		expect(matcher(2.99994).pass, isFalse());
+		expect(matcher(2.99996).pass, isTrue());
+		expect(matcher(3.00004).pass, isTrue());
+		expect(matcher(3.00006).pass, isFalse());
+	},
+
+	'rejects unknown precision types'() {
+		expect(() => matchers.isNear(3, { foo: 'bar' })(3)).throws('Unsupported precision type: {"foo":"bar"}');
+	},
+});

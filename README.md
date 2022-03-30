@@ -385,6 +385,14 @@ describe('lifecycle', () => {
 - `isLessThanOrEqual(value)`:<br>
 	Checks if `<= value`.
 
+- `isNear(value[, precision])`:<br>
+	Checks if near `value`. By default, the comparison checks to 2 decimal places, but
+	you can configure this by providing an explicit precision. The types of precision
+	supported are:
+	- `{ tolerance: n }` sets an explicit permitted range (+/- `n`)
+	- `{ decimalPlaces: n }` sets an explicit number of decimal places to check
+	  (+/- `0.5 * 10^-n`)
+
 - `resolves(expectation)`:<br>
 	Checks if the given function or promise returns a value which matches the given
 	expectation (sub-matcher). `expectation` can also be a literal value, in which case
