@@ -422,6 +422,11 @@ describe('lifecycle', () => {
 	Checks if the value (a string, array, or `Set`) contains the given substring or
 	sub-element.
 
+- `hasProperty(name[, expectation])`:<br>
+	Checks if the value (any type) contains a property of the given name, optionally
+	matching the given expectation. If no `expectation` is given, this just checks that
+	the property exists on the object (using `hasOwnProperty`).
+
 ## CLI flags
 
 The `lean-test` executable can be configured in various ways:

@@ -117,6 +117,14 @@ describe('contains', {
 		expect(resultFail.pass, isFalse());
 	},
 
+	'checks arrays with a sub-matcher'() {
+		const resultPass = matchers.contains(coreMatchers.equals('foo'))(['abc', 'foo', 'def']);
+		expect(resultPass.pass, isTrue());
+
+		const resultFail = matchers.contains(coreMatchers.equals('foo'))(['abc', 'def']);
+		expect(resultFail.pass, isFalse());
+	},
+
 	'checks sets'() {
 		const resultPass = matchers.contains('foo')(new Set(['abc', 'foo', 'def']));
 		expect(resultPass.pass, isTrue());
@@ -125,8 +133,16 @@ describe('contains', {
 		expect(resultFail.pass, isFalse());
 	},
 
+	'checks sets with a sub-matcher'() {
+		const resultPass = matchers.contains(coreMatchers.equals('foo'))(new Set(['abc', 'foo', 'def']));
+		expect(resultPass.pass, isTrue());
+
+		const resultFail = matchers.contains(coreMatchers.equals('foo'))(new Set(['abc', 'def']));
+		expect(resultFail.pass, isFalse());
+	},
+
 	'rejects other types'() {
-		const resultInvalid = matchers.contains('foo')(7);
-		expect(resultInvalid.pass, isFalse());
+		expect(matchers.contains('foo')(7).pass, isFalse());
+		expect(matchers.contains(coreMatchers.equals('foo'))(7).pass, isFalse());
 	},
 });

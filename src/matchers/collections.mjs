@@ -31,6 +31,22 @@ export const isEmpty = () => (actual) => {
 };
 
 export const contains = (sub) => (actual) => {
+	if (typeof sub === 'function') {
+		let results;
+		if (Array.isArray(actual)) {
+			results = actual.map(sub);
+		} else if (actual instanceof Set) {
+			results = [...actual].map(sub);
+		} else {
+			return { pass: false, message: `Expected to contain element matching ${sub}, but got non-collection type ${actual}.` };
+		}
+		const passes = results.filter((r) => r.pass);
+		if (passes.length > 0) {
+			return { pass: true, message: `Expected not to contain any element matching ${sub}, but got ${actual}.` };
+		} else {
+			return { pass: false, message: `Expected to contain element matching ${sub}, but got ${actual}.` };
+		}
+	}
 	let pass;
 	if (typeof actual === 'string') {
 		if (typeof sub !== 'string') {

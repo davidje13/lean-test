@@ -19,3 +19,7 @@ export {
 	hasLength as toHaveLength,
 	contains as toContain,
 } from './collections.mjs';
+
+export {
+	hasProperty as toHaveProperty,
+} from './dictionary.mjs';

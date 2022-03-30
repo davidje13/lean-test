@@ -1037,6 +1037,22 @@ const isEmpty = () => (actual) => {
 };
 
 const contains = (sub) => (actual) => {
+	if (typeof sub === 'function') {
+		let results;
+		if (Array.isArray(actual)) {
+			results = actual.map(sub);
+		} else if (actual instanceof Set) {
+			results = [...actual].map(sub);
+		} else {
+			return { pass: false, message: `Expected to contain element matching ${sub}, but got non-collection type ${actual}.` };
+		}
+		const passes = results.filter((r) => r.pass);
+		if (passes.length > 0) {
+			return { pass: true, message: `Expected not to contain any element matching ${sub}, but got ${actual}.` };
+		} else {
+			return { pass: false, message: `Expected to contain element matching ${sub}, but got ${actual}.` };
+		}
+	}
 	let pass;
 	if (typeof actual === 'string') {
 		if (typeof sub !== 'string') {
@@ -1054,6 +1070,14 @@ const contains = (sub) => (actual) => {
 		return { pass: true, message: `Expected not to contain ${sub}, but got ${actual}.` };
 	} else {
 		return { pass: false, message: `Expected to contain ${sub}, but got ${actual}.` };
+	}
+};
+
+const hasProperty = (name, expected = ANY) => (actual) => {
+	if (actual !== null && actual !== undefined && Object.prototype.hasOwnProperty.call(actual, name)) {
+		return delegateMatcher(expected, actual[name], name);
+	} else {
+		return { pass: false, message: `Expected a value with property ${name}, but got ${actual}.` };
 	}
 };
 
@@ -1079,6 +1103,7 @@ var matchers = /*#__PURE__*/Object.freeze({
 	hasLength: hasLength,
 	isEmpty: isEmpty,
 	contains: contains,
+	hasProperty: hasProperty,
 	toEqual: equals,
 	toBe: same,
 	toBeTruthy: isTruthy,
@@ -1091,7 +1116,8 @@ var matchers = /*#__PURE__*/Object.freeze({
 	toBeGreaterThanOrEqual: isGreaterThanOrEqual,
 	toBeLessThanOrEqual: isLessThanOrEqual,
 	toHaveLength: hasLength,
-	toContain: contains
+	toContain: contains,
+	toHaveProperty: hasProperty
 });
 
 const FLUENT_MATCHERS = Symbol();
