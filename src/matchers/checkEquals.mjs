@@ -1,11 +1,13 @@
+import { print } from '../utils.mjs';
+
 export const ANY = Symbol();
 
 export const checkEquals = (expected, actual, name) => {
 	const diff = getDiff(actual, expected);
 	if (diff) {
-		return { pass: false, message: `Expected ${name} to equal ${expected}, but ${diff}.` };
+		return { pass: false, message: `Expected ${name} to equal ${print(expected)}, but ${diff}.` };
 	} else {
-		return { pass: true, message: `Expected ${name} not to equal ${expected}, but did.` };
+		return { pass: true, message: `Expected ${name} not to equal ${print(expected)}, but did.` };
 	}
 };
 
@@ -13,7 +15,7 @@ export const delegateMatcher = (matcher, actual, name) => {
 	if (typeof matcher === 'function') {
 		return matcher(actual);
 	} else if (matcher === ANY) {
-		return { pass: true, message: `Expected no ${name}, but got ${actual}.` };
+		return { pass: true, message: `Expected no ${name}, but got ${print(actual)}.` };
 	} else {
 		return checkEquals(matcher, actual, name);
 	}
@@ -27,7 +29,7 @@ function getDiff(a, b) {
 		const simpleA = !a || typeof a !== 'object';
 		const simpleB = !b || typeof b !== 'object';
 		if (simpleA && simpleB) {
-			return `${a} != ${b}`;
+			return `${print(a)} != ${print(b)}`;
 		} else {
 			return 'different types';
 		}
@@ -36,17 +38,17 @@ function getDiff(a, b) {
 	const diffs = [];
 	for (const k of Object.keys(a)) {
 		if (!k in b) {
-			diffs.push(`missing ${JSON.stringify(k)}`);
+			diffs.push(`missing ${print(k)}`);
 		} else {
 			const sub = getDiff(a[k], b[k]);
 			if (sub) {
-				diffs.push(`${sub} at ${JSON.stringify(k)}`);
+				diffs.push(`${sub} at ${print(k)}`);
 			}
 		}
 	}
 	for (const k of Object.keys(b)) {
 		if (!k in a) {
-			diffs.push(`extra ${JSON.stringify(k)}`);
+			diffs.push(`extra ${print(k)}`);
 		}
 	}
 	return diffs.join(' and ');

@@ -10,6 +10,16 @@ describe('hasProperty', {
 		expect(resultFail.pass, isFalse());
 	},
 
+	'checks Symbol properties'() {
+		const symbol = Symbol();
+
+		const resultPass = matchers.hasProperty(symbol)({ [symbol]: 'abc' });
+		expect(resultPass.pass, isTrue());
+
+		const resultFail = matchers.hasProperty(symbol)({ abc: 'foo' });
+		expect(resultFail.pass, isFalse());
+	},
+
 	'considers values set to undefined to be present'() {
 		const resultPass = matchers.hasProperty('foo')({ foo: undefined });
 		expect(resultPass.pass, isTrue());

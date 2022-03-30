@@ -8,3 +8,5 @@ export function seq(result, then) {
 }
 
 export const resolveMessage = (message) => String((typeof message === 'function' ? message() : message) || '');
+
+export const print = (v) => v instanceof Symbol ? v.toString() : typeof v === 'function' ? v : JSON.stringify(v);

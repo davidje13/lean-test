@@ -38,6 +38,7 @@ describe('hasLength', {
 		expect(matchers.hasLength(3)({ a: 'b' }).pass, isFalse());
 		expect(matchers.hasLength(3)(null).pass, isFalse());
 		expect(matchers.hasLength(3)(undefined).pass, isFalse());
+		expect(matchers.hasLength(3)(Symbol()).pass, isFalse());
 		expect(matchers.hasLength(3)(3).pass, isFalse());
 	},
 
@@ -59,6 +60,7 @@ describe('hasLength', {
 		expect(matchers.hasLength()({ a: 'b' }).pass, isFalse());
 		expect(matchers.hasLength()(null).pass, isFalse());
 		expect(matchers.hasLength()(undefined).pass, isFalse());
+		expect(matchers.hasLength()(Symbol()).pass, isFalse());
 		expect(matchers.hasLength()(1).pass, isFalse());
 	},
 });
@@ -92,6 +94,7 @@ describe('isEmpty', {
 		expect(matchers.isEmpty()({ a: 'b' }).pass, isFalse());
 		expect(matchers.isEmpty()(null).pass, isFalse());
 		expect(matchers.isEmpty()(undefined).pass, isFalse());
+		expect(matchers.isEmpty()(Symbol()).pass, isFalse());
 		expect(matchers.isEmpty()(3).pass, isFalse());
 	},
 });
@@ -144,5 +147,7 @@ describe('contains', {
 	'rejects other types'() {
 		expect(matchers.contains('foo')(7).pass, isFalse());
 		expect(matchers.contains(coreMatchers.equals('foo'))(7).pass, isFalse());
+
+		expect(matchers.contains('foo')(Symbol()).pass, isFalse());
 	},
 });

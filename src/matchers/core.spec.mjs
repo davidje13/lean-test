@@ -1,3 +1,4 @@
+import { print } from '../utils.mjs';
 import * as matchers from './core.mjs';
 
 describe('equals', {
@@ -47,6 +48,17 @@ describe('equals', {
 			throw new Error('Expected failure, but succeeded');
 		}
 	},
+
+	'compares symbols'() {
+		const s1 = Symbol();
+		const s2 = Symbol();
+		if (matchers.equals(s1)(s1).pass !== true) {
+			throw new Error('Expected syccess, but failed');
+		}
+		if (matchers.equals(s1)(s2).pass !== false) {
+			throw new Error('Expected failure, but succeeded');
+		}
+	},
 });
 
 describe('same', {
@@ -93,6 +105,17 @@ describe('same', {
 		const object2 = { foo: 'zag' };
 		const result = matchers.same(object1)(object2);
 		if (result.pass !== false) {
+			throw new Error('Expected failure, but succeeded');
+		}
+	},
+
+	'compares symbols'() {
+		const s1 = Symbol();
+		const s2 = Symbol();
+		if (matchers.same(s1)(s1).pass !== true) {
+			throw new Error('Expected syccess, but failed');
+		}
+		if (matchers.same(s1)(s2).pass !== false) {
 			throw new Error('Expected failure, but succeeded');
 		}
 	},
@@ -164,7 +187,8 @@ describe('isTrue', () => [
 	[0, false],
 	[null, false],
 	[undefined, false],
-].forEach(([input, expected]) => test(`returns ${expected} for ${input}`, () => {
+	[Symbol(), false],
+].forEach(([input, expected]) => test(`returns ${expected} for ${print(input)}`, () => {
 	expect(matchers.isTrue()(input).pass, equals(expected));
 })));
 
@@ -175,7 +199,8 @@ describe('isFalse', () => [
 	[0, false],
 	[null, false],
 	[undefined, false],
-].forEach(([input, expected]) => test(`returns ${expected} for ${input}`, () => {
+	[Symbol(), false],
+].forEach(([input, expected]) => test(`returns ${expected} for ${print(input)}`, () => {
 	expect(matchers.isFalse()(input).pass, equals(expected));
 })));
 
@@ -186,7 +211,8 @@ describe('isTruthy', () => [
 	[0, false],
 	[null, false],
 	[undefined, false],
-].forEach(([input, expected]) => test(`returns ${expected} for ${input}`, () => {
+	[Symbol(), true],
+].forEach(([input, expected]) => test(`returns ${expected} for ${print(input)}`, () => {
 	expect(matchers.isTruthy()(input).pass, equals(expected));
 })));
 
@@ -197,7 +223,8 @@ describe('isFalsy', () => [
 	[0, true],
 	[null, true],
 	[undefined, true],
-].forEach(([input, expected]) => test(`returns ${expected} for ${input}`, () => {
+	[Symbol(), false],
+].forEach(([input, expected]) => test(`returns ${expected} for ${print(input)}`, () => {
 	expect(matchers.isFalsy()(input).pass, equals(expected));
 })));
 
@@ -208,7 +235,8 @@ describe('isNull', () => [
 	[0, false],
 	[null, true],
 	[undefined, false],
-].forEach(([input, expected]) => test(`returns ${expected} for ${input}`, () => {
+	[Symbol(), false],
+].forEach(([input, expected]) => test(`returns ${expected} for ${print(input)}`, () => {
 	expect(matchers.isNull()(input).pass, equals(expected));
 })));
 
@@ -219,7 +247,8 @@ describe('isUndefined', () => [
 	[0, false],
 	[null, false],
 	[undefined, true],
-].forEach(([input, expected]) => test(`returns ${expected} for ${input}`, () => {
+	[Symbol(), false],
+].forEach(([input, expected]) => test(`returns ${expected} for ${print(input)}`, () => {
 	expect(matchers.isUndefined()(input).pass, equals(expected));
 })));
 
@@ -230,7 +259,8 @@ describe('isNullish', () => [
 	[0, false],
 	[null, true],
 	[undefined, true],
-].forEach(([input, expected]) => test(`returns ${expected} for ${input}`, () => {
+	[Symbol(), false],
+].forEach(([input, expected]) => test(`returns ${expected} for ${print(input)}`, () => {
 	expect(matchers.isNullish()(input).pass, equals(expected));
 })));
 
