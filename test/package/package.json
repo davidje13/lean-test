@@ -5,6 +5,6 @@
     "test": "lean-test && lean-test --browser=chrome"
   },
   "devDependencies": {
-    "lean-test": "file:lean-test-1.4.1.tgz"
+    "lean-test": "file:lean-test.tgz"
   }
 }
