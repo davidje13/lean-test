@@ -317,6 +317,7 @@ const FIREFOX_PREFS = [
 	// (some options have been removed which are obsolete or do not make sense here)
 	'user_pref("browser.shell.checkDefaultBrowser", false);',
 	'user_pref("browser.bookmarks.restore_default_bookmarks", false);',
+	'user_pref("datareporting.policy.dataSubmissionEnabled", false);', // do not show privacy page
 	'user_pref("dom.disable_open_during_load", false);', // disable popup blocker
 	'user_pref("dom.min_background_timeout_value", 10);', // behave like foreground
 	'user_pref("browser.tabs.remote.autostart", false);', // disable multi-process
@@ -641,7 +642,7 @@ class HttpServerRunner extends AbstractRunner {
 					if (!connected) {
 						reject(new Error('browser launch timed out'));
 					} else {
-						reject(new DisconnectError('unknown disconnect (did a test change window.location?)'));
+						reject(new DisconnectError('unknown disconnect'));
 					}
 				}
 			}, 250);
@@ -664,6 +665,10 @@ class HttpServerRunner extends AbstractRunner {
 					case 'browser-error':
 						clearInterval(checkPing);
 						reject(new DisconnectError(`browser error: ${event.error}`));
+						break;
+					case 'browser-unload':
+						clearInterval(checkPing);
+						reject(new DisconnectError(`test page closed (did a test change window.location?)`));
 						break;
 					default:
 						tracker.eventListener(event);

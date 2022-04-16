@@ -35,6 +35,7 @@ const FIREFOX_PREFS = [
 	// (some options have been removed which are obsolete or do not make sense here)
 	'user_pref("browser.shell.checkDefaultBrowser", false);',
 	'user_pref("browser.bookmarks.restore_default_bookmarks", false);',
+	'user_pref("datareporting.policy.dataSubmissionEnabled", false);', // do not show privacy page
 	'user_pref("dom.disable_open_during_load", false);', // disable popup blocker
 	'user_pref("dom.min_background_timeout_value", 10);', // behave like foreground
 	'user_pref("browser.tabs.remote.autostart", false);', // disable multi-process

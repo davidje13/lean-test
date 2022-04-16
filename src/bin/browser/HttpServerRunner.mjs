@@ -74,7 +74,7 @@ export default class HttpServerRunner extends AbstractRunner {
 					if (!connected) {
 						reject(new Error('browser launch timed out'));
 					} else {
-						reject(new DisconnectError('unknown disconnect (did a test change window.location?)'));
+						reject(new DisconnectError('unknown disconnect'));
 					}
 				}
 			}, 250);
@@ -97,6 +97,10 @@ export default class HttpServerRunner extends AbstractRunner {
 					case 'browser-error':
 						clearInterval(checkPing);
 						reject(new DisconnectError(`browser error: ${event.error}`));
+						break;
+					case 'browser-unload':
+						clearInterval(checkPing);
+						reject(new DisconnectError(`test page closed (did a test change window.location?)`));
 						break;
 					default:
 						tracker.eventListener(event);
