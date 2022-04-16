@@ -1,10 +1,10 @@
-[FAIL] chrome [xx]
+[FAIL] Google Chrome [xx]
 [FAIL]   suite: basics.spec.mjs [xx]
 [PASS]     test: is chrome [xx]
 [FAIL]     test: is firefox [xx]
              Failure: not expected browser
               at basics.spec.mjs:6:2
-[FAIL] firefox [xx]
+[FAIL] Mozilla Firefox [xx]
 [FAIL]   suite: basics.spec.mjs [xx]
 [FAIL]     test: is chrome [xx]
              Failure: not expected browser

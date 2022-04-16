@@ -13,7 +13,7 @@ npx lean-test
 ### Running in browsers
 
 ```sh
-npx lean-test --browser chrome --browser firefox
+npx lean-test --target chrome --target firefox
 ```
 
 ## Features
@@ -439,9 +439,9 @@ describe('lifecycle', () => {
 
 The `lean-test` executable can be configured in various ways:
 
-- `--browser <name>` / `-b <name>` / environment `BROWSER=<name>`:<br>
-	Runs the tests in a browser. Currently `chrome` and `firefox` are supported, or use
-	`manual` then open the printed URL in any browser to start the tests.
+- `--target <name>` / `-t <name>` / environment `TARGET=<name>`:<br>
+	Runs the tests in the chosen target. Currently `node`, `chrome` and `firefox` are
+	supported, or use `url` then open the printed URL in any browser to start the tests.
 
 	You can also use a WebDriver-compatible server (e.g. Selenium) by setting the
 	`WEBDRIVER_HOST` environment variable, or `WEBDRIVER_HOST_<BROWSER>` to set it for
@@ -451,7 +451,7 @@ The `lean-test` executable can be configured in various ways:
 	# alternatively this could be a grid, for example
 	docker run -d -p 4444:4444 --shm-size="2g" selenium/standalone-chrome
 	export WEBDRIVER_HOST=localhost:4444
-	lean-test --browser=chrome
+	lean-test --target=chrome
 	```
 
 	```sh
@@ -459,29 +459,31 @@ The `lean-test` executable can be configured in various ways:
 	docker run -d -p 4445:4444 --shm-size="2g" selenium/standalone-firefox
 	export WEBDRIVER_HOST_CHROME=localhost:4444
 	export WEBDRIVER_HOST_FIREFOX=localhost:4445
-	lean-test --browser=chrome --browser=firefox
+	lean-test --target=chrome --target=firefox
 	```
 
 	If you are using a remote browser, you will also need to set
 	`--host 0.0.0.0` (or equivalently `TESTRUNNER_HOST=0.0.0.0`) so that the test server
 	is accessible to the browser.
 
-	If you specify more than one browser, the tests will be run in all browsers in
-	parallel, with the results containing one section per browser:
+	If you specify more than one target, the tests will be run in all targets in
+	parallel, with the results containing one section per target:
 
 	```sh
-	lean-test --browser=chrome,firefox
+	lean-test --target=node,chrome,firefox
 	# or
-	lean-test --browser chrome --browser firefox
+	lean-test --target node --target chrome --target firefox
 	```
 
 - `--port <number>` / environment `TESTRUNNER_PORT=<number>`:<br>
 	Sets an explicit port number for the browser-based tests to use. By default this is
-	`0` (pick random available port). This only takes effect if `--browser` is used.
+	`0` (pick random available port). This only takes effect if the tests are running in a
+	browser.
 
 - `--host <name>` / environment `TESTRUNNER_HOST=<name>`:<br>
 	Sets an explicit host name for the browser-based tests to use. By default this is
-	`127.0.0.1` (local loopback). This only takes effect if `--browser` is used.
+	`127.0.0.1` (local loopback). This only takes effect if the tests are running in a
+	browser.
 	You may want to change this setting if you need to run tests in a browser running on a
 	different computer on the same network (e.g. by specifying `0.0.0.0` to make it
 	available over the network).
@@ -511,7 +513,7 @@ Example:
 
 ```sh
 # Run all js/mjs files in the 'tests' folder, using Chrome:
-lean-test --parallel --browser chrome -i '**/*.{js|mjs}' tests
+lean-test --parallel --target chrome -i '**/*.{js|mjs}' tests
 ```
 
 ## CI Examples for Browser testing
@@ -521,7 +523,7 @@ These examples assume that `package.json` contains something like:
 ```json
 {
   "scripts": {
-    "test": "lean-test --browser=chrome,firefox"
+    "test": "lean-test --target=chrome,firefox"
   }
 }
 ```

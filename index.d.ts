@@ -173,9 +173,20 @@ export class TestAssumptionError extends Error {
 	constructor(message: string, skipFrames?: number);
 }
 
-interface Runner {
-	run(listener?: TestEventHandler | null | undefined): Promise<Result>;
+export interface AbstractRunner {
+	prepare(sharedState: Record<string | symbol, unknown>): Promise<void>;
+	teardown(sharedState: Record<string | symbol, unknown>): Promise<void>;
+	invoke(
+		listener: TestEventHandler | null | undefined,
+		sharedState: Record<string | symbol, unknown>,
+	): Promise<Result>;
+	run(
+		listener?: TestEventHandler | null | undefined,
+		sharedState?: Record<string | symbol, unknown> | undefined,
+	): Promise<Result>;
 }
+
+interface Runner extends AbstractRunner {}
 declare namespace Runner {
 	class Builder {
 		constructor();
@@ -196,10 +207,9 @@ declare namespace Runner {
 }
 export { Runner };
 
-export class MultiRunner implements Runner {
+export class ParallelRunner implements AbstractRunner {
 	constructor();
-	add(label: string, runner: (subListener: TestEventHandler) => Promise<Result>): void;
-	run(listener?: TestEventHandler | null | undefined): Promise<Result>;
+	add(label: string, runner: AbstractRunner): void;
 }
 
 export namespace outputs {
@@ -225,6 +235,15 @@ export namespace reporters {
 		constructor(output: Output);
 		eventListener: TestEventHandler;
 	}
+}
+
+export class ExitHook {
+	constructor(hook: () => Promise<void> | void);
+
+	add(): void;
+	remove(): void;
+	ifExitDuring<T>(fn: () => Promise<T> | T): Promise<T>;
+	ifExitDuringOrFinally<T>(fn: () => Promise<T> | T): Promise<T>;
 }
 
 type Precision =

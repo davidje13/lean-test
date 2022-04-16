@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-import process, { platform, getuid, stderr, env } from 'process';
+import process, { platform, getuid, env } from 'process';
 import { join, resolve, dirname, relative } from 'path';
-import { MultiRunner, standardRunner, outputs, reporters } from '../lean-test.mjs';
+import { AbstractRunner, ExitHook, standardRunner, outputs, reporters, ParallelRunner } from '../lean-test.mjs';
 import { readdir, access, mkdtemp, rm, writeFile, readFile, realpath } from 'fs/promises';
-import { tmpdir, networkInterfaces } from 'os';
 import { constants } from 'fs';
 import { spawn } from 'child_process';
-import { request, createServer } from 'http';
+import { tmpdir, networkInterfaces } from 'os';
+import { createServer, request } from 'http';
 
 const SPECIAL = /[^-a-zA-Z0-9 _]/g;
 const SPECIAL_REPLACE = (v) => {
@@ -82,8 +82,12 @@ class ArgumentParser {
 		this.names = new Map();
 		this.envs = [];
 		this.defaults = {};
+		this.mappings = [];
 		Object.entries(opts).forEach(([id, v]) => {
 			this.defaults[id] = v.default;
+			if (v.mapping) {
+				this.mappings.push({ id, name: v.names[0], mapping: v.mapping });
+			}
 			const config = { id, type: v.type || 'boolean' };
 			v.names.forEach((name) => this.names.set(name, config));
 			if (v.env) {
@@ -119,9 +123,10 @@ class ArgumentParser {
 				target[id] = v;
 				break;
 			case 'array':
+			case 'set':
 				const list = target[id] || [];
 				list.push(...(value ?? getValue()).split(','));
-				target[id] = list;
+				target[id] = (type === 'set') ? [...new Set(list)] : list;
 				break;
 			default:
 				throw new Error(`Unknown argument type for ${name}: ${type}`);
@@ -142,6 +147,21 @@ class ArgumentParser {
 		};
 		this.parseOpt(name, target, config, value, getNext);
 		return inc;
+	}
+
+	applyMappings(options) {
+		for (const { id, name, mapping } of this.mappings) {
+			const value = options[id];
+			if (value === undefined) {
+				continue;
+			}
+			if (Array.isArray(value)) {
+				options[id] = value.map((v) => applyMap(v, name, mapping));
+			} else {
+				options[id] = applyMap(value, name, mapping);
+			}
+		}
+		return options;
 	}
 
 	parse(environment, argv, begin = 2) {
@@ -172,7 +192,7 @@ class ArgumentParser {
 				this.loadOpt(result, null, arg, []);
 			}
 		}
-		return { ...this.defaults, ...envResult, ...result };
+		return this.applyMappings({ ...this.defaults, ...envResult, ...result });
 	}
 }
 
@@ -185,115 +205,34 @@ function split2(v, s) {
 	}
 }
 
-let hasRun = null;
-const exitHooks = [];
-async function runExitHooks() {
-	if (hasRun !== null) {
-		if (Date.now() > hasRun + 1000) {
-			// user got impatient and fired signal again; do as they say
-			process.stderr.write(`\nWarning: teardown did not complete\n`);
-			process.exit(1);
+function applyMap(value, name, mapping) {
+	if (mapping instanceof Map) {
+		if (!mapping.has(value)) {
+			throw new Error(`Unknown ${name}: ${value}`);
 		}
-		return;
+		return mapping.get(value);
 	}
-	hasRun = Date.now();
-
-	const hooks = exitHooks.slice();
-
-	// mimick default SIGINT/SIGTERM behaviour
-	if (process.stderr.isTTY) {
-		process.stderr.write('\u001B[0m');
-	}
-
-	var info = setTimeout(() => process.stderr.write(`\nTeardown in progress; please wait (warning: forcing exit could result in left-over processes)\n`), 200);
-
-	// run hooks
-	for (const hook of hooks) {
-		try {
-			await hook();
-		} catch (e) {
-			process.stderr.write(`\nWarning: error during teardown ${e}\n`);
+	if (mapping instanceof Set) {
+		if (!mapping.has(value)) {
+			throw new Error(`Unknown ${name}: ${value}`);
 		}
+		return value;
 	}
-	clearTimeout(info);
-	process.exit(1);
-}
-
-function checkExit() {
-	if (hasRun !== null) {
-		return;
-	}
-
-	const hooks = exitHooks.slice();
-	if (process.stderr.isTTY) {
-		process.stderr.write('\u001B[0m');
-	}
-
-	// run all hooks "fire-and-forget" style for best-effort teardown
-	for (const hook of hooks) {
-		try {
-			hook();
-		} catch (e) {
-			process.stderr.write(`\nWarning: error during teardown ${e}\n`);
-		}
-	}
-
-	process.stderr.write('\nWarning: exit teardown was possibly incomplete\n');
-}
-
-function addExitHook(fn) {
-	exitHooks.unshift(fn);
-	if (exitHooks.length === 1) {
-		process.addListener('SIGTERM', runExitHooks);
-		process.addListener('SIGINT', runExitHooks);
-		process.addListener('exit', checkExit);
-	}
-}
-
-function clearListeners() {
-	exitHooks.length = 0;
-	process.removeListener('SIGTERM', runExitHooks);
-	process.removeListener('SIGINT', runExitHooks);
-	process.removeListener('exit', checkExit);
-}
-
-function removeExitHook(fn) {
-	const p = exitHooks.indexOf(fn);
-	if (p !== -1) {
-		exitHooks.splice(p, 1);
-		if (exitHooks.length === 0) {
-			clearListeners();
-		}
-	}
-}
-
-async function ifKilled(fn, fin) {
-	try {
-		addExitHook(fin);
-		return await fn();
-	} finally {
-		removeExitHook(fin);
-	}
-}
-
-async function alwaysFinally(fn, fin) {
-	try {
-		addExitHook(fin);
-		return await fn();
-	} finally {
-		removeExitHook(fin);
-		try {
-			await fin();
-		} catch (e) {
-			process.stderr.write(`\nWarning: error during teardown ${e}\n`);
-		}
-	}
+	throw new Error(`Invalid mapping config for ${name}`);
 }
 
 function addDataListener(target) {
 	const store = [];
 	target.addListener('data', (d) => store.push(d));
 	return () => Buffer.concat(store);
+}
+
+async function asyncListToSync(items) {
+	const result = [];
+	for await (const item of items) {
+		result.push(item);
+	}
+	return result;
 }
 
 const invoke = (exec, args, opts = {}) => new Promise((resolve, reject) => {
@@ -383,27 +322,6 @@ const FIREFOX_PREFS = [
 	'user_pref("browser.tabs.remote.autostart", false);', // disable multi-process
 ].join('\n');
 
-const LAUNCHERS = new Map([
-	['manual', launchManual],
-	['chrome', launchChrome],
-	['firefox', launchFirefox],
-]);
-
-function launchBrowser(name, url, opts = {}) {
-	const launcher = LAUNCHERS.get(name);
-	if (!launcher) {
-		stderr.write(`Unknown browser: ${name}\n`);
-		stderr.write(`Open this URL to run tests: ${url}\n`);
-		return null;
-	}
-	return launcher(url, opts);
-}
-
-async function launchManual(url) {
-	stderr.write(`Ready to run test: ${url}\n`);
-	return null;
-}
-
 async function launchChrome(url, opts) {
 	const executable = await findExecutable([
 		{ path: env.CHROME_PATH },
@@ -450,104 +368,6 @@ async function launchFirefox(url, opts) {
 		proc,
 		teardown: () => removeTempDir(profileDir),
 	};
-}
-
-// https://w3c.github.io/webdriver/
-
-class WebdriverSession {
-	constructor(sessionBase) {
-		this.sessionBase = sessionBase;
-	}
-
-	setUrl(url) {
-		return sendJSON('POST', `${this.sessionBase}/url`, { url });
-	}
-
-	getUrl() {
-		return get(`${this.sessionBase}/url`);
-	}
-
-	getTitle() {
-		return get(`${this.sessionBase}/title`);
-	}
-
-	close() {
-		return withRetry(() => sendJSON('DELETE', this.sessionBase), 5000);
-	}
-}
-
-WebdriverSession.create = function(host, browser) {
-	const promise = withRetry(() => sendJSON('POST', `${host}/session`, {
-		capabilities: {
-			firstMatch: [{ browserName: browser }]
-		},
-	}), 20000);
-	return ifKilled(async () => {
-		const { value: { sessionId } } = await promise;
-		return new WebdriverSession(`${host}/session/${encodeURIComponent(sessionId)}`);
-	}, async () => {
-		const { value: { sessionId } } = await promise;
-		const session = new WebdriverSession(`${host}/session/${encodeURIComponent(sessionId)}`);
-		return session.close();
-	});
-};
-
-async function withRetry(fn, timeout) {
-	const delay = 100;
-	const begin = Date.now();
-	while (true) {
-		try {
-			return await fn();
-		} catch (e) {
-			if (Date.now() + delay >= begin + timeout) {
-				throw e;
-			}
-		}
-		await new Promise((resolve) => setTimeout(resolve, delay));
-	}
-}
-
-const get = async (url) => (await sendJSON('GET', url)).value;
-
-function sendJSON(method, path, data) {
-	const errorInfo = `WebDriver error for ${method} ${path}: `;
-	const content = new TextEncoder().encode(JSON.stringify(data));
-	return new Promise((resolve, reject) => {
-		let timeout = setTimeout(() => reject(new Error(`${errorInfo}timeout waiting for session (does this runner support the requested browser?)`)), 30000);
-		const url = new URL(path.includes('://') ? path : `http://${path}`);
-		const opts = {
-			hostname: url.hostname,
-			port: url.port,
-			path: url.pathname,
-			method,
-			headers: {
-				'Content-Type': 'application/json; charset=utf-8',
-				'Content-Length': content.length,
-			},
-		};
-		const req = request(opts, (res) => {
-			clearTimeout(timeout);
-			timeout = setTimeout(() => reject(new Error(`${errorInfo}timeout receiving data (got HTTP ${res.statusCode})`)), 10000);
-			const resultData = addDataListener(res);
-			res.addListener('close', () => {
-				clearTimeout(timeout);
-				const dataString = resultData().toString('utf-8');
-				if (res.statusCode >= 300) {
-					reject(new Error(`${errorInfo}${res.statusCode}\n\n${dataString}`));
-				} else {
-					resolve(JSON.parse(dataString));
-				}
-			});
-		});
-		req.addListener('error', (e) => {
-			clearTimeout(timeout);
-			reject(new Error(`${errorInfo}${e.message}`));
-		});
-		if (data !== undefined) {
-			req.write(content);
-		}
-		req.end();
-	});
 }
 
 class EventListener {
@@ -600,35 +420,6 @@ class EventListener {
 	}
 }
 
-class ActiveTestTracker {
-	constructor() {
-		this.active = new Map();
-		this.eventListener = (event) => {
-			if (event.type === 'begin') {
-				this.active.set(event.id, event);
-			} else if (event.type === 'complete') {
-				this.active.delete(event.id);
-			}
-		};
-	}
-
-	get() {
-		const result = [];
-		this.active.forEach((beginEvent) => {
-			if (!beginEvent.isBlock) {
-				const parts = [];
-				for (let e = beginEvent; e; e = this.active.get(e.parent)) {
-					if (e.label !== null) {
-						parts.push(e.label);
-					}
-				}
-				result.push(parts.reverse());
-			}
-		});
-		return result;
-	}
-}
-
 const CHARSET = '; charset=utf-8';
 
 class Server {
@@ -650,7 +441,6 @@ class Server {
 
 		this.address = null;
 		this.server = createServer(this._handleRequest.bind(this));
-		this.close = this.close.bind(this);
 	}
 
 	getContentType(ext) {
@@ -735,14 +525,12 @@ class Server {
 			throw new Exception(`Server.address unexpectedly returned ${addr}; aborting`);
 		}
 		this.address = addr;
-		addExitHook(this.close);
 	}
 
 	async close() {
 		if (!this.address) {
 			return;
 		}
-		removeExitHook(this.close);
 		this.address = null;
 		this.port = null;
 		await new Promise((resolve) => this.server.close(resolve));
@@ -756,41 +544,95 @@ class HttpError extends Error {
 	}
 }
 
-const INITIAL_CONNECT_TIMEOUT = 30000;
-const PING_TIMEOUT = 2000;
+class ActiveTestTracker {
+	constructor() {
+		this.active = new Map();
+		this.eventListener = (event) => {
+			if (event.type === 'begin') {
+				this.active.set(event.id, event);
+			} else if (event.type === 'complete') {
+				this.active.delete(event.id);
+			}
+		};
+	}
 
-async function browserRunner(config, paths, listener) {
-	// must use realpath because npm will install the binary as a symlink in a different folder (.bin)
-	const selfPath = dirname(await realpath(process.argv[1]));
-	const basePath = process.cwd();
-
-	const index = await buildIndex(config, paths, basePath);
-	const postListener = new EventListener();
-	const server = new Server(index, postListener.handle, [
-		['/.lean-test/', resolve(selfPath, '..')],
-		['/', basePath],
-	]);
-	await server.listen(Number(config.port), config.host);
-
-	try {
-		const multi = new MultiRunner();
-		config.browser.forEach((browser) => multi.add(
-			browser,
-			(subListener) => addBrowser(server, browser, postListener, subListener),
-		));
-		return await multi.run(listener);
-	} finally {
-		server.close();
+	get() {
+		const result = [];
+		this.active.forEach((beginEvent) => {
+			if (!beginEvent.isBlock) {
+				const parts = [];
+				for (let e = beginEvent; e; e = this.active.get(e.parent)) {
+					if (e.label !== null) {
+						parts.push(e.label);
+					}
+				}
+				result.push(parts.reverse());
+			}
+		});
+		return result;
 	}
 }
 
-async function addBrowser(server, browser, postListener, listener) {
-	const tracker = new ActiveTestTracker();
+const INITIAL_CONNECT_TIMEOUT = 30000;
+const PING_TIMEOUT = 2000;
 
-	const webdriver = getConfiguredWebdriverHost(browser);
-	const runner = webdriver ? new WebDriverRunner(webdriver) : new ProcessRunner();
-	try {
-		return await runner.run(server, browser, postListener, (browserID) => new Promise((res, reject) => {
+class HttpServerRunner extends AbstractRunner {
+	constructor({ port, host, ...browserConfig }, paths) {
+		super();
+		this.port = port;
+		this.host = host;
+		this.browserConfig = browserConfig;
+		this.paths = paths;
+	}
+
+	async prepare(sharedState) {
+		if (sharedState[HttpServerRunner.POST_LISTENER]) {
+			return;
+		}
+		sharedState[HttpServerRunner.POST_LISTENER] = new EventListener();
+
+		// must use realpath because npm will install the binary as a symlink in a different folder (.bin)
+		const selfPath = dirname(await realpath(process.argv[1]));
+		const basePath = process.cwd();
+
+		const index = await buildIndex(this.browserConfig, this.paths, basePath);
+		const server = new Server(index, sharedState[HttpServerRunner.POST_LISTENER].handle, [
+			['/.lean-test/', resolve(selfPath, '..')],
+			['/', basePath],
+		]);
+		await server.listen(Number(this.port), this.host);
+		sharedState[HttpServerRunner.SERVER] = server;
+	}
+
+	async teardown(sharedState) {
+		if (!sharedState[HttpServerRunner.POST_LISTENER]) {
+			return;
+		}
+		const server = sharedState[HttpServerRunner.SERVER];
+		delete sharedState[HttpServerRunner.SERVER];
+		delete sharedState[HttpServerRunner.POST_LISTENER];
+		server?.close();
+	}
+
+	async invoke(listener, sharedState) {
+		const { browserID, url } = this.makeUniqueTarget(sharedState);
+		process.stderr.write(`Ready to run test: ${url}\n`);
+		return this.invokeWithBrowserID(listener, sharedState, browserID);
+	}
+
+	makeUniqueTarget(sharedState, overrideAddr = null) {
+		const server = sharedState[HttpServerRunner.SERVER];
+		const postListener = sharedState[HttpServerRunner.POST_LISTENER];
+
+		const browserID = postListener.getUniqueID();
+		return { browserID, url: server.baseurl(overrideAddr) + '#' + browserID };
+	}
+
+	invokeWithBrowserID(listener, sharedState, browserID) {
+		const postListener = sharedState[HttpServerRunner.POST_LISTENER];
+		const tracker = new ActiveTestTracker();
+
+		return new Promise((res, reject) => {
 			let connectedUntil = Date.now() + INITIAL_CONNECT_TIMEOUT;
 			let connected = false;
 			const checkPing = setInterval(() => {
@@ -828,123 +670,21 @@ async function addBrowser(server, browser, postListener, listener) {
 						listener(event);
 				}
 			});
-		}));
-	} catch (e) {
-		if (e instanceof DisconnectError) {
-			throw new Error(`Browser disconnected: ${e.message}\nActive tests:\n${tracker.get().map((p) => '- ' + p.join(' -> ')).join('\n') || 'none'}\n`);
-		}
-		throw new Error(`Error running browser: ${e}\n${await runner.debug()}\nUnhandled events: ${postListener.unhandled()}\n`);
-	}
-}
-
-class WebDriverRunner {
-	constructor(webdriverHost) {
-		this.webdriverHost = webdriverHost;
-		this.session = null;
-		this.finalURL = null;
-		this.finalTitle = null;
-	}
-
-	async run(server, browser, postListener, runner) {
-		this.session = await WebdriverSession.create(this.webdriverHost, browser);
-		return alwaysFinally(async () => {
-			const browserID = await this.makeConnection(server, postListener);
-			return runner(browserID);
-		}, async () => {
-			this.finalURL = await this.session.getUrl();
-			this.finalTitle = await this.session.getTitle();
-			await this.session.close();
-		});
-	}
-
-	async makeConnection(server, postListener) {
-		// try various URLs until something works, because we don't know what environment we're in
-		const urls = [...new Set([
-			server.baseurl(process.env.WEBDRIVER_TESTRUNNER_HOST),
-			server.baseurl(),
-			server.baseurl('host.docker.internal'), // See https://stackoverflow.com/a/43541732/1180785
-			...Object.values(networkInterfaces())
-				.flatMap((i) => i)
-				.filter((i) => !i.internal)
-				.map((i) => server.baseurl(i)),
-		])];
-
-		let lastError = null;
-		for (const url of urls) {
-			const browserID = postListener.getUniqueID();
-			try {
-				await this.session.setUrl(url + '#' + browserID);
-				// Firefox via webdriver lies about the connection, returning success
-				// even if it fails, so we have to check that it actually did connect.
-				// Unfortunately there's no synchronous way of doing this (Firefox
-				// returns from POST url before it has reached DOMContentLoaded), so
-				// we need to poll.
-				const tm0 = Date.now();
-				do {
-					if (postListener.hasQueuedEvents(browserID)) {
-						return browserID;
-					}
-					await new Promise((resolve) => setTimeout(resolve, 50));
-				} while (Date.now() < tm0 + 1000);
-			} catch (e) {
-				lastError = e;
+		}).catch((e) => {
+			if (e instanceof DisconnectError) {
+				throw new Error(`Browser disconnected: ${e.message}\nActive tests:\n${tracker.get().map((p) => '- ' + p.join(' -> ')).join('\n') || 'none'}\n`);
 			}
-		}
-		if (!lastError) {
-			throw new Error(`unable to access test server\n(tried ${urls.join(', ')})`)
-		}
-		throw new Error(`error accessing test server ${lastError}\n(tried ${urls.join(', ')})`);
-	}
-
-	async debug() {
-		if (this.finalURL === null) {
-			return 'failed to create session';
-		}
-		return `URL='${this.finalURL}' Title='${this.finalTitle}'`;
-	}
-}
-
-class ProcessRunner {
-	constructor() {
-		this.stdout = () => '';
-		this.stderr = () => '';
-	}
-
-	async run(server, browser, postListener, runner) {
-		const browserID = postListener.getUniqueID();
-		const launched = await launchBrowser(browser, server.baseurl() + '#' + browserID, { stdio: ['ignore', 'pipe', 'pipe'] });
-		if (!launched) {
-			return runner(browserID);
-		}
-
-		this.stdout = addDataListener(launched.proc.stdout);
-		this.stderr = addDataListener(launched.proc.stderr);
-		return alwaysFinally(() => {
-			return Promise.race([
-				new Promise((_, reject) => launched.proc.once('error', (err) => reject(err))),
-				runner(browserID),
-			]);
-		}, () => {
-			launched.proc.kill();
-			return launched.teardown?.();
+			throw new Error(`Error running browser: ${e}\n${this.debug()}\nUnhandled events: ${postListener.unhandled()}\n`);
 		});
 	}
 
 	debug() {
-		return `stderr:\n${this.stdout().toString('utf-8')}\nstdout:\n${this.stderr().toString('utf-8')}`;
+		return 'unknown';
 	}
 }
 
-function getConfiguredWebdriverHost(browser) {
-	const webdriverEnv = browser.toUpperCase().replace(/[^A-Z]+/g, '_');
-	return process.env[`WEBDRIVER_HOST_${webdriverEnv}`] || process.env.WEBDRIVER_HOST || null;
-}
-
-class DisconnectError extends Error {
-	constructor(message) {
-		super(message);
-	}
-}
+HttpServerRunner.SERVER = Symbol();
+HttpServerRunner.POST_LISTENER = Symbol();
 
 const INDEX = `<!DOCTYPE html>
 <html lang="en">
@@ -970,7 +710,242 @@ async function buildIndex(config, paths, basePath) {
 		.replace('/*SUITES*/', JSON.stringify(suites));
 }
 
-async function nodeRunner(config, paths, listener) {
+class DisconnectError extends Error {
+	constructor(message) {
+		super(message);
+	}
+}
+
+class BrowserProcessRunner extends HttpServerRunner {
+	constructor(config, paths, browserLauncher) {
+		super(config, paths);
+		this.browserLauncher = browserLauncher;
+		this.stdout = () => '';
+		this.stderr = () => '';
+		this.launched = null;
+	}
+
+	async teardown(sharedState) {
+		try {
+			if (this.launched) {
+				this.launched.proc.kill();
+				await this.launched.teardown?.();
+				this.launched = null;
+			}
+		} finally {
+			await super.teardown(sharedState);
+		}
+	}
+
+	async invoke(listener, sharedState) {
+		const { browserID, url } = this.makeUniqueTarget(sharedState);
+		this.launched = await this.browserLauncher(url, { stdio: ['ignore', 'pipe', 'pipe'] });
+		this.stdout = addDataListener(this.launched.proc.stdout);
+		this.stderr = addDataListener(this.launched.proc.stderr);
+		return Promise.race([
+			new Promise((_, reject) => this.launched.proc.once('error', (err) => reject(err))),
+			super.invokeWithBrowserID(listener, sharedState, browserID),
+		]);
+	}
+
+	debug() {
+		return `stderr:\n${this.stdout().toString('utf-8')}\nstdout:\n${this.stderr().toString('utf-8')}`;
+	}
+}
+
+// https://w3c.github.io/webdriver/
+
+class WebdriverSession {
+	constructor(sessionBase) {
+		this.sessionBase = sessionBase;
+	}
+
+	setUrl(url) {
+		return sendJSON('POST', `${this.sessionBase}/url`, { url });
+	}
+
+	getUrl() {
+		return get(`${this.sessionBase}/url`);
+	}
+
+	getTitle() {
+		return get(`${this.sessionBase}/title`);
+	}
+
+	close() {
+		return withRetry(() => sendJSON('DELETE', this.sessionBase), 5000);
+	}
+}
+
+WebdriverSession.create = function(host, browser) {
+	const promise = withRetry(() => sendJSON('POST', `${host}/session`, {
+		capabilities: {
+			firstMatch: [{ browserName: browser }]
+		},
+	}), 20000);
+	const fin = new ExitHook(async () => {
+		const { value: { sessionId } } = await promise;
+		const session = new WebdriverSession(`${host}/session/${encodeURIComponent(sessionId)}`);
+		return session.close();
+	});
+	return fin.ifExitDuring(async () => {
+		const { value: { sessionId } } = await promise;
+		return new WebdriverSession(`${host}/session/${encodeURIComponent(sessionId)}`);
+	});
+};
+
+async function withRetry(fn, timeout) {
+	const delay = 100;
+	const begin = Date.now();
+	while (true) {
+		try {
+			return await fn();
+		} catch (e) {
+			if (Date.now() + delay >= begin + timeout) {
+				throw e;
+			}
+		}
+		await new Promise((resolve) => setTimeout(resolve, delay));
+	}
+}
+
+const get = async (url) => (await sendJSON('GET', url)).value;
+
+function sendJSON(method, path, data) {
+	const errorInfo = `WebDriver error for ${method} ${path}: `;
+	const content = new TextEncoder().encode(JSON.stringify(data));
+	return new Promise((resolve, reject) => {
+		let timeout = setTimeout(() => reject(new Error(`${errorInfo}timeout waiting for session (does this runner support the requested browser?)`)), 30000);
+		const url = new URL(path.includes('://') ? path : `http://${path}`);
+		const opts = {
+			hostname: url.hostname,
+			port: url.port,
+			path: url.pathname,
+			method,
+			headers: {
+				'Content-Type': 'application/json; charset=utf-8',
+				'Content-Length': content.length,
+			},
+		};
+		const req = request(opts, (res) => {
+			clearTimeout(timeout);
+			timeout = setTimeout(() => reject(new Error(`${errorInfo}timeout receiving data (got HTTP ${res.statusCode})`)), 10000);
+			const resultData = addDataListener(res);
+			res.addListener('close', () => {
+				clearTimeout(timeout);
+				const dataString = resultData().toString('utf-8');
+				if (res.statusCode >= 300) {
+					reject(new Error(`${errorInfo}${res.statusCode}\n\n${dataString}`));
+				} else {
+					resolve(JSON.parse(dataString));
+				}
+			});
+		});
+		req.addListener('error', (e) => {
+			clearTimeout(timeout);
+			reject(new Error(`${errorInfo}${e.message}`));
+		});
+		if (data !== undefined) {
+			req.write(content);
+		}
+		req.end();
+	});
+}
+
+class WebdriverRunner extends HttpServerRunner {
+	constructor(config, paths, browser, webdriverHost) {
+		super(config, paths);
+		this.browser = browser;
+		this.webdriverHost = webdriverHost;
+		this.session = null;
+		this.finalURL = null;
+		this.finalTitle = null;
+	}
+
+	async prepare(sharedState) {
+		await super.prepare(sharedState);
+
+		this.session = await WebdriverSession.create(this.webdriverHost, this.browser);
+	}
+
+	async teardown(sharedState) {
+		try {
+			this.finalURL = await this.session.getUrl();
+			this.finalTitle = await this.session.getTitle();
+			await this.session.close();
+		} finally {
+			await super.teardown(sharedState);
+		}
+	}
+
+	async invoke(listener, sharedState) {
+		const server = sharedState[HttpServerRunner.SERVER];
+		const postListener = sharedState[HttpServerRunner.POST_LISTENER];
+
+		const browserID = await makeConnection(this.session, server, postListener);
+		return super.invokeWithBrowserID(listener, sharedState, browserID);
+	}
+
+	debug() {
+		if (this.finalURL === null) {
+			return 'failed to create session';
+		}
+		return `URL='${this.finalURL}' Title='${this.finalTitle}'`;
+	}
+}
+
+async function makeConnection(session, server, postListener) {
+	// try various URLs until something works, because we don't know what environment we're in
+	const urls = [...new Set([
+		server.baseurl(process.env.WEBDRIVER_TESTRUNNER_HOST),
+		server.baseurl(),
+		server.baseurl('host.docker.internal'), // See https://stackoverflow.com/a/43541732/1180785
+		...Object.values(networkInterfaces())
+			.flatMap((i) => i)
+			.filter((i) => !i.internal)
+			.map((i) => server.baseurl(i)),
+	])];
+
+	let lastError = null;
+	for (const url of urls) {
+		const browserID = postListener.getUniqueID();
+		try {
+			await session.setUrl(url + '#' + browserID);
+			// Firefox via webdriver lies about the connection, returning success
+			// even if it fails, so we have to check that it actually did connect.
+			// Unfortunately there's no synchronous way of doing this (Firefox
+			// returns from POST url before it has reached DOMContentLoaded), so
+			// we need to poll.
+			const tm0 = Date.now();
+			do {
+				if (postListener.hasQueuedEvents(browserID)) {
+					return browserID;
+				}
+				await new Promise((resolve) => setTimeout(resolve, 50));
+			} while (Date.now() < tm0 + 1000);
+		} catch (e) {
+			lastError = e;
+		}
+	}
+	if (!lastError) {
+		throw new Error(`unable to access test server\n(tried ${urls.join(', ')})`)
+	}
+	throw new Error(`error accessing test server ${lastError}\n(tried ${urls.join(', ')})`);
+}
+
+const manualBrowserRunner = (config, paths) => new HttpServerRunner(config, paths);
+
+const autoBrowserRunner = (browser, launcher) => (config, paths) => {
+	const webdriverEnv = browser.toUpperCase().replace(/[^A-Z]+/g, '_');
+	const webdriverHost = env[`WEBDRIVER_HOST_${webdriverEnv}`] || env.WEBDRIVER_HOST || null;
+	if (webdriverHost) {
+		return new WebdriverRunner(config, paths, webdriverHost);
+	} else {
+		return new BrowserProcessRunner(config, paths, launcher);
+	}
+};
+
+async function inProcessNodeRunner(config, paths) {
 	const builder = standardRunner()
 		.useParallelDiscovery(config.parallelDiscovery)
 		.useParallelSuites(config.parallelSuites);
@@ -983,27 +958,33 @@ async function nodeRunner(config, paths, listener) {
 		});
 	}
 
-	const runner = await builder.build();
-	return runner.run(listener);
+	return builder.build();
 }
+
+const targets = new Map([
+	['node', { name: 'Node.js', make: inProcessNodeRunner }],
+	['url', { name: 'Custom Browser', make: manualBrowserRunner }],
+	['chrome', { name: 'Google Chrome', make: autoBrowserRunner('chrome', launchChrome) }],
+	['firefox', { name: 'Mozilla Firefox', make: autoBrowserRunner('firefox', launchFirefox) }],
+]);
 
 const argparse = new ArgumentParser({
 	parallelDiscovery: { names: ['parallel-discovery', 'P'], env: 'PARALLEL_DISCOVERY', type: 'boolean', default: false },
 	parallelSuites: { names: ['parallel-suites', 'parallel', 'p'], env: 'PARALLEL_SUITES', type: 'boolean', default: false },
-	pathsInclude: { names: ['include', 'i'], type: 'array', default: ['**/*.{spec|test}.{js|mjs|cjs|jsx}'] },
-	pathsExclude: { names: ['exclude', 'x'], type: 'array', default: ['**/node_modules', '**/.*'] },
-	browser: { names: ['browser', 'b'], env: 'BROWSER', type: 'array', default: [] },
+	pathsInclude: { names: ['include', 'i'], type: 'set', default: ['**/*.{spec|test}.{js|mjs|cjs|jsx}'] },
+	pathsExclude: { names: ['exclude', 'x'], type: 'set', default: ['**/node_modules', '**/.*'] },
+	target: { names: ['target', 't'], env: 'TARGET', type: 'set', default: ['node'], mapping: targets },
 	colour: { names: ['colour', 'color'], env: 'OUTPUT_COLOUR', type: 'boolean', default: null },
 	port: { names: ['port'], env: 'TESTRUNNER_PORT', type: 'int', default: 0 },
 	host: { names: ['host'], env: 'TESTRUNNER_HOST', type: 'string', default: '127.0.0.1' },
-	rest: { names: ['scan', null], type: 'array', default: ['.'] }
+	scan: { names: ['scan', null], type: 'set', default: ['.'] }
 });
 
 try {
 	const config = argparse.parse(process.env, process.argv);
 
-	const scanDirs = config.rest.map((path) => resolve(process.cwd(), path));
-	const paths = findPathsMatching(scanDirs, config.pathsInclude, config.pathsExclude);
+	const scanDirs = config.scan.map((path) => resolve(process.cwd(), path));
+	const paths = await asyncListToSync(findPathsMatching(scanDirs, config.pathsInclude, config.pathsExclude));
 
 	const forceTTY = (
 		config.colour ??
@@ -1017,8 +998,11 @@ try {
 		new reporters.Summary(stdout),
 	];
 
-	const runner = config.browser.length ? browserRunner : nodeRunner;
-	const result = await runner(config, paths, liveReporter.eventListener);
+	const multi = new ParallelRunner();
+	for (const target of config.target) {
+		multi.add(target.name, await target.make(config, paths));
+	}
+	const result = await multi.run(liveReporter.eventListener);
 	finalReporters.forEach((reporter) => reporter.report(result));
 
 	// TODO: warn or error if any node contains 0 tests

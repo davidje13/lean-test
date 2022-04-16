@@ -1,3 +1,138 @@
+const HAS_PROCESS = (typeof process !== 'undefined');
+
+let hasRun = null;
+const exitHooks = [];
+async function runExitHooks() {
+	if (hasRun !== null) {
+		if (Date.now() > hasRun + 1000) {
+			// user got impatient and fired signal again; do as they say
+			process.stderr.write(`\nWarning: teardown did not complete\n`);
+			process.exit(1);
+		}
+		return;
+	}
+	hasRun = Date.now();
+
+	const hooks = exitHooks.slice().reverse();
+
+	// mimick default SIGINT/SIGTERM behaviour
+	if (process.stderr.isTTY) {
+		process.stderr.write('\u001B[0m');
+	}
+
+	var info = setTimeout(() => process.stderr.write(`\nTeardown in progress; please wait (warning: forcing exit could result in left-over processes)\n`), 200);
+
+	// run hooks
+	for (const hook of hooks) {
+		await hook();
+	}
+	clearTimeout(info);
+	process.exit(1);
+}
+
+function checkExit() {
+	if (hasRun !== null) {
+		return;
+	}
+
+	const hooks = exitHooks.slice().reverse();
+	if (process.stderr.isTTY) {
+		process.stderr.write('\u001B[0m');
+	}
+
+	// run all hooks "fire-and-forget" style for best-effort teardown
+	for (const hook of hooks) {
+		hook();
+	}
+
+	process.stderr.write('\nWarning: exit teardown was possibly incomplete\n');
+}
+
+class ExitHook {
+	constructor(hook) {
+		this.registered = false;
+		this.hook = async () => {
+			try {
+				await hook();
+			} catch (e) {
+				if (HAS_PROCESS) {
+					process.stderr.write(`\nWarning: error during teardown ${e}\n`);
+				} else {
+					console.warn('Error during teardown', e);
+				}
+			}
+		};
+	}
+
+	add() {
+		if (this.registered) {
+			throw new Error('Exit hook already registered');
+		}
+		this.registered = true;
+		exitHooks.push(this.hook);
+		if (exitHooks.length === 1 && HAS_PROCESS) {
+			process.addListener('SIGTERM', runExitHooks);
+			process.addListener('SIGINT', runExitHooks);
+			process.addListener('exit', checkExit);
+		}
+	}
+
+	remove() {
+		const p = exitHooks.indexOf(this.hook);
+		if (p === -1) {
+			throw new Error('Exit hook not registered');
+		}
+		this.registered = false;
+		exitHooks.splice(p, 1);
+		if (exitHooks.length === 0) {
+			exitHooks.length = 0;
+			if (HAS_PROCESS) {
+				process.removeListener('SIGTERM', runExitHooks);
+				process.removeListener('SIGINT', runExitHooks);
+				process.removeListener('exit', checkExit);
+			}
+		}
+	}
+
+	async ifExitDuring(fn) {
+		try {
+			this.add();
+			return await fn();
+		} finally {
+			this.remove();
+		}
+	}
+
+	async ifExitDuringOrFinally(fn) {
+		try {
+			this.add();
+			return await fn();
+		} finally {
+			this.remove();
+			await this.hook();
+		}
+	}
+}
+
+class AbstractRunner {
+	async prepare(sharedState) {
+	}
+
+	async teardown(sharedState) {
+	}
+
+	async invoke(listener, sharedState) {
+	}
+
+	async run(listener = null, sharedState = {}) {
+		const fin = new ExitHook(() => this.teardown(sharedState));
+		return fin.ifExitDuringOrFinally(async () => {
+			await this.prepare(sharedState);
+			return this.invoke(listener, sharedState);
+		});
+	}
+}
+
 class TestAssertionError extends Error {
 	constructor(message, skipFrames = 0) {
 		super(message);
@@ -594,14 +729,15 @@ var describe = (fnName = 'describe', {
 	}, { order: Number.POSITIVE_INFINITY, id: id$1 });
 };
 
-class Runner {
+class Runner extends AbstractRunner {
 	constructor(baseNode, baseContext) {
+		super();
 		this.baseNode = baseNode;
 		this.baseContext = baseContext;
 		Object.freeze(this);
 	}
 
-	run(listener = null) {
+	invoke(listener) {
 		// enable long stack trace so that we can resolve scopes, cut down displayed traces, etc.
 		Error.stackTraceLimit = 50;
 		return this.baseNode.run(Object.freeze({
@@ -1577,8 +1713,9 @@ var index$2 = /*#__PURE__*/Object.freeze({
 	timeout: timeout
 });
 
-class MultiRunner {
+class ParallelRunner extends AbstractRunner {
 	constructor() {
+		super();
 		this.runners = [];
 	}
 
@@ -1586,17 +1723,26 @@ class MultiRunner {
 		this.runners.push({ label, runner });
 	}
 
-	run(listener) {
+	prepare(sharedState) {
+		return Promise.all(this.runners.map(({ runner }) => runner.prepare(sharedState)));
+	}
+
+	teardown(sharedState) {
+		return Promise.all(this.runners.map(({ runner }) => runner.teardown(sharedState)));
+	}
+
+	invoke(listener, sharedState) {
 		if (this.runners.length === 0) {
 			throw new Error('No sub-runners registered');
 		}
 		if (this.runners.length === 1) {
-			return this.runners[0].runner(listener);
+			return this.runners[0].runner.invoke(listener, sharedState);
 		}
 		return Result.of(null, async (baseResult) => {
 			const subResults = await Promise.all(this.runners.map(async ({ label, runner }) => {
 				const convert = (o) => ((o.parent === null) ? { ...o, parent: baseResult.id, label } : o);
-				const subResult = await runner((event) => listener?.(convert(event)))
+				const subListener = listener ? ((event) => listener(convert(event))) : null;
+				const subResult = await runner.invoke(subListener, sharedState)
 					.catch((e) => Result.of(null, () => { throw e; }, { isBlock: true }));
 				return new StaticResult(convert(subResult));
 			}));
@@ -1828,4 +1974,4 @@ function standardRunner() {
 		.addPlugin(timeout());
 }
 
-export { MultiRunner, Runner, TestAssertionError, TestAssumptionError, matchers, index$1 as outputs, index$2 as plugins, index as reporters, setIdNamespace, standardRunner };
+export { AbstractRunner, ExitHook, ParallelRunner, Runner, TestAssertionError, TestAssumptionError, matchers, index$1 as outputs, index$2 as plugins, index as reporters, setIdNamespace, standardRunner };

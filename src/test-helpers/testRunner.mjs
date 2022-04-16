@@ -16,7 +16,9 @@ export default async function testRunner(plugins, expectedResult, block) {
 
 	const match = equals(looseExpected)(result.summary);
 	if (!match.pass) {
-		new FullReporter(new Writer(process.stdout, false)).report(result);
+		if (typeof process !== 'undefined') {
+			new FullReporter(new Writer(process.stdout, false)).report(result);
+		}
 		fail(match.message);
 	}
 	return result;

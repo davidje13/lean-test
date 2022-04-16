@@ -6,8 +6,12 @@ export default class ArgumentParser {
 		this.names = new Map();
 		this.envs = [];
 		this.defaults = {};
+		this.mappings = [];
 		Object.entries(opts).forEach(([id, v]) => {
 			this.defaults[id] = v.default;
+			if (v.mapping) {
+				this.mappings.push({ id, name: v.names[0], mapping: v.mapping });
+			}
 			const config = { id, type: v.type || 'boolean' };
 			v.names.forEach((name) => this.names.set(name, config));
 			if (v.env) {
@@ -43,9 +47,10 @@ export default class ArgumentParser {
 				target[id] = v;
 				break;
 			case 'array':
+			case 'set':
 				const list = target[id] || [];
 				list.push(...(value ?? getValue()).split(','));
-				target[id] = list;
+				target[id] = (type === 'set') ? [...new Set(list)] : list;
 				break;
 			default:
 				throw new Error(`Unknown argument type for ${name}: ${type}`);
@@ -66,6 +71,21 @@ export default class ArgumentParser {
 		};
 		this.parseOpt(name, target, config, value, getNext);
 		return inc;
+	}
+
+	applyMappings(options) {
+		for (const { id, name, mapping } of this.mappings) {
+			const value = options[id];
+			if (value === undefined) {
+				continue;
+			}
+			if (Array.isArray(value)) {
+				options[id] = value.map((v) => applyMap(v, name, mapping));
+			} else {
+				options[id] = applyMap(value, name, mapping);
+			}
+		}
+		return options;
 	}
 
 	parse(environment, argv, begin = 2) {
@@ -96,7 +116,7 @@ export default class ArgumentParser {
 				this.loadOpt(result, null, arg, []);
 			}
 		}
-		return { ...this.defaults, ...envResult, ...result };
+		return this.applyMappings({ ...this.defaults, ...envResult, ...result });
 	}
 }
 
@@ -107,4 +127,20 @@ function split2(v, s) {
 	} else {
 		return [v.substr(0, p), v.substr(p + 1)];
 	}
+}
+
+function applyMap(value, name, mapping) {
+	if (mapping instanceof Map) {
+		if (!mapping.has(value)) {
+			throw new Error(`Unknown ${name}: ${value}`);
+		}
+		return mapping.get(value);
+	}
+	if (mapping instanceof Set) {
+		if (!mapping.has(value)) {
+			throw new Error(`Unknown ${name}: ${value}`);
+		}
+		return value;
+	}
+	throw new Error(`Invalid mapping config for ${name}`);
 }

@@ -1,6 +1,6 @@
 import findExecutable from '../filesystem/findExecutable.mjs';
 import { makeTempDir, removeTempDir } from '../filesystem/tempDir.mjs';
-import { stderr, env, platform, getuid } from 'process';
+import { env, platform, getuid } from 'process';
 import { spawn } from 'child_process';
 import { writeFile } from 'fs/promises';
 import { join } from 'path';
@@ -40,28 +40,7 @@ const FIREFOX_PREFS = [
 	'user_pref("browser.tabs.remote.autostart", false);', // disable multi-process
 ].join('\n');
 
-const LAUNCHERS = new Map([
-	['manual', launchManual],
-	['chrome', launchChrome],
-	['firefox', launchFirefox],
-]);
-
-export default function launchBrowser(name, url, opts = {}) {
-	const launcher = LAUNCHERS.get(name);
-	if (!launcher) {
-		stderr.write(`Unknown browser: ${name}\n`);
-		stderr.write(`Open this URL to run tests: ${url}\n`);
-		return null;
-	}
-	return launcher(url, opts);
-}
-
-async function launchManual(url) {
-	stderr.write(`Ready to run test: ${url}\n`);
-	return null;
-}
-
-async function launchChrome(url, opts) {
+export async function launchChrome(url, opts) {
 	const executable = await findExecutable([
 		{ path: env.CHROME_PATH },
 		{ ifPlatform: 'darwin', path: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' },
@@ -84,7 +63,7 @@ async function launchChrome(url, opts) {
 	return { proc };
 }
 
-async function launchFirefox(url, opts) {
+export async function launchFirefox(url, opts) {
 	const executable = await findExecutable([
 		{ path: env.FIREFOX_PATH },
 		{ ifPlatform: 'darwin', path: '/Applications/Firefox.app/Contents/MacOS/firefox' },

@@ -2,7 +2,7 @@
   "name": "lean-test-package-test",
   "private": true,
   "scripts": {
-    "test": "lean-test && lean-test --browser=chrome"
+    "test": "lean-test --target=node,chrome"
   },
   "devDependencies": {
     "lean-test": "file:lean-test.tgz"

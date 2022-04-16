@@ -15,15 +15,15 @@ results.push(...await Promise.all([
 	runIntegrationTest('discovery', 'expected.txt', '--parallel-discovery'),
 	runIntegrationTest('basics'),
 	runIntegrationTest('reporting'),
-	runIntegrationTest('browser-broken', 'expected.txt', '--browser=chrome'), // slow
+	runIntegrationTest('browser-broken', 'expected.txt', '--target=chrome'), // slow
 ]));
 // run separately to avoid needing multiple browser sessions for the same browser at a time on CI
 results.push(...await Promise.all([
-	runIntegrationTest('browser', 'expected.txt', '--browser=chrome'),
-	runIntegrationTest('browser', 'expected-ff.txt', '--browser=firefox'), // firefox stack traces do not handle async chains but are still OK
+	runIntegrationTest('browser', 'expected.txt', '--target=chrome'),
+	runIntegrationTest('browser', 'expected-ff.txt', '--target=firefox'), // firefox stack traces do not handle async chains but are still OK
 ]));
 results.push(...await Promise.all([
-	runIntegrationTest('multibrowser', 'expected.txt', '--browser=chrome,firefox'),
+	runIntegrationTest('multibrowser', 'expected.txt', '--target=chrome,firefox'),
 ]));
 
 process.stdout.write('\nIntegration tests: ');

@@ -1,6 +1,6 @@
 import { request } from 'http';
 import { addDataListener } from '../utils.mjs';
-import { ifKilled } from '../shutdown.mjs';
+import { ExitHook } from '../../lean-test.mjs';
 
 // https://w3c.github.io/webdriver/
 
@@ -32,13 +32,14 @@ WebdriverSession.create = function(host, browser) {
 			firstMatch: [{ browserName: browser }]
 		},
 	}), 20000);
-	return ifKilled(async () => {
-		const { value: { sessionId } } = await promise;
-		return new WebdriverSession(`${host}/session/${encodeURIComponent(sessionId)}`);
-	}, async () => {
+	const fin = new ExitHook(async () => {
 		const { value: { sessionId } } = await promise;
 		const session = new WebdriverSession(`${host}/session/${encodeURIComponent(sessionId)}`);
 		return session.close();
+	});
+	return fin.ifExitDuring(async () => {
+		const { value: { sessionId } } = await promise;
+		return new WebdriverSession(`${host}/session/${encodeURIComponent(sessionId)}`);
 	});
 }
 

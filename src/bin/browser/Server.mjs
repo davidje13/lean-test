@@ -1,7 +1,6 @@
 import { readFile } from 'fs/promises';
 import { resolve } from 'path';
 import { createServer } from 'http';
-import { addExitHook, removeExitHook } from '../shutdown.mjs';
 
 const CHARSET = '; charset=utf-8';
 
@@ -24,7 +23,6 @@ export default class Server {
 
 		this.address = null;
 		this.server = createServer(this._handleRequest.bind(this));
-		this.close = this.close.bind(this);
 	}
 
 	getContentType(ext) {
@@ -109,14 +107,12 @@ export default class Server {
 			throw new Exception(`Server.address unexpectedly returned ${addr}; aborting`);
 		}
 		this.address = addr;
-		addExitHook(this.close);
 	}
 
 	async close() {
 		if (!this.address) {
 			return;
 		}
-		removeExitHook(this.close);
 		this.address = null;
 		this.port = null;
 		await new Promise((resolve) => this.server.close(resolve));

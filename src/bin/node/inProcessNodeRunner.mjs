@@ -1,6 +1,6 @@
 import { standardRunner } from '../../lean-test.mjs';
 
-export default async function nodeRunner(config, paths, listener) {
+export default async function inProcessNodeRunner(config, paths) {
 	const builder = standardRunner()
 		.useParallelDiscovery(config.parallelDiscovery)
 		.useParallelSuites(config.parallelSuites);
@@ -13,6 +13,5 @@ export default async function nodeRunner(config, paths, listener) {
 		});
 	}
 
-	const runner = await builder.build();
-	return runner.run(listener);
+	return builder.build();
 }

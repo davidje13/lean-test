@@ -2,29 +2,38 @@
 
 import process from 'process';
 import { resolve } from 'path';
-import { outputs, reporters } from '../lean-test.mjs';
+import { outputs, ParallelRunner, reporters } from '../lean-test.mjs';
 import findPathsMatching from './filesystem/findPathsMatching.mjs';
 import ArgumentParser from './ArgumentParser.mjs';
-import browserRunner from './browser/browserRunner.mjs';
-import nodeRunner from './node/nodeRunner.mjs';
+import { launchChrome, launchFirefox } from './browser/launchBrowser.mjs';
+import { autoBrowserRunner, manualBrowserRunner } from './browser/browserRunner.mjs';
+import inProcessNodeRunner from './node/inProcessNodeRunner.mjs';
+import { asyncListToSync } from './utils.mjs';
+
+const targets = new Map([
+	['node', { name: 'Node.js', make: inProcessNodeRunner }],
+	['url', { name: 'Custom Browser', make: manualBrowserRunner }],
+	['chrome', { name: 'Google Chrome', make: autoBrowserRunner('chrome', launchChrome) }],
+	['firefox', { name: 'Mozilla Firefox', make: autoBrowserRunner('firefox', launchFirefox) }],
+]);
 
 const argparse = new ArgumentParser({
 	parallelDiscovery: { names: ['parallel-discovery', 'P'], env: 'PARALLEL_DISCOVERY', type: 'boolean', default: false },
 	parallelSuites: { names: ['parallel-suites', 'parallel', 'p'], env: 'PARALLEL_SUITES', type: 'boolean', default: false },
-	pathsInclude: { names: ['include', 'i'], type: 'array', default: ['**/*.{spec|test}.{js|mjs|cjs|jsx}'] },
-	pathsExclude: { names: ['exclude', 'x'], type: 'array', default: ['**/node_modules', '**/.*'] },
-	browser: { names: ['browser', 'b'], env: 'BROWSER', type: 'array', default: [] },
+	pathsInclude: { names: ['include', 'i'], type: 'set', default: ['**/*.{spec|test}.{js|mjs|cjs|jsx}'] },
+	pathsExclude: { names: ['exclude', 'x'], type: 'set', default: ['**/node_modules', '**/.*'] },
+	target: { names: ['target', 't'], env: 'TARGET', type: 'set', default: ['node'], mapping: targets },
 	colour: { names: ['colour', 'color'], env: 'OUTPUT_COLOUR', type: 'boolean', default: null },
 	port: { names: ['port'], env: 'TESTRUNNER_PORT', type: 'int', default: 0 },
 	host: { names: ['host'], env: 'TESTRUNNER_HOST', type: 'string', default: '127.0.0.1' },
-	rest: { names: ['scan', null], type: 'array', default: ['.'] }
+	scan: { names: ['scan', null], type: 'set', default: ['.'] }
 });
 
 try {
 	const config = argparse.parse(process.env, process.argv);
 
-	const scanDirs = config.rest.map((path) => resolve(process.cwd(), path));
-	const paths = findPathsMatching(scanDirs, config.pathsInclude, config.pathsExclude);
+	const scanDirs = config.scan.map((path) => resolve(process.cwd(), path));
+	const paths = await asyncListToSync(findPathsMatching(scanDirs, config.pathsInclude, config.pathsExclude));
 
 	const forceTTY = (
 		config.colour ??
@@ -38,8 +47,11 @@ try {
 		new reporters.Summary(stdout),
 	];
 
-	const runner = config.browser.length ? browserRunner : nodeRunner;
-	const result = await runner(config, paths, liveReporter.eventListener);
+	const multi = new ParallelRunner();
+	for (const target of config.target) {
+		multi.add(target.name, await target.make(config, paths));
+	}
+	const result = await multi.run(liveReporter.eventListener);
 	finalReporters.forEach((reporter) => reporter.report(result));
 
 	// TODO: warn or error if any node contains 0 tests

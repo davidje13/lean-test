@@ -1,17 +1,19 @@
-import Node, { RUN_INTERCEPTORS, LISTENER } from './Node.mjs';
-import ExtensionStore from './ExtensionStore.mjs';
-import ResultStage from './ResultStage.mjs';
-import StackScope from './StackScope.mjs';
+import AbstractRunner from './AbstractRunner.mjs';
+import Node, { RUN_INTERCEPTORS, LISTENER } from '../core/Node.mjs';
+import ExtensionStore from '../core/ExtensionStore.mjs';
+import ResultStage from '../core/ResultStage.mjs';
+import StackScope from '../core/StackScope.mjs';
 import describe from '../plugins/describe.mjs';
 
-export default class Runner {
+export default class Runner extends AbstractRunner {
 	constructor(baseNode, baseContext) {
+		super();
 		this.baseNode = baseNode;
 		this.baseContext = baseContext;
 		Object.freeze(this);
 	}
 
-	run(listener = null) {
+	invoke(listener) {
 		// enable long stack trace so that we can resolve scopes, cut down displayed traces, etc.
 		Error.stackTraceLimit = 50;
 		return this.baseNode.run(Object.freeze({
