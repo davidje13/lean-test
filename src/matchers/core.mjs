@@ -1,6 +1,11 @@
 import { seq, print } from '../utils.mjs';
 import { checkEquals, delegateMatcher, ANY } from './checkEquals.mjs';
 
+export const any = () => (actual) => ({
+	pass: true,
+	message: `Expected nothing, but got ${print(actual)}.`,
+});
+
 export const not = (matcher) => (...args) =>
 	seq(matcher(...args), ({ pass, message }) => ({ pass: !pass, message }));
 

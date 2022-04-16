@@ -119,6 +119,13 @@ describe('same', {
 			throw new Error('Expected failure, but succeeded');
 		}
 	},
+
+	'produces nice messages for symbols'() {
+		const s1 = Symbol();
+		const s2 = Symbol('hi');
+		const result = matchers.same(s1)(s2);
+		expect(result.message).equals('Expected value to equal Symbol(), but Symbol(hi) != Symbol().');
+	},
 });
 
 const ASYNC_PASS = () => Promise.resolve({ pass: true, message: 'msg' });

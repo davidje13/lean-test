@@ -12,7 +12,9 @@ export const checkEquals = (expected, actual, name) => {
 };
 
 export const delegateMatcher = (matcher, actual, name) => {
-	if (typeof matcher === 'function') {
+	if (matcher === actual) {
+		return { pass: true, message: `Expected ${name} not to equal ${print(matcher)}, but did.` };
+	} else if (typeof matcher === 'function') {
 		return matcher(actual);
 	} else if (matcher === ANY) {
 		return { pass: true, message: `Expected no ${name}, but got ${print(actual)}.` };

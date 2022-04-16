@@ -141,10 +141,20 @@ export interface DiscoveryGlobals extends matchers {
 	afterAll: LifecycleFunc<LifecycleHookAfter>;
 	getStdout: GetOutput;
 	getStderr: GetOutput;
+	mock: typeof helpers.mock;
 }
 
 export type TestEvent = TestBeginEvent | TestCompleteEvent;
 export type TestEventHandler = (e: TestEvent) => void;
+
+export type RunContext = Record<string | symbol, unknown>;
+
+export interface Node {
+	options: NodeOptions;
+	children: Node[];
+
+	run: (context: RunContext, parentResult?: Result) => MaybeAsync<void>;
+}
 
 interface NodeConfig {
 	display: string | null;
@@ -162,7 +172,12 @@ interface MethodThis {
 	get: (key: ExtensionKey) => unknown[];
 }
 
-type RunInterceptor = () => MaybeAsync<void>;
+type RunInterceptor = (
+	next: (context?: RunContext, result?: Result) => MaybeAsync<void>,
+	context: RunContext,
+	result: Result,
+	node: Node,
+) => MaybeAsync<void>;
 type RunCondition = () => MaybeAsync<boolean>;
 
 export class TestAssertionError extends Error {
@@ -173,16 +188,18 @@ export class TestAssumptionError extends Error {
 	constructor(message: string, skipFrames?: number);
 }
 
+export type SharedState = Record<string | symbol, unknown>;
+
 export interface AbstractRunner {
-	prepare(sharedState: Record<string | symbol, unknown>): Promise<void>;
-	teardown(sharedState: Record<string | symbol, unknown>): Promise<void>;
+	prepare(sharedState: SharedState): Promise<void>;
+	teardown(sharedState: SharedState): Promise<void>;
 	invoke(
 		listener: TestEventHandler | null | undefined,
-		sharedState: Record<string | symbol, unknown>,
+		sharedState: SharedState,
 	): Promise<Result>;
 	run(
 		listener?: TestEventHandler | null | undefined,
-		sharedState?: Record<string | symbol, unknown> | undefined,
+		sharedState?: SharedState | undefined,
 	): Promise<Result>;
 }
 
@@ -210,6 +227,36 @@ export { Runner };
 export class ParallelRunner implements AbstractRunner {
 	constructor();
 	add(label: string, runner: AbstractRunner): void;
+}
+
+interface Methods<T> {
+	[k: keyof T]: T[k] extends (...args: any[]) => any ? T[k] : never;
+}
+
+interface MockAction<T> {
+	with(...expectedArgs: Parameters<T>): MockAction<T>;
+	once(): MockAction<T>;
+	times(n: number): MockAction<T>;
+	then(fn: T): Mocking<T>;
+	thenReturn(value: ReturnType<T>): Mocking<T>;
+	thenResolve(value: unknown): Mocking<T>;
+	thenReject(value: unknown): Mocking<T>;
+	thenThrow(error: unknown): Mocking<T>;
+}
+
+type Mocking<T extends (...args: any) => any> = T & {
+	whenCalled(): MockAction<T>;
+	whenCalledNext(): MockAction<T>;
+	whenCalledWith(...args: Parameters<T>): MockAction<T>;
+	returning(value: ReturnType<T>): Mocking<T>;
+	throwing(error: unknown): Mocking<T>;
+	reset(): Mocking<T>;
+};
+
+export namespace helpers {
+	function mock<T extends (...args: any[]) => any>(name?: string, delegate?: T): Mocking<T>;
+	function mock<T extends (...args: any[]) => any>(delegate: T): Mocking<T>;
+	function mock<T, K extends keyof Methods<T>>(object: T, key: K): Mocking<T[K]> & { revert(): void };
 }
 
 export namespace outputs {
@@ -251,7 +298,12 @@ type Precision =
 	{ tolerance: number } |
 	{ decimalPlaces: number };
 
+interface SyncMatchersOrValues<T> {
+	[k: keyof T]: SyncMatcher<T[k]> | T[k];
+}
+
 interface matchers {
+	any: () => SyncMatcher<unknown>;
 	equals: <T>(expected: T) => SyncMatcher<T>;
 	same: <T>(expected: T) => SyncMatcher<T>;
 	not: <M extends Matcher<any>>(matcher: M) => M;
@@ -279,7 +331,11 @@ interface matchers {
 	hasLength: (expectation?: SyncMatcher<number> | number) => SyncMatcher<LengthHaver>;
 	isEmpty: () => SyncMatcher<LengthHaver>;
 	contains: (expectation?: SyncMatcher<any> | string | unknown) => SyncMatcher<string | Array<unknown> | Set<unknown>>;
+	isListOf: (...expectation?: (SyncMatcher<any> | unknown)[]) => SyncMatcher<Array<unknown>>;
 	hasProperty: (name: Symbol | string | number, expectation?: SyncMatcher<any> | unknown) => SyncMatcher<unknown>;
+
+	hasBeenCalled: (options?: { times?: number }) => SyncMatcher<(...args: unknown[]) => unknown>;
+	hasBeenCalledWith: <T extends (...args: any[]) => any>(...args: SyncMatchersOrValues<Parameters<T>>) => SyncMatcher<T>;
 
 	// compatibility aliases
 	toEqual: <T>(expected: T) => SyncMatcher<T>;
@@ -300,6 +356,9 @@ interface matchers {
 	toHaveLength: (expectation?: SyncMatcher<number> | number) => SyncMatcher<LengthHaver>;
 	toContain: (expectation?: SyncMatcher<any> | string | unknown) => SyncMatcher<string | Array<unknown> | Set<unknown>>;
 	toHaveProperty: (name: Symbol | string | number, expectation?: SyncMatcher<any> | unknown) => SyncMatcher<unknown>;
+
+	toHaveBeenCalled: (options?: { times?: number }) => SyncMatcher<(...args: unknown[]) => unknown>;
+	toHaveBeenCalledWith: <T extends (...args: any[]) => any>(...args: SyncMatchersOrValues<Parameters<T>>) => SyncMatcher<T>;
 }
 export const matchers: matchers;
 
@@ -317,6 +376,7 @@ interface plugins {
 	focus: () => Plugin;
 	ignore: () => Plugin;
 	lifecycle: (options?: { order?: number }) => Plugin;
+	scopedMock: () => Plugin;
 	outputCaptor: (options?: { order?: number }) => Plugin;
 	repeat: (options?: { order?: number }) => Plugin;
 	retry: (options?: { order?: number }) => Plugin;
@@ -341,7 +401,9 @@ declare global { // same as DiscoveryGlobals + matchers
 	const afterAll: LifecycleFunc<LifecycleHookAfter>;
 	const getStdout: GetOutput;
 	const getStderr: GetOutput;
+	const mock: typeof helpers.mock;
 
+	const any: () => SyncMatcher<unknown>;
 	const equals: <T>(expected: T) => SyncMatcher<T>;
 	const same: <T>(expected: T) => SyncMatcher<T>;
 	const not: <M extends Matcher<any>>(matcher: M) => M;
@@ -369,7 +431,11 @@ declare global { // same as DiscoveryGlobals + matchers
 	const hasLength: (expectation?: SyncMatcher<number> | number) => SyncMatcher<LengthHaver>;
 	const isEmpty: () => SyncMatcher<LengthHaver>;
 	const contains: (expectation?: SyncMatcher<any> | string | unknown) => SyncMatcher<string | Array<unknown> | Set<unknown>>;
+	const isListOf: (...expectation?: (SyncMatcher<any> | unknown)[]) => SyncMatcher<Array<unknown>>;
 	const hasProperty: (name: Symbol | string | number, expectation?: SyncMatcher<any> | unknown) => SyncMatcher<unknown>;
+
+	const hasBeenCalled: (options?: { times?: number }) => SyncMatcher<(...args: unknown[]) => unknown>;
+	const hasBeenCalledWith: <T extends (...args: any[]) => any>(...args: SyncMatchersOrValues<Parameters<T>>) => SyncMatcher<T>;
 
 	// compatibility aliases
 	const toEqual: <T>(expected: T) => SyncMatcher<T>;
@@ -390,4 +456,7 @@ declare global { // same as DiscoveryGlobals + matchers
 	const toHaveLength: (expectation?: SyncMatcher<number> | number) => SyncMatcher<LengthHaver>;
 	const toContain: (expectation?: SyncMatcher<any> | string | unknown) => SyncMatcher<string | Array<unknown> | Set<unknown>>;
 	const toHaveProperty: (name: Symbol | string | number, expectation?: SyncMatcher<any> | unknown) => SyncMatcher<unknown>;
+
+	const toHaveBeenCalled: (options?: { times?: number }) => SyncMatcher<(...args: unknown[]) => unknown>;
+	const toHaveBeenCalledWith: <T extends (...args: any[]) => any>(...args: SyncMatchersOrValues<Parameters<T>>) => SyncMatcher<T>;
 }

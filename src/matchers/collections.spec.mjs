@@ -151,3 +151,36 @@ describe('contains', {
 		expect(matchers.contains('foo')(Symbol()).pass, isFalse());
 	},
 });
+
+describe('isListOf', {
+	'checks all items of an array'() {
+		const resultPass = matchers.isListOf('foo', 'bar')(['foo', 'bar']);
+		expect(resultPass.pass, isTrue());
+
+		const resultFail = matchers.isListOf('foo', 'bar')(['nope', 'nah']);
+		expect(resultFail.pass, isFalse());
+	},
+
+	'checks ordering'() {
+		const resultFail = matchers.isListOf('foo', 'bar')(['bar', 'foo']);
+		expect(resultFail.pass, isFalse());
+	},
+
+	'checks item count'() {
+		const resultFail = matchers.isListOf('foo')(['foo', 'foo']);
+		expect(resultFail.pass, isFalse());
+	},
+
+	'uses sub-matchers'() {
+		const resultPass = matchers.isListOf(coreMatchers.equals('foo'), 'bar')(['foo', 'bar']);
+		expect(resultPass.pass, isTrue());
+
+		const resultFail = matchers.isListOf(coreMatchers.equals('foo'), 'bar')(['nope', 'bar']);
+		expect(resultFail.pass, isFalse());
+	},
+
+	'rejects non-arrays'() {
+		const resultFail = matchers.isListOf('n')('nope');
+		expect(resultFail.pass, isFalse());
+	},
+});

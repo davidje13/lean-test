@@ -490,7 +490,7 @@ class Server {
 		} catch (e) {
 			let status = 500;
 			let message = 'An internal error occurred';
-			if (typeof e === 'object' && e.message) {
+			if (e && typeof e === 'object' && e.message) {
 				status = e.status || 400;
 				message = e.message;
 			}

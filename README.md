@@ -348,6 +348,9 @@ describe('lifecycle', () => {
 	Negates another matcher.<br>
 	e.g. `expect(7, not(equals(4)))`
 
+- `any()`:<br>
+	Always matches. The negation `not(any())` always fails. Useful as a sub-matcher.
+
 - `withMessage(message, expectation)`:<br>
 	Customises the error message of another matcher.<br>
 	e.g. `expect(7, withMessage('hmm, not 7', equals(7)))`
@@ -430,10 +433,21 @@ describe('lifecycle', () => {
 	Checks if the value (a string, array, or `Set`) contains the given substring or
 	sub-element.
 
+- `isListOf(...elements)`:<br>
+	Checks if the value contains the given elements in the listed order. Elements can be
+	literal or matchers (these can be mixed).
+
 - `hasProperty(name[, expectation])`:<br>
 	Checks if the value (any type) contains a property of the given name, optionally
 	matching the given expectation. If no `expectation` is given, this just checks that
 	the property exists on the object (using `hasOwnProperty`).
+
+- `hasBeenCalled()`:<br>
+	Checks that a mocked function has been invoked since being mocked.
+
+- `hasBeenCalledWith(...arguments)`:<br>
+	Checks that a mocked function has been invoked since being mocked, with the given
+	arguments (which can be literal, matchers, or a mix).
 
 ## CLI flags
 

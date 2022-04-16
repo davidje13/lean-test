@@ -23,3 +23,8 @@ export {
 export {
 	hasProperty as toHaveProperty,
 } from './dictionary.mjs';
+
+export {
+	hasBeenCalled as toHaveBeenCalled,
+	hasBeenCalledWith as toHaveBeenCalledWith,
+} from './spy.mjs';

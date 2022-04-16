@@ -8,6 +8,7 @@ export { default as ExitHook } from './core/ExitHook.mjs';
 export { setIdNamespace } from './core/Result.mjs';
 export { default as AbstractRunner } from './runners/AbstractRunner.mjs';
 export { default as ParallelRunner } from './runners/ParallelRunner.mjs';
+export * as helpers from './helpers/index.mjs';
 export * as outputs from './outputs/index.mjs';
 export * as reporters from './reporters/index.mjs';
 
@@ -29,6 +30,7 @@ export function standardRunner() {
 		.addPlugin(plugins.outputCaptor())
 		.addPlugin(plugins.repeat())
 		.addPlugin(plugins.retry())
+		.addPlugin(plugins.scopedMock())
 		.addPlugin(plugins.stopAtFirstFailure())
 		.addPlugin(plugins.test())
 		.addPlugin(plugins.test('it'))

@@ -930,7 +930,7 @@ function seq(result, then) {
 const resolveMessage = (message) => String((typeof message === 'function' ? message() : message) || '');
 
 const print = (v) =>
-	(v instanceof Symbol || v instanceof Error) ? v.toString() :
+	(typeof v === 'symbol' || v instanceof Error) ? v.toString() :
 	typeof v === 'function' ? v :
 	JSON.stringify(v);
 
@@ -946,7 +946,9 @@ const checkEquals = (expected, actual, name) => {
 };
 
 const delegateMatcher = (matcher, actual, name) => {
-	if (typeof matcher === 'function') {
+	if (matcher === actual) {
+		return { pass: true, message: `Expected ${name} not to equal ${print(matcher)}, but did.` };
+	} else if (typeof matcher === 'function') {
 		return matcher(actual);
 	} else if (matcher === ANY) {
 		return { pass: true, message: `Expected no ${name}, but got ${print(actual)}.` };
@@ -987,6 +989,11 @@ function getDiff(a, b) {
 	}
 	return diffs.join(' and ');
 }
+
+const any = () => (actual) => ({
+	pass: true,
+	message: `Expected nothing, but got ${print(actual)}.`,
+});
 
 const not = (matcher) => (...args) =>
 	seq(matcher(...args), ({ pass, message }) => ({ pass: !pass, message }));
@@ -1235,6 +1242,24 @@ const contains = (sub) => (actual) => {
 	}
 };
 
+const isListOf = (...items) => (actual) => {
+	if (!Array.isArray(actual)) {
+		return { pass: false, message: `Expected to contain ${print(items)}, but got non-collection type ${print(actual)}.` };
+	}
+
+	if (actual.length !== items.length) {
+		return { pass: false, message: `Expected to contain ${print(items)}, but got ${print(actual)}.` };
+	}
+
+	for (let i = 0; i < items.length; ++i) {
+		const result = delegateMatcher(items[i], actual[i], `item ${i + 1}`);
+		if (!result.pass) {
+			return result;
+		}
+	}
+	return { pass: true, message: `Expected not to contain ${print(items)}, but did.` };
+};
+
 const hasProperty = (name, expected = ANY) => (actual) => {
 	if (actual !== null && actual !== undefined && Object.prototype.hasOwnProperty.call(actual, name)) {
 		return delegateMatcher(expected, actual[name], print(name));
@@ -1243,8 +1268,46 @@ const hasProperty = (name, expected = ANY) => (actual) => {
 	}
 };
 
+const hasBeenCalled = ({ times = null } = {}) => (fn) => {
+	const invocations = fn.invocations;
+	if (!invocations) {
+		throw new Error('matcher can only be used with mocked functions');
+	}
+	const actualTimes = invocations.length;
+	if (times === null) {
+		if (actualTimes > 0) {
+			return { pass: true, message: `Expected not to have been called, but was called ${actualTimes} time(s).` };
+		} else {
+			return { pass: false, message: 'Expected to have been called, but was not.' };
+		}
+	}
+	if (actualTimes === times) {
+		return { pass: true, message: `Expected not to have been called ${times} time(s), but was.` };
+	} else {
+		return { pass: false, message: `Expected to have been called ${times} time(s), but was called ${actualTimes} time(s).` };
+	}
+};
+
+const hasBeenCalledWith = (...expectedArgs) => (fn) => {
+	const invocations = fn.invocations;
+	if (!invocations) {
+		throw new Error('matcher can only be used with mocked functions');
+	}
+	const matcher = isListOf(...expectedArgs);
+	const mismatches = [];
+	for (const i of invocations) {
+		const match = matcher(i.arguments);
+		if (match.pass) {
+			return { pass: true, message: `Expected not to have been called with ${expectedArgs.map(print).join(', ')}, but was.` };
+		}
+		mismatches.push(`  ${i.arguments.map(print).join(', ')} (${match.message})`);
+	}
+	return { pass: false, message: `Expected to have been called with ${expectedArgs.map(print).join(', ')}, but no matching calls.\nObserved calls:\n${mismatches.join('\n')}` };
+};
+
 var matchers = /*#__PURE__*/Object.freeze({
 	__proto__: null,
+	any: any,
 	not: not,
 	withMessage: withMessage,
 	equals: equals,
@@ -1266,7 +1329,10 @@ var matchers = /*#__PURE__*/Object.freeze({
 	hasLength: hasLength,
 	isEmpty: isEmpty,
 	contains: contains,
+	isListOf: isListOf,
 	hasProperty: hasProperty,
+	hasBeenCalled: hasBeenCalled,
+	hasBeenCalledWith: hasBeenCalledWith,
 	toEqual: equals,
 	toBe: same,
 	toBeTruthy: isTruthy,
@@ -1280,7 +1346,9 @@ var matchers = /*#__PURE__*/Object.freeze({
 	toBeLessThanOrEqual: isLessThanOrEqual,
 	toHaveLength: hasLength,
 	toContain: contains,
-	toHaveProperty: hasProperty
+	toHaveProperty: hasProperty,
+	toHaveBeenCalled: hasBeenCalled,
+	toHaveBeenCalledWith: hasBeenCalledWith
 });
 
 const FLUENT_MATCHERS = Symbol();
@@ -1642,6 +1710,168 @@ var retry = ({ order = -2 } = {}) => (builder) => {
 	}, { order });
 };
 
+const ACTIONS = Symbol();
+
+class MockAction {
+	constructor(mock) {
+		this.mock = mock;
+		this.argsMatcher = null;
+		this.limit = Number.POSITIVE_INFINITY;
+		this.state = { matches: 0 };
+		this.fn = null;
+
+		if (mock.original) {
+			this.thenCallThrough = this.then.bind(this, mock.original);
+		}
+	}
+
+	with(...expectedArgs) {
+		this.argsMatcher = isListOf(...expectedArgs);
+		return this;
+	}
+
+	once() {
+		return this.times(1);
+	}
+
+	times(n) {
+		this.limit = n;
+		return this;
+	}
+
+	then(fn) {
+		if (typeof fn !== 'function') {
+			throw new Error('Invalid mock action');
+		}
+		this.fn = fn;
+		Object.freeze(this);
+		this.mock[ACTIONS].push(this);
+		return this.mock;
+	}
+
+	thenReturn(value) {
+		return this.then(() => value);
+	}
+
+	thenResolve(value) {
+		return this.thenReturn(Promise.resolve(value));
+	}
+
+	thenReject(value) {
+		return this.thenReturn(Promise.reject(value));
+	}
+
+	thenThrow(error) {
+		return this.then(() => {
+			throw error;
+		});
+	}
+
+	_check(args) {
+		if (this.state.matches >= this.limit) {
+			return null;
+		}
+		try {
+			if (this.argsMatcher?.(args)?.pass !== false) {
+				this.state.matches++;
+				return this.fn;
+			}
+		} catch (ignore) {
+		}
+		return null;
+	}
+}
+
+function mockFunction(name, original) {
+	if (original !== undefined && typeof original !== 'function') {
+		throw new Error('Invalid call to mock() - bad original function');
+	}
+	const actions = [];
+	const invocations = [];
+	const mock = {
+		[name]: (...args) => {
+			invocations.push({ arguments: args, stack: new Error().stack });
+			for (const action of actions) {
+				const fn = action._check(args);
+				if (fn) {
+					return fn(...args);
+				}
+			}
+			return original?.(...args);
+		},
+	};
+	const fn = mock[name];
+	fn.original = original;
+	fn.invocations = invocations;
+	fn[ACTIONS] = actions;
+	fn.whenCalled = () => new MockAction(fn);
+	fn.whenCalledNext = () => fn.whenCalled().once();
+	fn.whenCalledWith = (...args) => fn.whenCalled().with(...args);
+	fn.returning = (value) => fn.whenCalled().thenReturn(value);
+	fn.throwing = (error) => fn.whenCalled().thenThrow(error);
+	fn.reset = () => {
+		invocations.length = 0;
+		actions.length = 0;
+		return fn;
+	};
+	return fn;
+}
+
+function mockMethod(object, method) {
+	const original = object[method];
+	if (typeof original !== 'function') {
+		throw new Error(`Cannot mock ${print(method)} as it is not a function`);
+	}
+	if (original[ACTIONS]) {
+		throw new Error(`Cannot mock ${print(method)} as it is already mocked`);
+	}
+	const fn = mockFunction(method, original.bind(object));
+	fn.revert = () => {
+		fn.reset();
+		object[method] = original;
+		fn.revert = () => undefined;
+	};
+	object[method] = fn;
+	return fn;
+}
+
+function mock(a, ...rest) {
+	if (typeof a === 'object' && a) {
+		return mockMethod(a, ...rest);
+	} else if (typeof a === 'function') {
+		return mockFunction(a.name, a, ...rest);
+	} else if (typeof a === 'string' || a === undefined) {
+		return mockFunction(a || 'mock function', ...rest);
+	} else {
+		throw new Error('Invalid call to mock()');
+	}
+}
+
+const MOCK_SCOPE = new StackScope('MOCK');
+
+var scopedMock = () => (builder) => {
+	builder.addGlobals({
+		mock(...args) {
+			const fn = mock(...args);
+			if (fn.revert) {
+				MOCK_SCOPE.get()?.push(fn);
+			}
+			return fn;
+		},
+	});
+
+	builder.addRunInterceptor(async (next) => {
+		const mockedMethods = [];
+		try {
+			await MOCK_SCOPE.run(mockedMethods, next);
+		} finally {
+			for (const mock of mockedMethods) {
+				mock.revert();
+			}
+		}
+	});
+};
+
 var stopAtFirstFailure = () => (builder) => {
 	builder.addRunCondition((_, result, node) => !(
 		node.parent &&
@@ -1697,7 +1927,7 @@ var timeout = ({ order = 1 } = {}) => (builder) => {
 	}, { order });
 };
 
-var index$2 = /*#__PURE__*/Object.freeze({
+var index$3 = /*#__PURE__*/Object.freeze({
 	__proto__: null,
 	describe: describe,
 	expect: expect,
@@ -1708,6 +1938,7 @@ var index$2 = /*#__PURE__*/Object.freeze({
 	outputCaptor: outputCaptor,
 	repeat: repeat,
 	retry: retry,
+	scopedMock: scopedMock,
 	stopAtFirstFailure: stopAtFirstFailure,
 	test: test,
 	timeout: timeout
@@ -1757,6 +1988,11 @@ class StaticResult {
 		this.getCurrentSummary = () => built.summary;
 	}
 }
+
+var index$2 = /*#__PURE__*/Object.freeze({
+	__proto__: null,
+	mock: mock
+});
 
 class Writer {
 	constructor(writer, forceTTY = null) {
@@ -1968,10 +2204,11 @@ function standardRunner() {
 		.addPlugin(outputCaptor())
 		.addPlugin(repeat())
 		.addPlugin(retry())
+		.addPlugin(scopedMock())
 		.addPlugin(stopAtFirstFailure())
 		.addPlugin(test())
 		.addPlugin(test('it'))
 		.addPlugin(timeout());
 }
 
-export { AbstractRunner, ExitHook, ParallelRunner, Runner, TestAssertionError, TestAssumptionError, matchers, index$1 as outputs, index$2 as plugins, index as reporters, setIdNamespace, standardRunner };
+export { AbstractRunner, ExitHook, ParallelRunner, Runner, TestAssertionError, TestAssumptionError, index$2 as helpers, matchers, index$1 as outputs, index$3 as plugins, index as reporters, setIdNamespace, standardRunner };

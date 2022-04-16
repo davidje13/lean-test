@@ -67,3 +67,21 @@ export const contains = (sub) => (actual) => {
 		return { pass: false, message: `Expected to contain ${print(sub)}, but got ${print(actual)}.` };
 	}
 };
+
+export const isListOf = (...items) => (actual) => {
+	if (!Array.isArray(actual)) {
+		return { pass: false, message: `Expected to contain ${print(items)}, but got non-collection type ${print(actual)}.` };
+	}
+
+	if (actual.length !== items.length) {
+		return { pass: false, message: `Expected to contain ${print(items)}, but got ${print(actual)}.` };
+	}
+
+	for (let i = 0; i < items.length; ++i) {
+		const result = delegateMatcher(items[i], actual[i], `item ${i + 1}`);
+		if (!result.pass) {
+			return result;
+		}
+	}
+	return { pass: true, message: `Expected not to contain ${print(items)}, but did.` };
+};
