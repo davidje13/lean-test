@@ -24,6 +24,7 @@ const argparse = new ArgumentParser({
 	pathsExclude: { names: ['exclude', 'x'], type: 'set', default: ['**/node_modules', '**/.*'] },
 	target: { names: ['target', 't'], env: 'TARGET', type: 'set', default: ['node'], mapping: targets },
 	colour: { names: ['colour', 'color'], env: 'OUTPUT_COLOUR', type: 'boolean', default: null },
+	importMap: { names: ['import-map', 'm'], env: 'IMPORT_MAP', type: 'boolean', default: false },
 	port: { names: ['port'], env: 'TESTRUNNER_PORT', type: 'int', default: 0 },
 	host: { names: ['host'], env: 'TESTRUNNER_HOST', type: 'string', default: '127.0.0.1' },
 	scan: { names: ['scan', null], type: 'set', default: ['.'] }

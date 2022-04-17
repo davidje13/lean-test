@@ -424,10 +424,10 @@ class EventListener {
 const CHARSET = '; charset=utf-8';
 
 class Server {
-	constructor(index, postListener, directories) {
+	constructor(index, postListener, handlers) {
 		this.index = index;
 		this.postListener = postListener;
-		this.directories = directories;
+		this.handlers = handlers.filter((h) => h);
 		this.mimes = new Map([
 			['js', 'text/javascript'],
 			['mjs', 'text/javascript'],
@@ -444,8 +444,9 @@ class Server {
 		this.server = createServer(this._handleRequest.bind(this));
 	}
 
-	getContentType(ext) {
-		return (this.mimes.get(ext.toLowerCase()) || 'text/plain') + CHARSET;
+	getContentType(path) {
+		const ext = path.substr(path.lastIndexOf('.') + 1).toLowerCase();
+		return (this.mimes.get(ext) || 'text/plain') + CHARSET;
 	}
 
 	async _handleRequest(req, res) {
@@ -469,21 +470,9 @@ class Server {
 			if (url.includes('..')) {
 				throw new HttpError(400, 'Invalid resource path');
 			}
-			for (const [base, dir] of this.directories) {
-				if (url.startsWith(base)) {
-					const path = resolve(dir, url.substr(base.length));
-					if (!path.startsWith(dir)) {
-						throw new HttpError(400, 'Invalid resource path');
-					}
-					try {
-						const data = await readFile(path);
-						const ext = path.substr(path.lastIndexOf('.') + 1);
-						res.setHeader('Content-Type', this.getContentType(ext));
-						res.end(data);
-						return;
-					} catch (e) {
-						throw new HttpError(404, 'Not Found');
-					}
+			for (const handler of this.handlers) {
+				if (await handler(this, url, res)) {
+					return;
 				}
 			}
 			throw new HttpError(404, 'Not Found');
@@ -500,6 +489,16 @@ class Server {
 			res.statusCode = status;
 			res.setHeader('Content-Type', this.getContentType('txt'));
 			res.end(message + '\n');
+		}
+	}
+
+	async sendFile(path, res) {
+		try {
+			const data = await readFile(path);
+			res.setHeader('Content-Type', this.getContentType(path));
+			res.end(data);
+		} catch (e) {
+			throw new HttpError(404, 'Not Found');
 		}
 	}
 
@@ -538,12 +537,26 @@ class Server {
 	}
 }
 
+Server.directory = (base, dir) => async (server, url, res) => {
+	if (!url.startsWith(base)) {
+		return false;
+	}
+	const path = resolve(dir, url.substr(base.length));
+	if (!path.startsWith(dir)) {
+		throw new HttpError(400, 'Invalid resource path');
+	}
+	await server.sendFile(path, res);
+	return true;
+};
+
 class HttpError extends Error {
 	constructor(status, message) {
 		super(message);
 		this.status = status;
 	}
 }
+
+Server.HttpError = HttpError;
 
 class ActiveTestTracker {
 	constructor() {
@@ -574,8 +587,95 @@ class ActiveTestTracker {
 	}
 }
 
+const MARKER = '.import-map-resolve';
+
+class ImportMap {
+	constructor(basePath) {
+		this.basePath = basePath;
+		this.importMap = null;
+	}
+
+	async buildImportMap() {
+		if (this.importMap === null) {
+			this.importMap = await buildNodeModulesImportMap(scanNodeModules(this.basePath, '/'));
+		}
+		return this.importMap;
+	}
+
+	async resolve(path) {
+		const parts = path.split('/');
+		const mark = parts.indexOf(MARKER);
+		if (mark === -1) {
+			return null;
+		}
+		const prefix = parts.slice(0, mark);
+		const suffix = parts.slice(mark + 1);
+		// TODO: this could also support finding file extension if omitted,
+		// and using package.json config (main / module / etc.)
+		if (!suffix.length) {
+			suffix.push('index.mjs');
+		}
+		return join(this.basePath, ...prefix, ...suffix);
+	}
+}
+
+async function* scanNodeModules(dir, scope) {
+	const nodeModules = join(dir, 'node_modules');
+	const entries = await readdir(nodeModules, { withFileTypes: true }).catch(() => null);
+	if (!entries) {
+		return;
+	}
+	for (const entry of entries) {
+		if (entry.isDirectory() && !entry.name.startsWith('.')) {
+			const name = entry.name;
+			const sub = join(nodeModules, name);
+			const subScope = `${scope}node_modules/${name}/`; // always use '/' for import map
+			yield { name, scope, subScope };
+			yield* scanNodeModules(sub, subScope);
+		}
+	}
+}
+
+//async function* scanAllParentNodeModules(dir, scope) {
+//	const seen = new Set();
+//	for (let abs = await realpath(dir); abs && !seen.has(abs); abs = dirname(abs)) {
+//		seen.add(abs);
+//		yield* scanNodeModules(abs, scope);
+//	}
+//}
+
+async function buildNodeModulesImportMap(items) {
+	const allScopes = {};
+	for await (const { name, scope, subScope } of items) {
+		const scoped = emplace(allScopes, scope, {});
+		scoped[name] = subScope + MARKER;
+		scoped[name + '/'] = subScope + MARKER + '/';
+	}
+	const { '/': imports, ...scopes } = allScopes;
+	return { imports: imports ?? {}, scopes };
+}
+
+function emplace(o, key, v) {
+	if (Object.prototype.hasOwnProperty.call(o, key)) {
+		return o[key];
+	}
+	o[key] = v;
+	return v;
+}
+
 const INITIAL_CONNECT_TIMEOUT = 30000;
 const PING_TIMEOUT = 2000;
+
+const handleMappedImport = (importMap) => async (server, url, res) => {
+	const path = await importMap.resolve(url.substr(1)).catch(() => {
+		throw new Server.HttpError(404, 'Not Found');
+	});
+	if (path === null) {
+		return false;
+	}
+	await server.sendFile(path, res);
+	return true;
+};
 
 class HttpServerRunner extends AbstractRunner {
 	constructor({ port, host, ...browserConfig }, paths) {
@@ -596,10 +696,12 @@ class HttpServerRunner extends AbstractRunner {
 		const selfPath = dirname(await realpath(process.argv[1]));
 		const basePath = process.cwd();
 
-		const index = await buildIndex(this.browserConfig, this.paths, basePath);
+		const importMap = this.browserConfig.importMap ? new ImportMap(basePath) : null;
+		const index = await buildIndex(this.browserConfig, this.paths, basePath, importMap);
 		const server = new Server(index, sharedState[HttpServerRunner.POST_LISTENER].handle, [
-			['/.lean-test/', resolve(selfPath, '..')],
-			['/', basePath],
+			Server.directory('/.lean-test/', resolve(selfPath, '..')),
+			importMap && handleMappedImport(importMap),
+			Server.directory('/', basePath),
 		]);
 		await server.listen(Number(this.port), this.host);
 		sharedState[HttpServerRunner.SERVER] = server;
@@ -666,6 +768,10 @@ class HttpServerRunner extends AbstractRunner {
 						clearInterval(checkPing);
 						reject(new DisconnectError(`browser error: ${event.error}`));
 						break;
+					case 'browser-unsupported':
+						clearInterval(checkPing);
+						reject(new UnsupportedError(event.error));
+						break;
 					case 'browser-unload':
 						clearInterval(checkPing);
 						reject(new DisconnectError(`test page closed (did a test change window.location?)`));
@@ -676,6 +782,9 @@ class HttpServerRunner extends AbstractRunner {
 				}
 			});
 		}).catch((e) => {
+			if (e instanceof UnsupportedError) {
+				throw e;
+			}
 			if (e instanceof DisconnectError) {
 				throw new Error(`Browser disconnected: ${e.message}\nActive tests:\n${tracker.get().map((p) => '- ' + p.join(' -> ')).join('\n') || 'none'}\n`);
 			}
@@ -695,6 +804,7 @@ const INDEX = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <title>Lean Test Runner - loading</title>
+/*IMPORT_MAP*/
 <script type="module">
 import run from '/.lean-test/browser-runtime.mjs';
 const id = window.location.hash.substr(1);
@@ -705,14 +815,27 @@ run(id, /*CONFIG*/, /*SUITES*/).then(() => window.close());
 <body></body>
 </html>`;
 
-async function buildIndex(config, paths, basePath) {
+async function buildIndex(config, paths, basePath, importMap) {
 	const suites = [];
 	for await (const path of paths) {
 		suites.push([path.relative, '/' + relative(basePath, path.path)]);
 	}
+	const importMapScript = importMap ? (
+		'<script type="importmap">' +
+		JSON.stringify(await importMap.buildImportMap()) +
+		'</script>'
+	) : '';
 	return INDEX
+		.replace('/*IMPORT_MAP*/', importMapScript)
 		.replace('/*CONFIG*/', JSON.stringify(config))
 		.replace('/*SUITES*/', JSON.stringify(suites));
+}
+
+class UnsupportedError extends Error {
+	constructor(message) {
+		super(message);
+		this.skipFrames = Number.POSITIVE_INFINITY;
+	}
 }
 
 class DisconnectError extends Error {
@@ -984,6 +1107,7 @@ const argparse = new ArgumentParser({
 	pathsExclude: { names: ['exclude', 'x'], type: 'set', default: ['**/node_modules', '**/.*'] },
 	target: { names: ['target', 't'], env: 'TARGET', type: 'set', default: ['node'], mapping: targets },
 	colour: { names: ['colour', 'color'], env: 'OUTPUT_COLOUR', type: 'boolean', default: null },
+	importMap: { names: ['import-map', 'm'], env: 'IMPORT_MAP', type: 'boolean', default: false },
 	port: { names: ['port'], env: 'TESTRUNNER_PORT', type: 'int', default: 0 },
 	host: { names: ['host'], env: 'TESTRUNNER_HOST', type: 'string', default: '127.0.0.1' },
 	scan: { names: ['scan', null], type: 'set', default: ['.'] }

@@ -502,6 +502,15 @@ The `lean-test` executable can be configured in various ways:
 	different computer on the same network (e.g. by specifying `0.0.0.0` to make it
 	available over the network).
 
+- `--import-map` / environment `IMPORT_MAP=true`:<br>
+  Generates an [import map](https://github.com/WICG/import-maps) for `node_modules`
+	imports. This only takes effect if the tests are running in a browser.
+	This allows non-relative imports like `import foo from 'foo';`, which will be
+	resolved by looking in `node_modules`, which means some projects can be tested
+	without needing a compilation / transpilation stage.
+	Note that import maps are currently only supported by Chrome, but Firefox is also
+	considering implementing them.
+
 - `--parallel-suites` / `--parallel` / `-p` / environment `PARALLEL_SUITES=true`:<br>
 	Runs test suites in parallel. This is generally recommended unless the code being
 	tested may cause tests in different files to interfere with each other (e.g. uses

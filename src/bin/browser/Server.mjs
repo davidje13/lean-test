@@ -5,10 +5,10 @@ import { createServer } from 'http';
 const CHARSET = '; charset=utf-8';
 
 export default class Server {
-	constructor(index, postListener, directories) {
+	constructor(index, postListener, handlers) {
 		this.index = index;
 		this.postListener = postListener;
-		this.directories = directories;
+		this.handlers = handlers.filter((h) => h);
 		this.mimes = new Map([
 			['js', 'text/javascript'],
 			['mjs', 'text/javascript'],
@@ -25,8 +25,9 @@ export default class Server {
 		this.server = createServer(this._handleRequest.bind(this));
 	}
 
-	getContentType(ext) {
-		return (this.mimes.get(ext.toLowerCase()) || 'text/plain') + CHARSET;
+	getContentType(path) {
+		const ext = path.substr(path.lastIndexOf('.') + 1).toLowerCase();
+		return (this.mimes.get(ext) || 'text/plain') + CHARSET;
 	}
 
 	async _handleRequest(req, res) {
@@ -50,21 +51,9 @@ export default class Server {
 			if (url.includes('..')) {
 				throw new HttpError(400, 'Invalid resource path');
 			}
-			for (const [base, dir] of this.directories) {
-				if (url.startsWith(base)) {
-					const path = resolve(dir, url.substr(base.length));
-					if (!path.startsWith(dir)) {
-						throw new HttpError(400, 'Invalid resource path');
-					}
-					try {
-						const data = await readFile(path);
-						const ext = path.substr(path.lastIndexOf('.') + 1);
-						res.setHeader('Content-Type', this.getContentType(ext));
-						res.end(data);
-						return;
-					} catch (e) {
-						throw new HttpError(404, 'Not Found');
-					}
+			for (const handler of this.handlers) {
+				if (await handler(this, url, res)) {
+					return;
 				}
 			}
 			throw new HttpError(404, 'Not Found');
@@ -81,6 +70,16 @@ export default class Server {
 			res.statusCode = status;
 			res.setHeader('Content-Type', this.getContentType('txt'));
 			res.end(message + '\n');
+		}
+	}
+
+	async sendFile(path, res) {
+		try {
+			const data = await readFile(path);
+			res.setHeader('Content-Type', this.getContentType(path));
+			res.end(data);
+		} catch (e) {
+			throw new HttpError(404, 'Not Found');
 		}
 	}
 
@@ -119,9 +118,23 @@ export default class Server {
 	}
 }
 
+Server.directory = (base, dir) => async (server, url, res) => {
+	if (!url.startsWith(base)) {
+		return false;
+	}
+	const path = resolve(dir, url.substr(base.length));
+	if (!path.startsWith(dir)) {
+		throw new HttpError(400, 'Invalid resource path');
+	}
+	await server.sendFile(path, res);
+	return true;
+};
+
 class HttpError extends Error {
 	constructor(status, message) {
 		super(message);
 		this.status = status;
 	}
 }
+
+Server.HttpError = HttpError;

@@ -67,6 +67,16 @@ export default async function run(id, config, suites) {
 		keepalive: true, // allow sending in background even after page unloads
 	}));
 	eventDispatcher.invoke({ type: 'browser-connect' });
+
+	if (config.importMap && HTMLScriptElement.supports && !HTMLScriptElement.supports('importmap')) {
+		eventDispatcher.invoke({
+			type: 'browser-unsupported',
+			error: 'Browser does not support import map',
+		});
+		await eventDispatcher.wait();
+		return;
+	}
+
 	const ping = setInterval(() => eventDispatcher.invoke({ type: 'browser-ping' }), 500);
 
 	const unload = () => {
@@ -100,10 +110,10 @@ export default async function run(id, config, suites) {
 	} catch (e) {
 		window.title = `Lean Test Runner (${id}) - error`;
 		console.error(e);
-		eventDispatcher.invoke({ type: 'browser-error', error: String(error) });
+		eventDispatcher.invoke({ type: 'browser-error', error: String(e) });
 	} finally {
 		clearInterval(ping);
 		window.removeEventListener('beforeunload', unload);
+		await eventDispatcher.wait();
 	}
-	await eventDispatcher.wait();
 }

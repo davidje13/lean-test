@@ -5,9 +5,21 @@ import EventListener from './EventListener.mjs';
 import Server from './Server.mjs';
 import ActiveTestTracker from './ActiveTestTracker.mjs';
 import { AbstractRunner } from '../../lean-test.mjs';
+import ImportMap from '../filesystem/ImportMap.mjs';
 
 const INITIAL_CONNECT_TIMEOUT = 30000;
 const PING_TIMEOUT = 2000;
+
+const handleMappedImport = (importMap) => async (server, url, res) => {
+	const path = await importMap.resolve(url.substr(1)).catch(() => {
+		throw new Server.HttpError(404, 'Not Found');
+	});
+	if (path === null) {
+		return false;
+	}
+	await server.sendFile(path, res);
+	return true;
+};
 
 export default class HttpServerRunner extends AbstractRunner {
 	constructor({ port, host, ...browserConfig }, paths) {
@@ -28,10 +40,12 @@ export default class HttpServerRunner extends AbstractRunner {
 		const selfPath = dirname(await realpath(process.argv[1]));
 		const basePath = process.cwd();
 
-		const index = await buildIndex(this.browserConfig, this.paths, basePath);
+		const importMap = this.browserConfig.importMap ? new ImportMap(basePath) : null;
+		const index = await buildIndex(this.browserConfig, this.paths, basePath, importMap);
 		const server = new Server(index, sharedState[HttpServerRunner.POST_LISTENER].handle, [
-			['/.lean-test/', resolve(selfPath, '..')],
-			['/', basePath],
+			Server.directory('/.lean-test/', resolve(selfPath, '..')),
+			importMap && handleMappedImport(importMap),
+			Server.directory('/', basePath),
 		]);
 		await server.listen(Number(this.port), this.host);
 		sharedState[HttpServerRunner.SERVER] = server;
@@ -98,6 +112,10 @@ export default class HttpServerRunner extends AbstractRunner {
 						clearInterval(checkPing);
 						reject(new DisconnectError(`browser error: ${event.error}`));
 						break;
+					case 'browser-unsupported':
+						clearInterval(checkPing);
+						reject(new UnsupportedError(event.error));
+						break;
 					case 'browser-unload':
 						clearInterval(checkPing);
 						reject(new DisconnectError(`test page closed (did a test change window.location?)`));
@@ -108,6 +126,9 @@ export default class HttpServerRunner extends AbstractRunner {
 				}
 			});
 		}).catch((e) => {
+			if (e instanceof UnsupportedError) {
+				throw e;
+			}
 			if (e instanceof DisconnectError) {
 				throw new Error(`Browser disconnected: ${e.message}\nActive tests:\n${tracker.get().map((p) => '- ' + p.join(' -> ')).join('\n') || 'none'}\n`);
 			}
@@ -127,6 +148,7 @@ const INDEX = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <title>Lean Test Runner - loading</title>
+/*IMPORT_MAP*/
 <script type="module">
 import run from '/.lean-test/browser-runtime.mjs';
 const id = window.location.hash.substr(1);
@@ -137,14 +159,27 @@ run(id, /*CONFIG*/, /*SUITES*/).then(() => window.close());
 <body></body>
 </html>`;
 
-async function buildIndex(config, paths, basePath) {
+async function buildIndex(config, paths, basePath, importMap) {
 	const suites = [];
 	for await (const path of paths) {
 		suites.push([path.relative, '/' + relative(basePath, path.path)]);
 	}
+	const importMapScript = importMap ? (
+		'<script type="importmap">' +
+		JSON.stringify(await importMap.buildImportMap()) +
+		'</script>'
+	) : '';
 	return INDEX
+		.replace('/*IMPORT_MAP*/', importMapScript)
 		.replace('/*CONFIG*/', JSON.stringify(config))
 		.replace('/*SUITES*/', JSON.stringify(suites));
+}
+
+class UnsupportedError extends Error {
+	constructor(message) {
+		super(message);
+		this.skipFrames = Number.POSITIVE_INFINITY;
+	}
 }
 
 class DisconnectError extends Error {

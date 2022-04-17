@@ -16,6 +16,7 @@ results.push(...await Promise.all([
 	runIntegrationTest('basics'),
 	runIntegrationTest('reporting'),
 	runIntegrationTest('browser-broken', 'expected.txt', '--target=chrome'), // slow
+	runIntegrationTest('modules', 'expected.txt', '--target=node,chrome,firefox', '--import-map'),
 ]));
 // run separately to avoid needing multiple browser sessions for the same browser at a time on CI
 results.push(...await Promise.all([
