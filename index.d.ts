@@ -274,6 +274,10 @@ export namespace reporters {
 		constructor(output: Output);
 		report(result: Result): void;
 	}
+	class ErrorList implements Reporter {
+		constructor(output: Output);
+		report(result: Result): void;
+	}
 	class Summary implements Reporter {
 		constructor(output: Output);
 		report(result: Result): void;

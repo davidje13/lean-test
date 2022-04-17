@@ -49,12 +49,8 @@ export default class Full {
 		if (result.output && (summary.error || summary.fail)) {
 			this.output.write(this.output.blue(result.output), infoIndent);
 		}
-		result.errors.forEach((err) => {
-			this._printerr('Error: ', err, infoIndent);
-		});
-		result.failures.forEach((err) => {
-			this._printerr('Failure: ', err, infoIndent);
-		});
+		result.errors.forEach((err) => this._printerr('Error: ', err, infoIndent));
+		result.failures.forEach((err) => this._printerr('Failure: ', err, infoIndent));
 		const nextIndent = indent + (display ? '  ' : '');
 		result.children.forEach((child) => this._print(child, nextIndent));
 	}

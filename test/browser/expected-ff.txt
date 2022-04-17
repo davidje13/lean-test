@@ -35,6 +35,43 @@
 [ERRO]       with xx timeout [xx]
                Error: timeout after xx
 
+suite: browser.spec.mjs - describe: console - test: displayed if unsuccessful
+  should be seen
+
+  Failure: oops
+   at browser.spec.mjs:20:7
+
+suite: stacktrace.spec.mjs - describe: stack traces - test: fail
+  Failure: nope
+   at stacktrace.spec.mjs:9:7
+
+suite: stacktrace.spec.mjs - describe: stack traces - test: user-space function call
+  Failure: inside
+   at stacktrace.spec.mjs:14:8
+   at stacktrace.spec.mjs:16:3
+
+suite: stacktrace.spec.mjs - describe: stack traces - test: async 1
+  Failure: Expected value to equal 2, but 1 != 2.
+   at stacktrace.spec.mjs:20:9
+
+suite: stacktrace.spec.mjs - describe: stack traces - test: async 2
+  Failure: Expected value to equal 2, but 1 != 2.
+   at stacktrace.spec.mjs:25:9
+
+suite: stacktrace.spec.mjs - describe: stack traces - test: async 3
+  Failure: Expected value to equal 2, but 1 != 2.
+   at stacktrace.spec.mjs:31:9
+
+suite: stacktrace.spec.mjs - describe: stack traces - test: async fn
+  Failure: inside
+   at stacktrace.spec.mjs:37:8
+
+suite: stacktrace.spec.mjs - describe: stack traces - test: error
+  Error: nope
+
+suite: stacktrace.spec.mjs - describe: stack traces - test: timeout - with xx timeout
+  Error: timeout after xx
+
 Total:    12
 Pass:     3
 Errors:   2

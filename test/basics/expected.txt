@@ -11,6 +11,7 @@
 [FAIL]   test: records failures [xx]
            Failure: expected failure
             at test/basics/basics.spec.mjs:5:2
+[NONE]   describe: empty blocks are reported [xx]
 [FAIL] suite: repeat.spec.mjs [xx]
 [FAIL]   test: reports individual runs [xx]
 [FAIL]     repetition 1 of 3 [xx]
@@ -34,6 +35,29 @@
              Failure: expected failure
               at test/basics/retry.spec.mjs:9:3
 [PASS]     attempt 2 of 3 [xx]
+
+suite: basics.spec.mjs - describe: empty blocks are reported
+  No Tests
+
+suite: basics.spec.mjs - test: records failures
+  Failure: expected failure
+   at test/basics/basics.spec.mjs:5:2
+
+suite: repeat.spec.mjs - test: reports individual runs - repetition 1 of 3
+  Failure: expected failure
+   at test/basics/repeat.spec.mjs:5:3
+
+suite: retry.spec.mjs - test: reports individual runs - attempt 1 of 3
+  Failure: expected failure
+   at test/basics/retry.spec.mjs:2:2
+
+suite: retry.spec.mjs - test: reports individual runs - attempt 2 of 3
+  Failure: expected failure
+   at test/basics/retry.spec.mjs:2:2
+
+suite: retry.spec.mjs - test: reports individual runs - attempt 3 of 3
+  Failure: expected failure
+   at test/basics/retry.spec.mjs:2:2
 
 Total:    9
 Pass:     6

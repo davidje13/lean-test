@@ -44,6 +44,7 @@ try {
 	const liveReporter = new reporters.Dots(stderr);
 	const finalReporters = [
 		new reporters.Full(stdout),
+		new reporters.ErrorList(stdout),
 		new reporters.Summary(stdout),
 	];
 

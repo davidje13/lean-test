@@ -53,6 +53,68 @@
 [ERRO]       with xx timeout [xx]
                Error: timeout after xx
 
+suite: console.spec.mjs - describe: console - test: displayed if unsuccessful
+  should be seen
+  also seen
+  and this
+
+  Failure: oops
+   at test/reporting/console.spec.mjs:12:3
+
+suite: stacktrace.spec.mjs - describe: stack traces - test: fail
+  Failure: nope
+   at test/reporting/stacktrace.spec.mjs:13:3
+
+suite: stacktrace.spec.mjs - describe: stack traces - test: expect matcher
+  Failure: Expected value to equal 2, but 1 != 2.
+   at test/reporting/stacktrace.spec.mjs:17:3
+
+suite: stacktrace.spec.mjs - describe: stack traces - test: expect fluent
+  Failure: Expected value to equal 2, but 1 != 2.
+   at test/reporting/stacktrace.spec.mjs:21:13
+
+suite: stacktrace.spec.mjs - describe: stack traces - test: expect lambda matcher
+  Failure: Expected resolved value to equal 8, but 7 != 8.
+   at test/reporting/stacktrace.spec.mjs:25:3
+
+suite: stacktrace.spec.mjs - describe: stack traces - test: expect lambda fluent
+  Failure: Expected resolved value to equal 8, but 7 != 8.
+   at test/reporting/stacktrace.spec.mjs:29:19
+
+suite: stacktrace.spec.mjs - describe: stack traces - test: user-space function call
+  Failure: inside
+   at test/reporting/stacktrace.spec.mjs:34:4
+   at test/reporting/stacktrace.spec.mjs:36:3
+
+suite: stacktrace.spec.mjs - describe: stack traces - test: async 1
+  Failure: Expected value to equal 2, but 1 != 2.
+   at test/reporting/stacktrace.spec.mjs:40:3
+
+suite: stacktrace.spec.mjs - describe: stack traces - test: async 2
+  Failure: Expected value to equal 2, but 1 != 2.
+   at test/reporting/stacktrace.spec.mjs:45:3
+
+suite: stacktrace.spec.mjs - describe: stack traces - test: async 3
+  Failure: Expected value to equal 2, but 1 != 2.
+   at test/reporting/stacktrace.spec.mjs:51:3
+
+suite: stacktrace.spec.mjs - describe: stack traces - test: async fn
+  Failure: inside
+   at test/reporting/stacktrace.spec.mjs:57:4
+   at test/reporting/stacktrace.spec.mjs:60:3
+
+suite: stacktrace.spec.mjs - describe: stack traces - test: error
+  Error: nope
+   at test/reporting/stacktrace.spec.mjs:5:9
+
+suite: stacktrace.spec.mjs - describe: stack traces - test: multiline error
+  Error: nope
+  newline
+   at test/reporting/stacktrace.spec.mjs:9:9
+
+suite: stacktrace.spec.mjs - describe: stack traces - test: timeout - with xx timeout
+  Error: timeout after xx
+
 Total:    15
 Pass:     1
 Errors:   3

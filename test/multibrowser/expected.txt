@@ -11,6 +11,14 @@
               at basics.spec.mjs:2:8
 [PASS]     test: is firefox [xx]
 
+Google Chrome - suite: basics.spec.mjs - test: is firefox
+  Failure: not expected browser
+   at basics.spec.mjs:6:2
+
+Mozilla Firefox - suite: basics.spec.mjs - test: is chrome
+  Failure: not expected browser
+   at basics.spec.mjs:2:8
+
 Total:    4
 Pass:     2
 Errors:   0
