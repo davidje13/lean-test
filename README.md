@@ -190,6 +190,106 @@ expect(7).isSeven();
 
 Globally registers new fluent checks.
 
+### mock
+
+```javascript
+// create a mocked function
+const mockedFunc = mock();
+const namedMockFunc = mock('my mock');
+
+// spy on existing methods
+const spyLog = mock(console, 'log');
+
+// configure behaviour
+const myMock = mock()
+	.whenCalledWith(1, 'foo').thenReturn(10)
+	.whenCalledWith(greaterThan(5)).thenThrow(new Error('too much!'));
+```
+
+Creates a mock function, or spies on an existing method.
+
+Mocked functions can be configured to return specific values when invoked,
+and can be checked to see if they were called with particular arguments (see
+`hasBeenCalled` / `hasBeenCalledWith` below).
+
+The extra methods available on mocks and spies are:
+
+- `whenCalled()`:<br>
+  Begins a context for configuring behaviour when the function is called.
+	The returned object has several fluent-API methods:
+
+	- `with(...arguments)`:<br>
+	  Filters for invocations with matching arguments (can be literal values,
+		matchers, or a combination). By default, the arguments are not checked.
+
+	- `times(n)`:<br>
+	  Limits the current configuration to a fixed number of invocations, after
+		which it is removed. This can be useful for configuring return values which
+		change in subsequent invocations. By default, there is no limit.
+
+	- `once()`:<br>
+	  Shorthand for `.times(1)`.
+
+	- `then(func)`:<br>
+	  Configures the mock to invoke the given function when an invocation matches
+		the current configuration. The function will be called with all provided
+		arguments, and its return value will be returned, so this acts as a
+		pass-through.
+		As a convenience, this returns the original mock function, so multiple
+		configurations can be chained easily.
+
+	- `thenReturn(value)`:<br>
+	  Shorthand for `.then(() => value)`
+
+	- `thenThrow(error)`:<br>
+	  Shorthand for `.then(() => { throw error; })`
+
+	- `thenResolve(value)`:<br>
+	  Shorthand for `.thenReturn(Promise.resolve(value))`
+
+	- `thenReject(error)`:<br>
+	  Shorthand for `.thenReturn(Promise.reject(error))`
+
+	- `thenCallThrough()`:<br>
+	  Configures the spy to invoke the original method when an invocation matches
+		the current configuration. This is the default for spies.
+		As a convenience, this returns the original mock function, so multiple
+		configurations can be chained easily.
+
+- `whenCalledWith(...arguments)`:<br>
+  Shorthand for `.whenCalled().with(...arguments)`.
+
+- `whenCalledNext()`:<br>
+  Shorthand for `.whenCalled().times(1)`.
+
+- `returning(value)`:<br>
+  Shorthand for `.whenCalled().thenReturn(value)`.
+
+- `throwing(error)`:<br>
+  Shorthand for `.whenCalled().thenThrow(error)`.
+
+- `reset()`:<br>
+  Resets the mock configuration and recorded invocations.
+
+- `revert()`:<br>
+  Removes the spy, returning the original function (note that this only exists
+	for spies; it does not exist for mock functions).
+
+If multiple `whenCalled*` configurations match an invocation, the first one is
+chosen. For example:
+
+```javascript
+const fn = mock('my mocked function')
+	.whenCalledWith(greaterThan(2)).once().thenReturn('a')
+	.whenCalledWith(lessThan(6)).thenReturn('b')
+	.whenCalled().thenReturn('c');
+
+fn(1); // b ('b' and 'c' match, so first is chosen)
+fn(4); // a (all match, so first is chosen)
+fn(4); // b ('a' has been used and was configured to only apply once)
+fn(8); // c
+```
+
 ### getStdout / setStderr
 
 ```javascript
