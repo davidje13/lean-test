@@ -1627,7 +1627,7 @@ function getCapturedOutput() {
 function combineOutput(parts, binary) {
 	if (IS_BROWSER) {
 		if (binary) {
-			throw new Error('cannot get output in binary format in browser environment');
+			throw new Error('Browser environment cannot get output in binary format');
 		}
 		// This is not perfectly representative of what would be logged, but should be generally good enough for testing
 		return parts.map((i) => i.args.map(printNoQuotes).join(' ') + '\n').join('')
@@ -1640,9 +1640,15 @@ function combineOutput(parts, binary) {
 var outputCaptor = ({ order = -1 } = {}) => (builder) => {
 	builder.addGlobals({
 		getStdout(binary = false) {
+			if (IS_BROWSER) {
+				throw new Error('Browser environment has no stdout - use getOutput() instead');
+			}
 			return combineOutput(getCapturedOutput().filter((i) => (i.type === 'stdout')), binary);
 		},
 		getStderr(binary = false) {
+			if (IS_BROWSER) {
+				throw new Error('Browser environment has no stderr - use getOutput() instead');
+			}
 			return combineOutput(getCapturedOutput().filter((i) => (i.type === 'stderr')), binary);
 		},
 		getOutput(binary = false) {
