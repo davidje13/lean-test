@@ -68,4 +68,19 @@ describe('outputCaptor', {
 			});
 		});
 	},
+
+	async 'makes current combined output available to the test'() {
+		await testRunner([outputCaptor()], { pass: 1 }, (g) => {
+			g.test('test 1', async () => {
+				process.stdout.write('out 1\n');
+				process.stderr.write('err 1\n');
+				process.stdout.write('out 2\n');
+				console.log('console', 'parts');
+				const output = g.getOutput();
+				if (output !== 'out 1\nerr 1\nout 2\nconsole parts\n') {
+					throw new Error();
+				}
+			});
+		});
+	},
 });

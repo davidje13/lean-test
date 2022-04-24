@@ -141,6 +141,7 @@ export interface DiscoveryGlobals extends matchers {
 	afterAll: LifecycleFunc<LifecycleHookAfter>;
 	getStdout: GetOutput;
 	getStderr: GetOutput;
+	getOutput: GetOutput;
 	mock: typeof helpers.mock;
 }
 
@@ -405,6 +406,7 @@ declare global { // same as DiscoveryGlobals + matchers
 	const afterAll: LifecycleFunc<LifecycleHookAfter>;
 	const getStdout: GetOutput;
 	const getStderr: GetOutput;
+	const getOutput: GetOutput;
 	const mock: typeof helpers.mock;
 
 	const any: () => SyncMatcher<unknown>;

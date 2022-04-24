@@ -290,18 +290,24 @@ fn(4); // b ('a' has been used and was configured to only apply once)
 fn(8); // c
 ```
 
-### getStdout / setStderr
+### getStdout / getStderr / getOutput
 
 ```javascript
 const textStdout = getStdout();
 const textStderr = getStderr();
 const binaryValue = getStdout(true);
+
+const allOutput = getOutput();
 ```
 
 Returns the content of `stdout` / `stderr` captured from the current test so far.
+`getOutput` returns all content to both `stdout` and `stderr` in the order it was
+written.
 
-Note that these are only available when running in NodeJS. When running in a browser,
-no methods are currently available to check logged items.
+In the browser, only `getOutput()` is available, which returns all content printed
+to the console as a string. Note that the exact format of logged content is not
+guaranteed (in particular, the format of printed objects may vary and the output
+may include ANSI escape sequences for setting colours).
 
 Also note that these may not capture all content; the capturing relies on inspecting
 stack traces, which will not work inside event callbacks such as `setTimeout` etc.

@@ -23,3 +23,5 @@ export const print = (v) =>
 	(typeof v === 'symbol' || v instanceof Error) ? v.toString() :
 	typeof v === 'function' ? v :
 	JSON.stringify(v);
+
+export const printNoQuotes = (v) => (typeof v === 'string' ? v : print(v));

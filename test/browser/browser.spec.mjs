@@ -19,4 +19,9 @@ describe('console', () => {
 		console.log('should be seen');
 		fail('oops');
 	});
+
+	test('can be queried', () => {
+		console.log('output', 'parts');
+		expect(getOutput(), equals('output parts\n'));
+	});
 });

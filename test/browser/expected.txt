@@ -8,6 +8,7 @@
 
              Failure: oops
               at browser.spec.mjs:20:3
+[PASS]     test: can be queried [xx]
 [ERRO] suite: stacktrace.spec.mjs [xx]
 [ERRO]   describe: stack traces [xx]
 [ERRO]     test: error [xx]
@@ -76,8 +77,8 @@ suite: stacktrace.spec.mjs - describe: stack traces - test: error
 suite: stacktrace.spec.mjs - describe: stack traces - test: timeout - with xx timeout
   Error: timeout after xx
 
-Total:    12
-Pass:     3
+Total:    13
+Pass:     4
 Errors:   2
 Failures: 7
 Skipped:  0

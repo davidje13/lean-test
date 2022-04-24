@@ -944,6 +944,8 @@ const print = (v) =>
 	typeof v === 'function' ? v :
 	JSON.stringify(v);
 
+const printNoQuotes = (v) => (typeof v === 'string' ? v : print(v));
+
 const ANY = Symbol();
 
 const checkEquals = (expected, actual, name) => {
@@ -1612,29 +1614,40 @@ async function removeIntercept() {
 	teardowns.length = 0;
 }
 
-function getOutput(type, binary) {
+function getCapturedOutput() {
 	const target = OUTPUT_CAPTOR_SCOPE.get();
 	if (!target) {
 		const err = new Error(`Unable to resolve ${type} scope`);
 		err.skipFrames = 2;
 		throw err;
 	}
-	const all = Buffer.concat(
-		target
-			.filter((i) => (i.type === type))
-			.map((i) => i.chunk)
-	);
-	return binary ? all : all.toString('utf8');
+	return target;
+}
+
+function combineOutput(parts, binary) {
+	if (IS_BROWSER) {
+		if (binary) {
+			throw new Error('cannot get output in binary format in browser environment');
+		}
+		// This is not perfectly representative of what would be logged, but should be generally good enough for testing
+		return parts.map((i) => i.args.map(printNoQuotes).join(' ') + '\n').join('')
+	} else {
+		const all = Buffer.concat(parts.map((i) => i.chunk));
+		return binary ? all : all.toString('utf8');
+	}
 }
 
 var outputCaptor = ({ order = -1 } = {}) => (builder) => {
 	builder.addGlobals({
 		getStdout(binary = false) {
-			return getOutput('stdout', binary);
+			return combineOutput(getCapturedOutput().filter((i) => (i.type === 'stdout')), binary);
 		},
 		getStderr(binary = false) {
-			return getOutput('stderr', binary);
+			return combineOutput(getCapturedOutput().filter((i) => (i.type === 'stderr')), binary);
 		},
+		getOutput(binary = false) {
+			return combineOutput(getCapturedOutput(), binary);
+		}
 	});
 	builder.addRunInterceptor(async (next, _, result) => {
 		const target = [];
@@ -1644,12 +1657,7 @@ var outputCaptor = ({ order = -1 } = {}) => (builder) => {
 		} finally {
 			removeIntercept();
 			if (target.length) {
-				if (IS_BROWSER) {
-					// This is not perfectly representative of what would be logged, but should be generally good enough for testing
-					result.addOutput(target.map((i) => i.args.map((a) => String(a)).join(' ') + '\n').join(''));
-				} else {
-					result.addOutput(Buffer.concat(target.map((i) => i.chunk)).toString('utf8'));
-				}
+				result.addOutput(combineOutput(target, false));
 			}
 		}
 	}, { order });
