@@ -929,6 +929,16 @@ function seq(result, then) {
 
 const resolveMessage = (message) => String((typeof message === 'function' ? message() : message) || '');
 
+const actualTypeOf = (o) => {
+	if (o === null) {
+		return 'null';
+	} else if (Array.isArray(o)) {
+		return 'array';
+	} else {
+		return typeof o;
+	}
+};
+
 const print = (v) =>
 	(typeof v === 'symbol' || v instanceof Error) ? v.toString() :
 	typeof v === 'function' ? v :
@@ -961,13 +971,13 @@ function getDiff(a, b) {
 	if (a === b || (a !== a && b !== b)) {
 		return null;
 	}
-	if (typeof a !== 'object' || typeof a !== typeof b || Array.isArray(a) !== Array.isArray(b)) {
-		const simpleA = !a || typeof a !== 'object';
-		const simpleB = !b || typeof b !== 'object';
-		if (simpleA && simpleB) {
-			return `${print(a)} != ${print(b)}`;
+	if (!a || typeof a !== 'object' || actualTypeOf(a) !== actualTypeOf(b)) {
+		const labelA = print(a);
+		const labelB = print(b);
+		if (labelA === labelB) {
+			return `${labelA} (${actualTypeOf(a)}) != ${labelB} (${actualTypeOf(b)})`;
 		} else {
-			return 'different types';
+			return `${labelA} != ${labelB}`;
 		}
 	}
 	// TODO: cope with loops, improve formatting of message
@@ -1789,15 +1799,15 @@ function mockFunction(name, original) {
 	const actions = [];
 	const invocations = [];
 	const mock = {
-		[name]: (...args) => {
+		[name](...args) {
 			invocations.push({ arguments: args, stack: new Error().stack });
 			for (const action of actions) {
 				const fn = action._check(args);
 				if (fn) {
-					return fn(...args);
+					return fn.apply(this, args);
 				}
 			}
-			return original?.(...args);
+			return original?.apply(this, args);
 		},
 	};
 	const fn = mock[name];
@@ -1825,7 +1835,7 @@ function mockMethod(object, method) {
 	if (original[ACTIONS]) {
 		throw new Error(`Cannot mock ${print(method)} as it is already mocked`);
 	}
-	const fn = mockFunction(method, original.bind(object));
+	const fn = mockFunction(method, original);
 	fn.revert = () => {
 		fn.reset();
 		object[method] = original;

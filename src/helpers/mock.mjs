@@ -80,15 +80,15 @@ function mockFunction(name, original) {
 	const actions = [];
 	const invocations = [];
 	const mock = {
-		[name]: (...args) => {
+		[name](...args) {
 			invocations.push({ arguments: args, stack: new Error().stack });
 			for (const action of actions) {
 				const fn = action._check(args);
 				if (fn) {
-					return fn(...args);
+					return fn.apply(this, args);
 				}
 			}
-			return original?.(...args);
+			return original?.apply(this, args);
 		},
 	};
 	const fn = mock[name];
@@ -116,7 +116,7 @@ function mockMethod(object, method) {
 	if (original[ACTIONS]) {
 		throw new Error(`Cannot mock ${print(method)} as it is already mocked`);
 	}
-	const fn = mockFunction(method, original.bind(object));
+	const fn = mockFunction(method, original);
 	fn.revert = () => {
 		fn.reset();
 		object[method] = original;

@@ -62,6 +62,17 @@ describe('mock function', {
 		expect(captured).isListOf(1, 2);
 	},
 
+	'then includes "this" argument'() {
+		const fn = mock();
+		let captured = null;
+		fn.whenCalled().then(function () {
+			captured = this;
+		});
+		const o = {};
+		fn.apply(o);
+		expect(captured).same(o);
+	},
+
 	'returned value count can be set'() {
 		const fn = mock();
 		fn.whenCalled().times(2).thenReturn(7);
