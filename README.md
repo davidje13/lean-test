@@ -627,8 +627,13 @@ The `lean-test` executable can be configured in various ways:
 	`**/*.{spec|test}.{js|mjs|cjs|jsx}`.
 
 - `--exclude <pattern>` / `-x <pattern>`:<br>
-	Configures the exclusion pattern glob. Can be set multiple times. By default, this is
-	`**/node_modules` and `**/.*`.
+	Configures the exclusion pattern glob. Can be set multiple times.
+	Note that `**/node_modules` and `**/.*` will always be excluded unless
+	`--no-default-exclude` is specified.
+
+- `--no-default-exclude`:<br>
+	By default, `**/node_modules` and `**/.*` are always excluded. Setting this flag
+	allows them.
 
 - `--parallel-discovery` / `-P` / environment `PARALLEL_DISCOVERY=true`:<br>
 	Runs test discovery in parallel. This may be slightly faster than the default

@@ -1104,7 +1104,8 @@ const argparse = new ArgumentParser({
 	parallelDiscovery: { names: ['parallel-discovery', 'P'], env: 'PARALLEL_DISCOVERY', type: 'boolean', default: false },
 	parallelSuites: { names: ['parallel-suites', 'parallel', 'p'], env: 'PARALLEL_SUITES', type: 'boolean', default: false },
 	pathsInclude: { names: ['include', 'i'], type: 'set', default: ['**/*.{spec|test}.{js|mjs|cjs|jsx}'] },
-	pathsExclude: { names: ['exclude', 'x'], type: 'set', default: ['**/node_modules', '**/.*'] },
+	pathsExclude: { names: ['exclude', 'x'], type: 'set', default: [] },
+	noDefaultExclude: { names: ['no-default-exclude'], type: 'boolean', default: false },
 	target: { names: ['target', 't'], env: 'TARGET', type: 'set', default: ['node'], mapping: targets },
 	colour: { names: ['colour', 'color'], env: 'OUTPUT_COLOUR', type: 'boolean', default: null },
 	importMap: { names: ['import-map', 'm'], env: 'IMPORT_MAP', type: 'boolean', default: false },
@@ -1116,8 +1117,9 @@ const argparse = new ArgumentParser({
 try {
 	const config = argparse.parse(process.env, process.argv);
 
+	const exclusion = [...config.pathsExclude, ...(config.noDefaultExclude ? [] : ['**/node_modules', '**/.*'])];
 	const scanDirs = config.scan.map((path) => resolve(process.cwd(), path));
-	const paths = await asyncListToSync(findPathsMatching(scanDirs, config.pathsInclude, config.pathsExclude));
+	const paths = await asyncListToSync(findPathsMatching(scanDirs, config.pathsInclude, exclusion));
 
 	const forceTTY = (
 		config.colour ??
