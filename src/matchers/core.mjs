@@ -1,5 +1,5 @@
 import { seq, print } from '../utils.mjs';
-import { checkEquals, delegateMatcher, ANY } from './checkEquals.mjs';
+import { checkEquals, delegateMatcher, ANY, isIdentical } from './checkEquals.mjs';
 
 export const any = () => (actual) => ({
 	pass: true,
@@ -15,7 +15,7 @@ export const withMessage = (message, matcher) => (...args) =>
 export const equals = (expected) => (actual) => checkEquals(expected, actual, 'value');
 
 export const same = (expected) => (actual) => {
-	if (expected === actual) {
+	if (isIdentical(expected, actual)) {
 		return { pass: true, message: `Expected value not to be ${print(expected)}, but was.` };
 	}
 	const equalResult = checkEquals(expected, actual, 'value');

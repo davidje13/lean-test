@@ -1,150 +1,296 @@
 import { print } from '../utils.mjs';
 import * as matchers from './core.mjs';
 
+const primitiveValueFactories = [
+	() => +0,
+	() => +1,
+	() => -0,
+	() => -1,
+	() => 0 / 0,
+	() => 1 / 0,
+	() => -1 / 0,
+	() => 0.1,
+	() => 7,
+	() => Math.PI,
+	() => 0n,
+	() => 10n,
+	() => null,
+	() => undefined,
+	() => true,
+	() => false,
+	() => 'foo',
+	() => '',
+	() => '0',
+	() => 'NaN',
+	() => 'null',
+	() => 'undefined',
+];
+
+const COMMON_SYMBOL = Symbol('key');
+
+const standardValueFactories = [
+	() => ({}),
+	() => ({ foo: 'bar' }),
+	() => ({ foo: 'zag' }),
+	() => ({ foo: 'bar', zig: 'zag' }),
+	() => ({ foo: { bar: 'baz' } }),
+	() => ({ foo: { bar: 'baz', zig: 'zag' } }),
+	() => ({ foo: { zag: 'baz' } }),
+	() => ({ foo: { bar: 'zag' } }),
+	() => ({ [COMMON_SYMBOL]: 'foo' }),
+	() => ({ [COMMON_SYMBOL]: 'bar' }),
+	() => ({ 0: 0 }),
+	() => ({ 0: 0, length: 1 }),
+	() => ({ length: 0, size: 0, foo: 'bar' }),
+	() => ({ length: 0 }),
+	() => ({ size: 0 }),
+	() => [],
+	() => [0],
+	() => [undefined],
+	() => [, undefined],
+	() => [0, , ],
+	() => new Array(1),
+	() => Object.assign([0], { foo: 'bar' }),
+	() => Object.assign([0], { 2: 'bar' }),
+	() => Object.assign([0], { '-1': 'bar' }),
+	() => Object.assign([0], { [COMMON_SYMBOL]: 'a' }),
+	() => Object.assign([0], { [COMMON_SYMBOL]: 'b' }),
+	() => ['foo'],
+	() => ['foo', 'bar'],
+	() => ['bar', 'foo'],
+	() => /foo/,
+	() => /bar/,
+	() => /foo/i,
+	() => new Date(),
+	() => new Date(10),
+	() => new Map(),
+	() => new Map([['a', 'x']]),
+	() => Object.assign(new Map(), { a: 'x' }),
+	() => new Map([['b', 'x']]),
+	() => new Map([['a', 'y']]),
+	() => new Map([['a', 'x'], ['b', 'y']]),
+	() => new Map([['a', 'y'], ['b', 'x']]),
+	() => new Set(),
+	() => new Set(['a']),
+	() => new Set(['b']),
+	() => new Set(['a', 'b']),
+	() => new Error('oops'),
+	() => new Error('nope'),
+];
+
+const uniqueValueFactories = [
+	() => Symbol(),
+	() => Symbol('foo'),
+	() => ({ [Symbol('unique')]: 'bar' }),
+];
+
+const allValueFactories = [
+	...primitiveValueFactories,
+	...standardValueFactories,
+	...uniqueValueFactories,
+];
+
 describe('equals', {
-	'returns true for equal primitives'() {
-		const result = matchers.equals(7)(7);
-		if (result.pass !== true) {
-			throw new Error('Expected success, but failed');
+	'returns true for values compared with themself'() {
+		for (const factory of allValueFactories) {
+			const item = factory();
+			if (matchers.equals(item)(item).pass !== true) {
+				throw new Error(`Expected ${print(item)} to equal itself, but did not`);
+			}
 		}
 	},
 
-	'returns false for mismatched primitives'() {
-		const result = matchers.equals(7)(8);
-		if (result.pass !== false) {
-			throw new Error('Expected failure, but succeeded');
+	'returns false for values compared with different values'() {
+		for (const factoryA of allValueFactories) {
+			for (const factoryB of allValueFactories) {
+				if (factoryA === factoryB) {
+					continue;
+				}
+				const itemA = factoryA();
+				const itemB = factoryB();
+				if (matchers.equals(itemA)(itemB).pass !== false) {
+					throw new Error(`Expected ${print(itemA)} not to equal ${print(itemB)}, but did`);
+				}
+			}
 		}
 	},
 
-	'performs strict comparison'() {
-		const result = matchers.equals(7)('7');
-		if (result.pass !== false) {
-			throw new Error('Expected failure, but succeeded');
+	'returns true for standard values compared with an equivalent copy'() {
+		for (const factory of [...primitiveValueFactories, ...standardValueFactories]) {
+			const item = factory();
+			if (matchers.equals(item)(factory()).pass !== true) {
+				throw new Error(`Expected ${print(item)} to equal its copy, but did not`);
+			}
 		}
 	},
 
-	'returns true for identical objects'() {
-		const object = { foo: 'bar', zig: 'zag' };
-		const result = matchers.equals(object)(object);
-		if (result.pass !== true) {
-			throw new Error('Expected success, but failed');
+	'returns false for unique values compared with an equivalent copy'() {
+		for (const factory of uniqueValueFactories) {
+			const item = factory();
+			if (matchers.equals(item)(factory()).pass !== false) {
+				throw new Error(`Expected ${print(item)} not to equal its copy, but did`);
+			}
 		}
 	},
 
-	'returns true for equal objects'() {
-		const object1 = { foo: 'bar', zig: 'zag' };
-		const object2 = { foo: 'bar', zig: 'zag' };
-		const result = matchers.equals(object1)(object2);
-		if (result.pass !== true) {
-			throw new Error('Expected success, but failed');
-		}
+	'returns true for equivalent sets'() {
+		const s1 = new Set(['a', 'b']);
+		const s2 = new Set(['b', 'a']);
+		const result = matchers.equals(s1)(s2);
+		expect(result.pass).isTrue();
 	},
 
-	'returns false for mismatched objects'() {
-		const object1 = { foo: 'bar', zig: 'zag' };
-		const object2 = { foo: 'zag' };
-		const result = matchers.equals(object1)(object2);
-		if (result.pass !== false) {
-			throw new Error('Expected failure, but succeeded');
-		}
+	'produces nice messages for classes'() {
+		class Foo {}
+		class Bar {}
+		const s1 = new Foo();
+		const s2 = new Bar();
+		const result = matchers.equals(s1)(s2);
+		expect(result.message).equals('Expected value to equal Foo {}, but Bar {} != Foo {}.');
 	},
 
-	'compares symbols'() {
+	'produces nice messages for symbols'() {
 		const s1 = Symbol();
-		const s2 = Symbol();
-		if (matchers.equals(s1)(s1).pass !== true) {
-			throw new Error('Expected syccess, but failed');
-		}
-		if (matchers.equals(s1)(s2).pass !== false) {
-			throw new Error('Expected failure, but succeeded');
-		}
+		const s2 = Symbol('hi');
+		const result = matchers.equals(s1)(s2);
+		expect(result.message).equals('Expected value to equal Symbol(), but Symbol(hi) != Symbol().');
 	},
 
-	'returns true for NaN == NaN'() {
-		const result = matchers.equals(0 / 0)(Number.NaN);
-		if (result.pass !== true) {
-			throw new Error('Expected success, but failed');
-		}
+	'explains dictionary mismatch'() {
+		const a = { foo: 'bar' };
+		const b = { bar: 'foo' };
+		const result = matchers.equals(a)(b);
+		expect(result.pass).isFalse();
+		expect(result.message).equals('Expected value to equal {foo: "bar"}, but extra "bar" and missing "foo".');
 	},
 
-	'returns true for +0 == +0'() {
-		const result = matchers.equals(0)(0);
-		if (result.pass !== true) {
-			throw new Error('Expected success, but failed');
-		}
+	'explains Set mismatch'() {
+		const a = new Set(['a', 'b']);
+		const b = new Set(['b', 'c']);
+		const result = matchers.equals(a)(b);
+		expect(result.pass).isFalse();
+		expect(result.message).equals('Expected value to equal Set("a", "b"), but extra "c" and missing "a".');
+	},
+});
+
+describe('equals with recursion', {
+	'considers equivalent recursive structures to be equal'() {
+		const a = {};
+		a.foo = a;
+		const b = {};
+		b.foo = b;
+		const result = matchers.equals(a)(b);
+		expect(result.pass).isTrue();
 	},
 
-	'returns true for -0 == -0'() {
-		const result = matchers.equals(-0)(-0);
-		if (result.pass !== true) {
-			throw new Error('Expected success, but failed');
-		}
+	'supports branching recursion'() {
+		const a = {};
+		a.foo = a;
+		a.bar = a;
+		const b = {};
+		b.foo = b;
+		b.bar = b;
+		const result = matchers.equals(a)(b);
+		expect(result.pass).isTrue();
 	},
 
-	'returns false for +0 == -0'() {
-		const result = matchers.equals(0)(-0);
-		if (result.pass !== false) {
-			throw new Error('Expected failure, but succeeded');
-		}
+	'supports deep nested recursion'() {
+		const a = { foo: {} };
+		a.foo.bar = a;
+		const b = { foo: {} };
+		b.foo.bar = b;
+		const result = matchers.equals(a)(b);
+		expect(result.pass).isTrue();
+	},
+
+	'rejects mismatched recursion'() {
+		const a = { foo: {} };
+		a.foo.bar = a;
+		const b = {};
+		b.foo = b;
+		expect(matchers.equals(a)(b).pass).isFalse();
+		expect(matchers.equals(b)(a).pass).isFalse();
+	},
+
+	'allows differing recursion if equivalent'() {
+		const a = { foo: {} };
+		a.foo.foo = a;
+		const b = {};
+		b.foo = b;
+		expect(matchers.equals(a)(b).pass).isTrue();
+		expect(matchers.equals(b)(a).pass).isTrue();
+	},
+
+	'rejects nested mismatched recursion'() {
+		const a = { foo: {} };
+		a.foo.bar = a;
+		const b = { foo: {} };
+		b.foo.bar = b.foo;
+		expect(matchers.equals(a)(b).pass).isFalse();
+		expect(matchers.equals(b)(a).pass).isFalse();
+	},
+
+	'supports multiple recursions'() {
+		const a = { foo: { i: 1 }, bar: { i: 2 } };
+		a.foo.next = a.bar;
+		a.bar.prev = a.foo;
+		const b = { foo: { i: 1 }, bar: { i: 2 } };
+		b.foo.next = b.bar;
+		b.bar.prev = b.foo;
+		const result = matchers.equals(a)(b);
+		expect(result.pass).isTrue();
+	},
+
+	'rejects multiple recursions if values do not match'() {
+		const a = { foo: { i: 1, next: { i: 2 } } };
+		a.foo.next.prev = a.foo;
+		const b = { foo: { i: 1, next: { i: 3 } } };
+		b.foo.next.prev = b.foo;
+		const result = matchers.equals(a)(b);
+		expect(result.pass).isFalse();
 	},
 });
 
 describe('same', {
-	'returns true for equal primitives'() {
-		const result = matchers.same(7)(7);
-		if (result.pass !== true) {
-			throw new Error('Expected success, but failed');
+	'returns true for values compared with themself'() {
+		for (const factory of allValueFactories) {
+			const item = factory();
+			if (matchers.same(item)(item).pass !== true) {
+				throw new Error(`Expected ${print(item)} to be same as itself, but was not`);
+			}
 		}
 	},
 
-	'returns false for mismatched primitives'() {
-		const result = matchers.same(7)(8);
-		if (result.pass !== false) {
-			throw new Error('Expected failure, but succeeded');
+	'returns true for equivalent primitives'() {
+		for (const factory of primitiveValueFactories) {
+			const item = factory();
+			if (matchers.same(item)(factory()).pass !== true) {
+				throw new Error(`Expected ${print(item)} to be same as its copy, but was not`);
+			}
 		}
 	},
 
-	'performs strict comparison'() {
-		const result = matchers.same(7)('7');
-		if (result.pass !== false) {
-			throw new Error('Expected failure, but succeeded');
+	'returns false for non-primitive values compared with identical copies'() {
+		for (const factory of [...standardValueFactories, ...uniqueValueFactories]) {
+			const item = factory();
+			if (matchers.same(item)(factory()).pass !== false) {
+				throw new Error(`Expected ${print(item)} not to be same as its copy, but was`);
+			}
 		}
 	},
 
-	'returns true for identical objects'() {
-		const object = { foo: 'bar', zig: 'zag' };
-		const result = matchers.same(object)(object);
-		if (result.pass !== true) {
-			throw new Error('Expected success, but failed');
-		}
-	},
-
-	'returns false for equal objects'() {
-		const object1 = { foo: 'bar', zig: 'zag' };
-		const object2 = { foo: 'bar', zig: 'zag' };
-		const result = matchers.same(object1)(object2);
-		if (result.pass !== false) {
-			throw new Error('Expected failure, but succeeded');
-		}
-	},
-
-	'returns false for mismatched objects'() {
-		const object1 = { foo: 'bar', zig: 'zag' };
-		const object2 = { foo: 'zag' };
-		const result = matchers.same(object1)(object2);
-		if (result.pass !== false) {
-			throw new Error('Expected failure, but succeeded');
-		}
-	},
-
-	'compares symbols'() {
-		const s1 = Symbol();
-		const s2 = Symbol();
-		if (matchers.same(s1)(s1).pass !== true) {
-			throw new Error('Expected syccess, but failed');
-		}
-		if (matchers.same(s1)(s2).pass !== false) {
-			throw new Error('Expected failure, but succeeded');
+	'returns false for values compared with different values'() {
+		for (const factoryA of allValueFactories) {
+			for (const factoryB of allValueFactories) {
+				if (factoryA === factoryB) {
+					continue;
+				}
+				const itemA = factoryA();
+				const itemB = factoryB();
+				if (matchers.same(itemA)(itemB).pass !== false) {
+					throw new Error(`Expected ${print(itemA)} not to be same as ${print(itemB)}, but was`);
+				}
+			}
 		}
 	},
 

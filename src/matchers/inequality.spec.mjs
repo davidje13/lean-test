@@ -58,6 +58,6 @@ describe('isNear', {
 	},
 
 	'rejects unknown precision types'() {
-		expect(() => matchers.isNear(3, { foo: 'bar' })(3)).throws('Unsupported precision type: {"foo":"bar"}');
+		expect(() => matchers.isNear(3, { foo: 'bar' })(3)).throws('Unsupported precision type: {foo: "bar"}');
 	},
 });

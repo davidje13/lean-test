@@ -1,5 +1,5 @@
 import StackScope from '../core/StackScope.mjs';
-import { printNoQuotes } from '../utils.mjs';
+import { print } from '../utils.mjs';
 
 const IS_BROWSER = (typeof process === 'undefined');
 const OUTPUT_CAPTOR_SCOPE = new StackScope('OUTPUT_CAPTOR');
@@ -82,7 +82,9 @@ function combineOutput(parts, binary) {
 			throw new Error('Browser environment cannot get output in binary format');
 		}
 		// This is not perfectly representative of what would be logged, but should be generally good enough for testing
-		return parts.map((i) => i.args.map(printNoQuotes).join(' ') + '\n').join('')
+		return parts
+			.map((i) => i.args.map((v) => (typeof v === 'string' ? v : print(v))).join(' ') + '\n')
+			.join('')
 	} else {
 		const all = Buffer.concat(parts.map((i) => i.chunk));
 		return binary ? all : all.toString('utf8');

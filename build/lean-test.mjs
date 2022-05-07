@@ -929,29 +929,91 @@ function seq(result, then) {
 
 const resolveMessage = (message) => String((typeof message === 'function' ? message() : message) || '');
 
-const actualTypeOf = (o) => {
-	if (o === null) {
-		return 'null';
-	} else if (Array.isArray(o)) {
-		return 'array';
-	} else {
-		return typeof o;
+const allKeys = (o) => [...Object.keys(o), ...Object.getOwnPropertySymbols(o)];
+
+const PLAIN_OBJECTS = [null, Object.prototype];
+
+const _print = (v, seen, path, noQuote) => {
+	switch (typeof v) {
+		case 'undefined':
+		case 'boolean':
+		case 'function':
+			return String(v);
+		case 'number':
+			return (v === 0 && Math.sign(1 / v) < 0) ? '-0' : String(v);
+		case 'bigint':
+			return String(v) + 'n';
+		case 'symbol':
+			return v.toString();
+		case 'string':
+			return noQuote ? v : JSON.stringify(v);
+		case 'object':
+			if (v === null) {
+				return 'null';
+			}
+			if (seen.has(v)) {
+				return `<ref: ${seen.get(v).join('.') || 'root'}>`;
+			}
+			seen.set(v, path);
+			if (Array.isArray(v)) {
+				const r = [];
+				for (let i = 0; i < v.length; ++i) {
+					r.push((i in v) ? _print(v[i], seen, [...path, i], false) : '-');
+				}
+				const keys = allKeys(v);
+				if (keys.length > r.length) {
+					for (const key of allKeys(v)) {
+						const index = typeof key === 'string' ? Number(key) : -1;
+						if (index < 0 || String(index|0) !== key) {
+							const sK = _print(key, new Map(), [], true);
+							const sV = _print(v[key], seen, [...path, sK], false);
+							r.push(`${sK}: ${sV}`);
+						}
+					}
+				}
+				return `[${r.join(', ')}]`;
+			}
+			if (v instanceof Date) {
+				return v.toISOString();
+			}
+			if (v instanceof Set) {
+				return `Set(${[...v].map((i) => _print(i, seen, [...path, '*'], false)).join(', ')})`;
+			}
+			if (v instanceof Map) {
+				return `Map(${[...v.entries()]
+					.map(([key, value]) => {
+						const sK = _print(key, seen, [...path, '<key>'], false);
+						const sV = _print(value, seen, [...path, sK], false);
+						return `${sK} = ${sV}`;
+					})
+					.join(', ')})`;
+			}
+			if (typeof v.toString === 'function' && v.toString !== Object.prototype.toString) {
+				return v.toString();
+			}
+			const prototype = Object.getPrototypeOf(v);
+			const prefix = PLAIN_OBJECTS.includes(prototype) ? '' : (prototype.constructor.name + ' ');
+			const content = allKeys(v)
+				.map((key) => {
+					const sK = _print(key, new Map(), [], true);
+					const sV = _print(v[key], seen, [...path, sK], false);
+					return `${sK}: ${sV}`;
+				})
+				.join(', ');
+			return `${prefix}{${content}}`;
+		default:
+			return `${typeof v}? ${JSON.stringify(v)}`;
 	}
 };
 
-const print = (v) =>
-	(typeof v === 'symbol' || v instanceof Error) ? v.toString() :
-	typeof v === 'function' ? v :
-	JSON.stringify(v);
-
-const printNoQuotes = (v) => (typeof v === 'string' ? v : print(v));
+const print = (v) => _print(v, new Map(), [], false);
 
 const ANY = Symbol();
 
 const checkEquals = (expected, actual, name) => {
-	const diff = getDiff(actual, expected);
-	if (diff) {
-		return { pass: false, message: `Expected ${name} to equal ${print(expected)}, but ${diff}.` };
+	const diffs = getDiffs(actual, expected, false, new Map());
+	if (diffs.length) {
+		return { pass: false, message: `Expected ${name} to equal ${print(expected)}, but ${diffs.join(' and ')}.` };
 	} else {
 		return { pass: true, message: `Expected ${name} not to equal ${print(expected)}, but did.` };
 	}
@@ -969,42 +1031,117 @@ const delegateMatcher = (matcher, actual, name) => {
 	}
 };
 
-const signOf = (n) => Math.sign(n) || Math.sign(1 / n);
+const isIdentical = (a, b) => (
+	(a === b && (a !== 0 || Math.sign(1 / a) === Math.sign(1 / b))) ||
+	(a !== a && b !== b)
+);
 
-function getDiff(a, b) {
-	if (a === b || (a !== a && b !== b)) {
-		if (a === 0 && signOf(a) !== signOf(b)) {
-			return `${signOf(a) > 0 ? '+' : '-'}0 != ${signOf(b) > 0 ? '+' : '-'}0`;
-		}
-		return null;
+const readItemMap = (v) => {
+	if (v instanceof Map) {
+		return new Map(v.entries());
 	}
-	if (!a || typeof a !== 'object' || actualTypeOf(a) !== actualTypeOf(b)) {
-		const labelA = print(a);
-		const labelB = print(b);
-		if (labelA === labelB) {
-			return `${labelA} (${actualTypeOf(a)}) != ${labelB} (${actualTypeOf(b)})`;
-		} else {
-			return `${labelA} != ${labelB}`;
-		}
+	if (v instanceof Set) {
+		return new Map([...v.keys()].map((k) => [k, null]));
 	}
-	// TODO: cope with loops, improve formatting of message
-	const diffs = [];
-	for (const k of Object.keys(a)) {
-		if (!k in b) {
-			diffs.push(`missing ${print(k)}`);
-		} else {
-			const sub = getDiff(a[k], b[k]);
-			if (sub) {
-				diffs.push(`${sub} at ${print(k)}`);
+	throw new Error();
+};
+
+const readPropMap = (v) => new Map(allKeys(v).map((k) => [k, v[k]]));
+
+const getAndRemove = (map, key, exact, seen) => {
+	if (map.has(key)) {
+		const v = map.get(key);
+		map.delete(key);
+		return [true, v];
+	}
+	if (!exact) {
+		for (const [key2, v] of map.entries()) {
+			if (!getDiffs(key, key2, true, seen).length) {
+				map.delete(key2);
+				return [true, v];
 			}
 		}
 	}
-	for (const k of Object.keys(b)) {
-		if (!k in a) {
-			diffs.push(`extra ${print(k)}`);
-		}
+	return [false, null];
+};
+
+function getDiffs(a, b, failFast, seen) {
+	if (isIdentical(a, b)) {
+		return [];
 	}
-	return diffs.join(' and ');
+	if (
+		!a || typeof a !== 'object' ||
+		!b || typeof b !== 'object' ||
+		Object.getPrototypeOf(a) !== Object.getPrototypeOf(b) ||
+		(a instanceof Date && a.getTime() !== b.getTime()) ||
+		(a instanceof RegExp && (a.source !== b.source || a.flags !== b.flags)) ||
+		(a instanceof Error && (a.message !== b.message || a.name !== b.name)) ||
+		(Array.isArray(a) && a.length !== b.length)
+	) {
+		return failFast ? [true] : [`${print(a)} != ${print(b)}`];
+	}
+
+	const diffs = [];
+	const addSubDiffs = (path, subs) => {
+		if (subs.length) {
+			if (failFast) {
+				diffs.push(true);
+			} else {
+				const suffix = ` at ${print(path)}`;
+				diffs.push(...subs.map((s) => s + suffix));
+			}
+		}
+	};
+
+	const checkAll = (map1, map2, exact) => {
+		if (map1.size !== map2.size) {
+			diffs.push(failFast ? true : `${print(a)} != ${print(b)}`);
+			return;
+		}
+		for (const [key, v1] of map1.entries()) {
+			const [present, v2] = getAndRemove(map2, key, exact, seen);
+			if (present) {
+				addSubDiffs(key, getDiffs(v1, v2, failFast, seen));
+			} else {
+				diffs.push(`extra ${print(key)}`);
+			}
+			if (failFast && diffs.length) {
+				return;
+			}
+		}
+		if (map2.size > 0) {
+			diffs.push(`missing ${[...map2.keys()].map(print).join(', ')}`);
+		}
+	};
+
+	const n1 = seen.get(a) || [];
+	const n2 = seen.get(b) || [];
+	if (n1.length && n2.length) {
+		// recursion detected, but both objects are already being compared against something
+		// higher up the chain, so if they're being compared against each other, we can assume
+		// they match here.
+		return n1.some((n) => n2.includes(n)) ? [] : ['recursion mismatch'];
+	}
+
+	const nonce = Symbol(Math.random());
+	// if any recursion happens, it's safe for it to assume the current two objects match
+	// (if they don't, we'll catch it and fail later here anyway)
+	n1.push(nonce);
+	n2.push(nonce);
+	seen.set(a, n1);
+	seen.set(b, n2);
+
+	if (a instanceof Map || a instanceof Set) {
+		checkAll(readItemMap(a), readItemMap(b), false);
+	}
+	if (!diffs.length) {
+		checkAll(readPropMap(a), readPropMap(b), true);
+	}
+
+	n1.pop();
+	n2.pop();
+
+	return diffs;
 }
 
 const any = () => (actual) => ({
@@ -1021,7 +1158,7 @@ const withMessage = (message, matcher) => (...args) =>
 const equals = (expected) => (actual) => checkEquals(expected, actual, 'value');
 
 const same = (expected) => (actual) => {
-	if (expected === actual) {
+	if (isIdentical(expected, actual)) {
 		return { pass: true, message: `Expected value not to be ${print(expected)}, but was.` };
 	}
 	const equalResult = checkEquals(expected, actual, 'value');
@@ -1635,7 +1772,9 @@ function combineOutput(parts, binary) {
 			throw new Error('Browser environment cannot get output in binary format');
 		}
 		// This is not perfectly representative of what would be logged, but should be generally good enough for testing
-		return parts.map((i) => i.args.map(printNoQuotes).join(' ') + '\n').join('')
+		return parts
+			.map((i) => i.args.map((v) => (typeof v === 'string' ? v : print(v))).join(' ') + '\n')
+			.join('')
 	} else {
 		const all = Buffer.concat(parts.map((i) => i.chunk));
 		return binary ? all : all.toString('utf8');
