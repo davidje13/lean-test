@@ -59,6 +59,34 @@ describe('equals', {
 			throw new Error('Expected failure, but succeeded');
 		}
 	},
+
+	'returns true for NaN == NaN'() {
+		const result = matchers.equals(0 / 0)(Number.NaN);
+		if (result.pass !== true) {
+			throw new Error('Expected success, but failed');
+		}
+	},
+
+	'returns true for +0 == +0'() {
+		const result = matchers.equals(0)(0);
+		if (result.pass !== true) {
+			throw new Error('Expected success, but failed');
+		}
+	},
+
+	'returns true for -0 == -0'() {
+		const result = matchers.equals(-0)(-0);
+		if (result.pass !== true) {
+			throw new Error('Expected success, but failed');
+		}
+	},
+
+	'returns false for +0 == -0'() {
+		const result = matchers.equals(0)(-0);
+		if (result.pass !== false) {
+			throw new Error('Expected failure, but succeeded');
+		}
+	},
 });
 
 describe('same', {

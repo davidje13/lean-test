@@ -23,8 +23,13 @@ export const delegateMatcher = (matcher, actual, name) => {
 	}
 };
 
+const signOf = (n) => Math.sign(n) || Math.sign(1 / n);
+
 function getDiff(a, b) {
 	if (a === b || (a !== a && b !== b)) {
+		if (a === 0 && signOf(a) !== signOf(b)) {
+			return `${signOf(a) > 0 ? '+' : '-'}0 != ${signOf(b) > 0 ? '+' : '-'}0`;
+		}
 		return null;
 	}
 	if (!a || typeof a !== 'object' || actualTypeOf(a) !== actualTypeOf(b)) {
