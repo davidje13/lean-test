@@ -28,6 +28,6 @@
   },
   "homepage": "https://github.com/davidje13/lean-test#readme",
   "devDependencies": {
-    "rollup": "^2.59.0"
+    "rollup": "^2.72.1"
   }
 }
