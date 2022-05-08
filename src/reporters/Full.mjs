@@ -1,6 +1,7 @@
 export default class Full {
-	constructor(output) {
+	constructor(output, { hideBoring = true } = {}) {
 		this.output = output;
+		this.hideBoring = hideBoring;
 	}
 
 	_printerr(prefix, err, indent) {
@@ -13,21 +14,32 @@ export default class Full {
 
 	_print(result, indent) {
 		const { summary } = result;
-		let marker = '';
-		if (summary.error) {
-			marker = this.output.redBack(' ERRO ', '[ERRO]');
-		} else if (summary.fail) {
-			marker = this.output.redBack(' FAIL ', '[FAIL]');
-		} else if (summary.run) {
-			marker = this.output.blueBack(' .... ', '[....]');
-		} else if (summary.pass) {
-			marker = this.output.greenBack(' PASS ', '[PASS]');
-		} else if (summary.skip) {
-			marker = this.output.yellowBack(' SKIP ', '[SKIP]');
-		} else {
-			marker = this.output.yellowBack(' NONE ', '[NONE]');
+		if (this.hideBoring && result.isBoring && !summary.error && !summary.fail) {
+			return false;
 		}
-		const resultSpace = '      ';
+		let col = null;
+		let markerStr = '';
+		if (summary.error) {
+			col = this.output.redBack;
+			markerStr = 'ERRO';
+		} else if (summary.fail) {
+			col = this.output.redBack;
+			markerStr = 'FAIL';
+		} else if (summary.run) {
+			col = this.output.blueBack;
+			markerStr = '....';
+		} else if (summary.pass) {
+			col = this.output.greenBack;
+			markerStr = 'PASS';
+		} else if (summary.skip) {
+			col = this.output.yellowBack;
+			markerStr = 'SKIP';
+		} else {
+			col = this.output.yellowBack;
+			markerStr = 'NONE';
+		}
+		const marker = col(` ${markerStr} `, `[${markerStr}]`);
+		const subMarker = ' '.repeat(markerStr.length + 2);
 
 		const isBlock = (result.children.length > 0 || !summary.count);
 		const isSlow = (summary.duration > 500);
@@ -42,17 +54,29 @@ export default class Full {
 			this.output.write(
 				`${formattedLabel} ${formattedDuration}`,
 				`${marker} ${indent}`,
-				`${resultSpace} ${indent}`,
+				`${subMarker} ${indent}`,
 			);
 		}
-		const infoIndent = `${resultSpace} ${indent}  `;
+		const infoIndent = `${subMarker} ${indent}  `;
 		if (result.output && (summary.error || summary.fail)) {
 			this.output.write(this.output.blue(result.output), infoIndent);
 		}
 		result.errors.forEach((err) => this._printerr('Error: ', err, infoIndent));
 		result.failures.forEach((err) => this._printerr('Failure: ', err, infoIndent));
 		const nextIndent = indent + (display ? '  ' : '');
-		result.children.forEach((child) => this._print(child, nextIndent));
+		let printedChildCount = 0;
+		for (const child of result.children) {
+			if (this._print(child, nextIndent)) {
+				++printedChildCount;
+			}
+		}
+		if (display && printedChildCount < result.children.length) {
+			this.output.write(
+				`(${result.children.length - printedChildCount} omitted results)`,
+				`${subMarker} ${nextIndent}`,
+			);
+		}
+		return true;
 	}
 
 	report(result) {

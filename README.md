@@ -29,6 +29,7 @@ npx lean-test --target chrome --target firefox
 	- lifecycle methods (`beforeAll` / `beforeEach` / `afterEach` / `afterAll`)
 	- repeated tests, failure tolerance;
 	- auto retry failing tests
+	- parameterised tests
 	- sequential test execution with stop at first failure (for flow testing)
 	- configurable test timeout
 
@@ -366,6 +367,45 @@ it('will retry on failure', () => { /* ... */ }, { retry: 3 });
 
 Runs a test multiple times until it succeeds. If any attempt succeeds, the test is
 considered a success.
+
+### parameters
+
+```javascript
+it('will run with multiple parameters', (v) => { /* ... */ }, { parameters: [1, 2] });
+```
+
+Runs a test multiple times with different parameters. There are a variety of ways
+to set parameters:
+
+```javascript
+// call with (1), (2):
+{ parameters: [1, 2] }
+
+// multiple parameters:
+// call with (1, 2), (3, 4):
+{ parameters: [[1, 2], [3, 4]] }
+
+// parameter matrix:
+// call with (1, 3), (1, 4), (2, 3), (2, 4):
+{ parameters: [new Set([1, 2]), new Set([3, 4])] }
+
+// parameter matrix with multiple parameters:
+// call with (1, 'a', 3), (1, 'a', 4), (2, 'b', 3), (2, 'b', 4):
+{ parameters: [new Set([[1, 'a'], [2, 'b']]), new Set([3, 4])] }
+```
+
+You can also set a `parameterFilter` to exclude specific combinations of
+parameters:
+
+```javascript
+// parameter matrix with filter:
+// call with (1, 2), (1, 3), (2, 1), (2, 3), (3, 1), (3, 2):
+{
+	parameters: [new Set([1, 2, 3]), new Set([1, 2, 3])],
+	// do not allow both parameters set to the same value
+	parameterFilter: (a, b) => (a !== b),
+}
+```
 
 ### timeout
 

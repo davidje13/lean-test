@@ -15,7 +15,7 @@ export default class Dots {
 				return;
 			}
 			const { summary } = event;
-			if (event.isBlock) {
+			if (event.isBlock || event.isBoring) {
 				if (summary.count || (!summary.error && !summary.fail)) {
 					// do not care about block-level events unless they failed without running any children
 					return;

@@ -80,9 +80,7 @@ const VALUES = [
 ];
 
 describe('print', () => {
-	for (const [value, label] of VALUES) {
-		it(`returns a useful label for ${label}`, () => {
-			expect(print(value), equals(label));
-		});
-	}
+	it('returns a useful label', (value, label) => {
+		expect(print(value), equals(label));
+	}, { parameters: VALUES });
 });

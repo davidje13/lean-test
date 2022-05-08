@@ -18,10 +18,11 @@ const filterSummary = ({ tangible, time, fail }, summary) => ({
 });
 
 export default class Result {
-	constructor(label, parent) {
+	constructor(label, parent, { isBoring = false } = {}) {
 		this.id = `${idNamespace}${++nextID}`;
 		this.label = label;
 		this.parent = parent;
+		this.isBoring = isBoring;
 		this.children = [];
 		this.stages = [];
 		this.output = '';
@@ -31,8 +32,8 @@ export default class Result {
 		this.buildCache = null;
 	}
 
-	createChild(label, fn) {
-		return Result.of(label, fn, { parent: this });
+	createChild(label, fn, { isBoring = false } = {}) {
+		return Result.of(label, fn, { parent: this, isBoring });
 	}
 
 	addOutput(detail) {
@@ -102,6 +103,7 @@ export default class Result {
 			id: this.id,
 			parent: this.parent?.id ?? null,
 			label: this.label,
+			isBoring: this.isBoring,
 		};
 	}
 
@@ -131,8 +133,8 @@ export default class Result {
 	}
 }
 
-Result.of = async (label, fn, { parent = null, isBlock = false, listener = null } = {}) => {
-	const result = new Result(label, parent);
+Result.of = async (label, fn, { parent = null, isBlock = false, isBoring = false, listener = null } = {}) => {
+	const result = new Result(label, parent, { isBoring: Boolean(isBoring) });
 	await result.createStage({ fail: true, time: true }, 'core', () => {
 		listener?.({
 			type: 'begin',

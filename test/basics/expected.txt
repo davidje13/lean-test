@@ -12,6 +12,23 @@
            Failure: expected failure
             at test/basics/basics.spec.mjs:5:2
 [NONE]   describe: empty blocks are reported [xx]
+[PASS] suite: parameterised.spec.mjs [xx]
+[PASS]   test: runs multiple times [xx]
+[PASS]     ("a") [xx]
+[PASS]     ("b") [xx]
+[PASS]   test: multiple parameters [xx]
+[PASS]     ("a", 1) [xx]
+[PASS]     ("b", 2) [xx]
+[PASS]   test: matrix parameters [xx]
+[PASS]     ("a", 1) [xx]
+[PASS]     ("a", 2) [xx]
+[PASS]     ("b", 1) [xx]
+[PASS]     ("b", 2) [xx]
+[PASS]   test: multiple matrix parameters [xx]
+[PASS]     ("a", 1, true) [xx]
+[PASS]     ("a", 1, false) [xx]
+[PASS]     ("b", 2, true) [xx]
+[PASS]     ("b", 2, false) [xx]
 [FAIL] suite: repeat.spec.mjs [xx]
 [FAIL]   test: reports individual runs [xx]
 [FAIL]     repetition 1 of 3 [xx]
@@ -59,8 +76,8 @@ suite: retry.spec.mjs - test: reports individual runs - attempt 3 of 3
   Failure: expected failure
    at test/basics/retry.spec.mjs:2:2
 
-Total:    9
-Pass:     6
+Total:    21
+Pass:     18
 Errors:   0
 Failures: 3
 Skipped:  0

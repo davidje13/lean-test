@@ -407,10 +407,11 @@ const filterSummary = ({ tangible, time, fail }, summary) => ({
 });
 
 class Result {
-	constructor(label, parent) {
+	constructor(label, parent, { isBoring = false } = {}) {
 		this.id = `${idNamespace}${++nextID}`;
 		this.label = label;
 		this.parent = parent;
+		this.isBoring = isBoring;
 		this.children = [];
 		this.stages = [];
 		this.output = '';
@@ -420,8 +421,8 @@ class Result {
 		this.buildCache = null;
 	}
 
-	createChild(label, fn) {
-		return Result.of(label, fn, { parent: this });
+	createChild(label, fn, { isBoring = false } = {}) {
+		return Result.of(label, fn, { parent: this, isBoring });
 	}
 
 	addOutput(detail) {
@@ -491,6 +492,7 @@ class Result {
 			id: this.id,
 			parent: this.parent?.id ?? null,
 			label: this.label,
+			isBoring: this.isBoring,
 		};
 	}
 
@@ -520,8 +522,8 @@ class Result {
 	}
 }
 
-Result.of = async (label, fn, { parent = null, isBlock = false, listener = null } = {}) => {
-	const result = new Result(label, parent);
+Result.of = async (label, fn, { parent = null, isBlock = false, isBoring = false, listener = null } = {}) => {
+	const result = new Result(label, parent, { isBoring: Boolean(isBoring) });
 	await result.createStage({ fail: true, time: true }, 'core', () => {
 		listener?.({
 			type: 'begin',
@@ -1813,6 +1815,83 @@ var outputCaptor = ({ order = -1 } = {}) => (builder) => {
 	}, { order });
 };
 
+var parameterised = ({ order = -4 } = {}) => (builder) => {
+	builder.addRunInterceptor(async (next, context, result, node) => {
+		const { parameters, parameterFilter } = node.options;
+
+		if (!context.active || !parameters || result.hasFailed()) {
+			return next(context);
+		}
+
+		const baseParameters = context.testParameters || [];
+		const normParameters = normaliseParameters(parameters);
+		const count = countParameterCombinations(normParameters);
+		for (const paramList of getParameterCombinations(baseParameters, normParameters)) {
+			if (parameterFilter?.(...paramList) === false) {
+				continue;
+			}
+			await result.createChild(
+				'(' + paramList.map(print).join(', ') + ')',
+				(subResult) => next({ ...context, testParameters: paramList }, subResult),
+				{ isBoring: count > 10 },
+			);
+		}
+	}, { order });
+};
+
+const norm2 = (pSet) => {
+	let allArrays = true;
+	for (const v of pSet) {
+		if (!Array.isArray(v)) {
+			allArrays = false;
+			break;
+		}
+	}
+	if (allArrays) {
+		return pSet;
+	}
+	return new Set([...pSet.values()].map((v) => [v]));
+};
+
+const normaliseParameters = (ps) => {
+	if (ps instanceof Set) {
+		// Set([foo, bar]) => call with (foo), (bar)
+		return [norm2(ps)];
+	}
+
+	if (Array.isArray(ps)) {
+		if (ps.every((p) => (p instanceof Set))) {
+			// [Set([foo, bar]), Set([zig, zag])] => call with (foo, zig), (foo, zag), (bar, zig), (bar, zag)
+			return ps.map(norm2);
+		} else {
+			// [foo, bar] => call with (foo), (bar)
+			// [[foo, zig], [bar, zag]] => call with (foo, zig), (bar, zag)
+			return [norm2(new Set(ps))];
+		}
+	}
+
+	throw new Error('Invalid parameters');
+};
+
+function countParameterCombinations(ps) {
+	let n = 1;
+	for (const p of ps) {
+		n *= p.size;
+	}
+	return n;
+}
+
+function *getParameterCombinations(base, [cur, ...rest]) {
+	for (const v of cur) {
+		const params = [...base, ...v];
+		if (rest.length > 0) {
+			yield *getParameterCombinations(params, rest);
+		} else {
+			yield params;
+		}
+	}
+}
+
 var repeat = ({ order = -3 } = {}) => (builder) => {
 	builder.addRunInterceptor(async (next, context, result, node) => {
 		let { repeat = {} } = node.options;
@@ -2065,7 +2144,7 @@ var test = (fnName = 'test') => (builder) => {
 			if (!context.active) {
 				throw new TestAssumptionError('ignored');
 			}
-			return node.options[TEST_FN]();
+			return node.options[TEST_FN](...(context.testParameters || []));
 		}, { errorStackSkipFrames: 1 });
 	}, { order: Number.POSITIVE_INFINITY, id });
 };
@@ -2104,6 +2183,7 @@ var index$3 = /*#__PURE__*/Object.freeze({
 	ignore: ignore,
 	lifecycle: lifecycle,
 	outputCaptor: outputCaptor,
+	parameterised: parameterised,
 	repeat: repeat,
 	retry: retry,
 	scopedMock: scopedMock,
@@ -2224,7 +2304,7 @@ class Dots {
 				return;
 			}
 			const { summary } = event;
-			if (event.isBlock) {
+			if (event.isBlock || event.isBoring) {
 				if (summary.count || (!summary.error && !summary.fail)) {
 					// do not care about block-level events unless they failed without running any children
 					return;
@@ -2340,8 +2420,9 @@ function collect(result, parentPath) {
 }
 
 class Full$1 {
-	constructor(output) {
+	constructor(output, { hideBoring = true } = {}) {
 		this.output = output;
+		this.hideBoring = hideBoring;
 	}
 
 	_printerr(prefix, err, indent) {
@@ -2354,21 +2435,32 @@ class Full$1 {
 
 	_print(result, indent) {
 		const { summary } = result;
-		let marker = '';
-		if (summary.error) {
-			marker = this.output.redBack(' ERRO ', '[ERRO]');
-		} else if (summary.fail) {
-			marker = this.output.redBack(' FAIL ', '[FAIL]');
-		} else if (summary.run) {
-			marker = this.output.blueBack(' .... ', '[....]');
-		} else if (summary.pass) {
-			marker = this.output.greenBack(' PASS ', '[PASS]');
-		} else if (summary.skip) {
-			marker = this.output.yellowBack(' SKIP ', '[SKIP]');
-		} else {
-			marker = this.output.yellowBack(' NONE ', '[NONE]');
+		if (this.hideBoring && result.isBoring && !summary.error && !summary.fail) {
+			return false;
 		}
-		const resultSpace = '      ';
+		let col = null;
+		let markerStr = '';
+		if (summary.error) {
+			col = this.output.redBack;
+			markerStr = 'ERRO';
+		} else if (summary.fail) {
+			col = this.output.redBack;
+			markerStr = 'FAIL';
+		} else if (summary.run) {
+			col = this.output.blueBack;
+			markerStr = '....';
+		} else if (summary.pass) {
+			col = this.output.greenBack;
+			markerStr = 'PASS';
+		} else if (summary.skip) {
+			col = this.output.yellowBack;
+			markerStr = 'SKIP';
+		} else {
+			col = this.output.yellowBack;
+			markerStr = 'NONE';
+		}
+		const marker = col(` ${markerStr} `, `[${markerStr}]`);
+		const subMarker = ' '.repeat(markerStr.length + 2);
 
 		const isBlock = (result.children.length > 0 || !summary.count);
 		const isSlow = (summary.duration > 500);
@@ -2383,17 +2475,29 @@ class Full$1 {
 			this.output.write(
 				`${formattedLabel} ${formattedDuration}`,
 				`${marker} ${indent}`,
-				`${resultSpace} ${indent}`,
+				`${subMarker} ${indent}`,
 			);
 		}
-		const infoIndent = `${resultSpace} ${indent}  `;
+		const infoIndent = `${subMarker} ${indent}  `;
 		if (result.output && (summary.error || summary.fail)) {
 			this.output.write(this.output.blue(result.output), infoIndent);
 		}
 		result.errors.forEach((err) => this._printerr('Error: ', err, infoIndent));
 		result.failures.forEach((err) => this._printerr('Failure: ', err, infoIndent));
 		const nextIndent = indent + (display ? '  ' : '');
-		result.children.forEach((child) => this._print(child, nextIndent));
+		let printedChildCount = 0;
+		for (const child of result.children) {
+			if (this._print(child, nextIndent)) {
+				++printedChildCount;
+			}
+		}
+		if (display && printedChildCount < result.children.length) {
+			this.output.write(
+				`(${result.children.length - printedChildCount} omitted results)`,
+				`${subMarker} ${nextIndent}`,
+			);
+		}
+		return true;
 	}
 
 	report(result) {
@@ -2453,6 +2557,7 @@ function standardRunner() {
 		.addPlugin(ignore())
 		.addPlugin(lifecycle())
 		.addPlugin(outputCaptor())
+		.addPlugin(parameterised())
 		.addPlugin(repeat())
 		.addPlugin(retry())
 		.addPlugin(scopedMock())

@@ -90,87 +90,74 @@ const allValueFactories = [
 	...uniqueValueFactories,
 ];
 
-describe('equals', {
-	'returns true for values compared with themself'() {
-		for (const factory of allValueFactories) {
-			const item = factory();
-			if (matchers.equals(item)(item).pass !== true) {
-				throw new Error(`Expected ${print(item)} to equal itself, but did not`);
-			}
+describe('equals', () => {
+	it('returns true for values compared with themself', (factory) => {
+		const item = factory();
+		if (matchers.equals(item)(item).pass !== true) {
+			throw new Error('Expected to equal itself, but did not');
 		}
-	},
+	}, { parameters: allValueFactories });
 
-	'returns false for values compared with different values'() {
-		for (const factoryA of allValueFactories) {
-			for (const factoryB of allValueFactories) {
-				if (factoryA === factoryB) {
-					continue;
-				}
-				const itemA = factoryA();
-				const itemB = factoryB();
-				if (matchers.equals(itemA)(itemB).pass !== false) {
-					throw new Error(`Expected ${print(itemA)} not to equal ${print(itemB)}, but did`);
-				}
-			}
+	it('returns false for values compared with different values', (factoryA, factoryB) => {
+		const itemA = factoryA();
+		const itemB = factoryB();
+		if (matchers.equals(itemA)(itemB).pass !== false) {
+			throw new Error('Expected not to equal, but did');
 		}
-	},
+	}, { parameters: [new Set(allValueFactories), new Set(allValueFactories)], parameterFilter: (a, b) => (a !== b) });
 
-	'returns true for standard values compared with an equivalent copy'() {
-		for (const factory of [...primitiveValueFactories, ...standardValueFactories]) {
-			const item = factory();
-			if (matchers.equals(item)(factory()).pass !== true) {
-				throw new Error(`Expected ${print(item)} to equal its copy, but did not`);
-			}
+	it('returns true for standard values compared with an equivalent copy', (factory) => {
+		const item = factory();
+		if (matchers.equals(item)(factory()).pass !== true) {
+			throw new Error('Expected to equal its copy, but did not');
 		}
-	},
+	}, { parameters: [...primitiveValueFactories, ...standardValueFactories] });
 
-	'returns false for unique values compared with an equivalent copy'() {
-		for (const factory of uniqueValueFactories) {
-			const item = factory();
-			if (matchers.equals(item)(factory()).pass !== false) {
-				throw new Error(`Expected ${print(item)} not to equal its copy, but did`);
-			}
+	it('returns false for unique values compared with an equivalent copy', (factory) => {
+		const item = factory();
+		if (matchers.equals(item)(factory()).pass !== false) {
+			throw new Error('Expected not to equal its copy, but did');
 		}
-	},
+	}, { parameters: uniqueValueFactories });
 
-	'returns true for equivalent sets'() {
+	it('returns true for equivalent sets', () => {
 		const s1 = new Set(['a', 'b']);
 		const s2 = new Set(['b', 'a']);
 		const result = matchers.equals(s1)(s2);
 		expect(result.pass).isTrue();
-	},
+	});
 
-	'produces nice messages for classes'() {
+	it('produces nice messages for classes', () => {
 		class Foo {}
 		class Bar {}
 		const s1 = new Foo();
 		const s2 = new Bar();
 		const result = matchers.equals(s1)(s2);
 		expect(result.message).equals('Expected value to equal Foo {}, but Bar {} != Foo {}.');
-	},
+	});
 
-	'produces nice messages for symbols'() {
+	it('produces nice messages for symbols', () => {
 		const s1 = Symbol();
 		const s2 = Symbol('hi');
 		const result = matchers.equals(s1)(s2);
 		expect(result.message).equals('Expected value to equal Symbol(), but Symbol(hi) != Symbol().');
-	},
+	});
 
-	'explains dictionary mismatch'() {
+	it('explains dictionary mismatch', () => {
 		const a = { foo: 'bar' };
 		const b = { bar: 'foo' };
 		const result = matchers.equals(a)(b);
 		expect(result.pass).isFalse();
 		expect(result.message).equals('Expected value to equal {foo: "bar"}, but extra "bar" and missing "foo".');
-	},
+	});
 
-	'explains Set mismatch'() {
+	it('explains Set mismatch', () => {
 		const a = new Set(['a', 'b']);
 		const b = new Set(['b', 'c']);
 		const result = matchers.equals(a)(b);
 		expect(result.pass).isFalse();
 		expect(result.message).equals('Expected value to equal Set("a", "b"), but extra "c" and missing "a".');
-	},
+	});
 });
 
 describe('equals with recursion', {
@@ -251,55 +238,42 @@ describe('equals with recursion', {
 	},
 });
 
-describe('same', {
-	'returns true for values compared with themself'() {
-		for (const factory of allValueFactories) {
-			const item = factory();
-			if (matchers.same(item)(item).pass !== true) {
-				throw new Error(`Expected ${print(item)} to be same as itself, but was not`);
-			}
+describe('same', () => {
+	it('returns true for values compared with themself', (factory) => {
+		const item = factory();
+		if (matchers.same(item)(item).pass !== true) {
+			throw new Error('Expected to be same as itself, but was not');
 		}
-	},
+	}, { parameters: allValueFactories });
 
-	'returns true for equivalent primitives'() {
-		for (const factory of primitiveValueFactories) {
-			const item = factory();
-			if (matchers.same(item)(factory()).pass !== true) {
-				throw new Error(`Expected ${print(item)} to be same as its copy, but was not`);
-			}
+	it('returns true for equivalent primitives', (factory) => {
+		const item = factory();
+		if (matchers.same(item)(factory()).pass !== true) {
+			throw new Error('Expected to be same as its copy, but was not');
 		}
-	},
+	}, { parameters: primitiveValueFactories });
 
-	'returns false for non-primitive values compared with identical copies'() {
-		for (const factory of [...standardValueFactories, ...uniqueValueFactories]) {
-			const item = factory();
-			if (matchers.same(item)(factory()).pass !== false) {
-				throw new Error(`Expected ${print(item)} not to be same as its copy, but was`);
-			}
+	it('returns false for non-primitive values compared with identical copies', (factory) => {
+		const item = factory();
+		if (matchers.same(item)(factory()).pass !== false) {
+			throw new Error('Expected not to be same as its copy, but was');
 		}
-	},
+	}, { parameters: [...standardValueFactories, ...uniqueValueFactories] });
 
-	'returns false for values compared with different values'() {
-		for (const factoryA of allValueFactories) {
-			for (const factoryB of allValueFactories) {
-				if (factoryA === factoryB) {
-					continue;
-				}
-				const itemA = factoryA();
-				const itemB = factoryB();
-				if (matchers.same(itemA)(itemB).pass !== false) {
-					throw new Error(`Expected ${print(itemA)} not to be same as ${print(itemB)}, but was`);
-				}
-			}
+	it('returns false for values compared with different values', (factoryA, factoryB) => {
+		const itemA = factoryA();
+		const itemB = factoryB();
+		if (matchers.same(itemA)(itemB).pass !== false) {
+			throw new Error('Expected not to be same, but was');
 		}
-	},
+	}, { parameters: [new Set(allValueFactories), new Set(allValueFactories)], parameterFilter: (a, b) => (a !== b) });
 
-	'produces nice messages for symbols'() {
+	it('produces nice messages for symbols', () => {
 		const s1 = Symbol();
 		const s2 = Symbol('hi');
 		const result = matchers.same(s1)(s2);
 		expect(result.message).equals('Expected value to equal Symbol(), but Symbol(hi) != Symbol().');
-	},
+	});
 });
 
 const ASYNC_PASS = () => Promise.resolve({ pass: true, message: 'msg' });

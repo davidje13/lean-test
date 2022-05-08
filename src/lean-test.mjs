@@ -28,6 +28,7 @@ export function standardRunner() {
 		.addPlugin(plugins.ignore())
 		.addPlugin(plugins.lifecycle())
 		.addPlugin(plugins.outputCaptor())
+		.addPlugin(plugins.parameterised())
 		.addPlugin(plugins.repeat())
 		.addPlugin(plugins.retry())
 		.addPlugin(plugins.scopedMock())

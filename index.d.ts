@@ -97,9 +97,13 @@ export interface TestCompleteEvent extends Result {
 	isBlock: boolean;
 }
 
+type ParameterOptions<T extends unknown[]> = Set<T> | Set<T[0]> | T;
+
 interface NodeOptions {
-	ignore?: boolean;
 	focus?: boolean;
+	ignore?: boolean;
+	parameters?: ParameterOptions<unknown[]>[] | ParameterOptions<unknown[]>;
+	parameterFilter?: (...params: any[]) => boolean;
 	repeat?: number | {
 		total: number;
 		failFast?: boolean;
@@ -381,6 +385,7 @@ interface plugins {
 	focus: () => Plugin;
 	ignore: () => Plugin;
 	lifecycle: (options?: { order?: number }) => Plugin;
+	parameterised: (options?: { order?: number }) => Plugin;
 	scopedMock: () => Plugin;
 	outputCaptor: (options?: { order?: number }) => Plugin;
 	repeat: (options?: { order?: number }) => Plugin;

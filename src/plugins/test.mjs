@@ -17,7 +17,7 @@ export default (fnName = 'test') => (builder) => {
 			if (!context.active) {
 				throw new TestAssumptionError('ignored');
 			}
-			return node.options[TEST_FN]();
+			return node.options[TEST_FN](...(context.testParameters || []));
 		}, { errorStackSkipFrames: 1 });
 	}, { order: Number.POSITIVE_INFINITY, id });
 };
