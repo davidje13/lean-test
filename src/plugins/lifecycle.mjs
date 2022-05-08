@@ -13,17 +13,20 @@ export default ({ order = 0 } = {}) => (builder) => {
 	});
 
 	builder.addRunInterceptor((next, context, result, node) => {
+		const baseParameters = context.testParameters || [];
 		if (!context.active) {
 			return next(context);
 		} else if (!node.config.isBlock) {
-			return withWrappers(result, context[scope].beforeEach, context[scope].afterEach, (skip) => next({
+			return withWrappers(result, context[scope].beforeEach, context[scope].afterEach, (skip, extraParams) => next({
 				...context,
+				testParameters: [...baseParameters, ...extraParams],
 				active: !skip,
 			}));
 		} else {
 			const nodeScope = node.getScope(scope);
-			return withWrappers(result, [nodeScope.beforeAll], [nodeScope.afterAll], (skip) => next({
+			return withWrappers(result, [nodeScope.beforeAll], [nodeScope.afterAll], (skip, extraParams) => next({
 				...context,
+				testParameters: [...baseParameters, ...extraParams],
 				[scope]: {
 					beforeEach: [...context[scope].beforeEach, nodeScope.beforeEach],
 					afterEach: [...context[scope].afterEach, nodeScope.afterEach],
@@ -34,6 +37,10 @@ export default ({ order = 0 } = {}) => (builder) => {
 	}, { order });
 
 	async function withWrappers(result, before, after, next) {
+		const extraParams = [];
+		const ops = {
+			addTestParameter: (...values) => extraParams.push(...values),
+		};
 		let skip = false;
 		const allTeardowns = [];
 		let i = 0;
@@ -44,7 +51,7 @@ export default ({ order = 0 } = {}) => (builder) => {
 					{ fail: true },
 					`before ${name}`,
 					async () => {
-						const teardown = await fn();
+						const teardown = await fn(ops);
 						if (typeof teardown === 'function') {
 							teardowns.unshift({ name, fn: teardown });
 						}
@@ -60,7 +67,7 @@ export default ({ order = 0 } = {}) => (builder) => {
 		}
 
 		try {
-			return await next(skip);
+			return await next(skip, extraParams);
 		} finally {
 			while ((i--) > 0) {
 				for (const { name, fn } of after[i]) {

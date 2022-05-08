@@ -115,7 +115,7 @@ interface NodeOptions {
 	[K: string]: unknown;
 }
 
-type TestImplementation = () => MaybeAsync<void>;
+type TestImplementation = (...args: any[]) => MaybeAsync<void>;
 interface DescribeObject {
 	[K: string]: DescribeObject | TestImplementation;
 }
@@ -127,8 +127,11 @@ type WithOptions<T> = T & {
 type Describe = WithOptions<(name: string, fn: DescribeImplementation, options?: NodeOptions) => void>;
 type Test = WithOptions<(name: string, fn: TestImplementation, options?: NodeOptions) => void>;
 
+interface LifecycleHookBeforeOps {
+	addTestParameter: (...parameters: unknown[]) => void;
+}
 type LifecycleHookAfter = () => MaybeAsync<void>;
-type LifecycleHookBefore = () => MaybeAsync<void | LifecycleHookAfter>;
+type LifecycleHookBefore = (operations: LifecycleHookBeforeOps) => MaybeAsync<void | LifecycleHookAfter>;
 type GetOutput = ((binary?: false) => string) & ((binary: true) => unknown); // unknown = Buffer
 type LifecycleFunc<Fn> = ((name: string, fn: Fn) => void) & ((fn: Fn) => void);
 

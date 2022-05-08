@@ -16,7 +16,7 @@ const PLUGINS = [
 
 describe('lifecycle', {
 	async 'passing tests run all lifecycle methods'() {
-		const invoked = await invoke({ pass: 2 }, (g, tag) => {
+		const invoked = await invokeWithCommonTags({ pass: 2 }, (g, tag) => {
 			g.test('test 1', () => tag('test 1'));
 			g.test('test 2', () => tag('test 2'));
 		});
@@ -30,7 +30,7 @@ describe('lifecycle', {
 	},
 
 	async 'nested methods are called outer-most to inner-most'() {
-		const invoked = await invoke({ pass: 3 }, (g, tag) => {
+		const invoked = await invokeWithCommonTags({ pass: 3 }, (g, tag) => {
 			g.describe('inner', () => {
 				g.beforeAll(() => { tag('ba3'); return () => tag('end-ba3'); });
 				g.beforeEach(() => { tag('be3'); return () => tag('end-be3'); });
@@ -57,7 +57,7 @@ describe('lifecycle', {
 	},
 
 	async 'failing tests run all lifecycle methods'() {
-		const invoked = await invoke({ count: 2, pass: 1, error: 1 }, (g, tag) => {
+		const invoked = await invokeWithCommonTags({ count: 2, pass: 1, error: 1 }, (g, tag) => {
 			g.test('test 1', () => { tag('test 1'); throw new Error() });
 			g.test('test 2', () => tag('test 2'));
 		});
@@ -71,7 +71,7 @@ describe('lifecycle', {
 	},
 
 	async 'skipped tests avoid lifecycle methods'() {
-		const invoked = await invoke({ count: 3, pass: 1, skip: 2 }, (g, tag) => {
+		const invoked = await invokeWithCommonTags({ count: 3, pass: 1, skip: 2 }, (g, tag) => {
 			g.test.ignore('test 1', () => tag('test 1'));
 			g.test('test 2', () => { tag('test 2'); throw new TestAssumptionError() });
 			g.test('test 3', () => tag('test 3'));
@@ -86,7 +86,7 @@ describe('lifecycle', {
 	},
 
 	async 'unfocused tests avoid lifecycle methods'() {
-		const invoked = await invoke({ count: 4, pass: 1, skip: 3 }, (g, tag) => {
+		const invoked = await invokeWithCommonTags({ count: 4, pass: 1, skip: 3 }, (g, tag) => {
 			g.describe('inner', () => {
 				g.beforeAll(() => { tag('ba3'); return () => tag('end-ba3'); });
 				g.beforeEach(() => { tag('be3'); return () => tag('end-be3'); });
@@ -120,7 +120,7 @@ describe('lifecycle', {
 	},
 
 	async 'beforeAll error stops execution but still runs teardown'() {
-		const invoked = await invoke({ count: 2, error: 1, skip: 2, pass: 0 }, (g, tag) => {
+		const invoked = await invokeWithCommonTags({ count: 2, error: 1, skip: 2, pass: 0 }, (g, tag) => {
 			g.beforeAll(() => { throw new Error(); });
 			g.beforeAll(() => { tag('ba3'); return () => tag('end-ba3'); });
 
@@ -135,7 +135,7 @@ describe('lifecycle', {
 	},
 
 	async 'beforeAll assumption failure stops execution but still runs teardown'() {
-		const invoked = await invoke({ count: 2, skip: 2, pass: 0 }, (g, tag) => {
+		const invoked = await invokeWithCommonTags({ count: 2, skip: 2, pass: 0 }, (g, tag) => {
 			g.beforeAll(() => { throw new TestAssumptionError(); });
 			g.beforeAll(() => { tag('ba3'); return () => tag('end-ba3'); });
 
@@ -150,7 +150,7 @@ describe('lifecycle', {
 	},
 
 	async 'beforeEach error stops execution but still runs teardown'() {
-		const invoked = await invoke({ count: 2, error: 2, pass: 0 }, (g, tag) => {
+		const invoked = await invokeWithCommonTags({ count: 2, error: 2, pass: 0 }, (g, tag) => {
 			g.beforeEach(() => { throw new Error(); });
 			g.beforeEach(() => { tag('be3'); return () => tag('end-be3'); });
 
@@ -167,7 +167,7 @@ describe('lifecycle', {
 	},
 
 	async 'beforeEach assumption failure stops execution but still runs teardown'() {
-		const invoked = await invoke({ count: 2, skip: 2, pass: 0 }, (g, tag) => {
+		const invoked = await invokeWithCommonTags({ count: 2, skip: 2, pass: 0 }, (g, tag) => {
 			g.beforeEach(() => { throw new TestAssumptionError(); });
 			g.beforeEach(() => { tag('be3'); return () => tag('end-be3'); });
 
@@ -184,7 +184,7 @@ describe('lifecycle', {
 	},
 
 	async 'afterEach error runs full teardown'() {
-		const invoked = await invoke({ count: 2, error: 2, pass: 0 }, (g, tag) => {
+		const invoked = await invokeWithCommonTags({ count: 2, error: 2, pass: 0 }, (g, tag) => {
 			g.afterEach(() => { throw new Error(); });
 			g.afterEach(() => tag('ae3'));
 
@@ -201,7 +201,7 @@ describe('lifecycle', {
 	},
 
 	async 'afterEach assumption failure is ignored'() {
-		const invoked = await invoke({ count: 2, pass: 2, skip: 0 }, (g, tag) => {
+		const invoked = await invokeWithCommonTags({ count: 2, pass: 2, skip: 0 }, (g, tag) => {
 			g.afterEach(() => { throw new TestAssumptionError(); });
 			g.afterEach(() => tag('ae3'));
 
@@ -218,7 +218,7 @@ describe('lifecycle', {
 	},
 
 	async 'afterAll error runs full teardown'() {
-		const invoked = await invoke({ count: 2, error: 1, pass: 2 }, (g, tag) => {
+		const invoked = await invokeWithCommonTags({ count: 2, error: 1, pass: 2 }, (g, tag) => {
 			g.afterAll(() => { throw new Error(); });
 			g.afterAll(() => tag('aa3'));
 
@@ -235,7 +235,7 @@ describe('lifecycle', {
 	},
 
 	async 'afterAll assumption failure is ignored'() {
-		const invoked = await invoke({ count: 2, pass: 2, skip: 0 }, (g, tag) => {
+		const invoked = await invokeWithCommonTags({ count: 2, pass: 2, skip: 0 }, (g, tag) => {
 			g.afterAll(() => { throw new TestAssumptionError(); });
 			g.afterAll(() => tag('aa3'));
 
@@ -253,7 +253,7 @@ describe('lifecycle', {
 
 	async 'retried tests re-run "each" lifecycle hooks but not "all"'() {
 		let attempts = 0;
-		const invoked = await invoke({ count: 1, error: 1 }, (g, tag) => {
+		const invoked = await invokeWithCommonTags({ count: 1, error: 1 }, (g, tag) => {
 			g.test('test 1', () => {
 				++attempts;
 				tag(`test 1 attempt ${attempts}`);
@@ -269,13 +269,83 @@ describe('lifecycle', {
 			'aa1', 'aa2', 'end-ba2', 'end-ba1',
 		]));
 	},
+
+	'addTestParameter': {
+		async 'adds a parameter available to all wrapped tests'() {
+			let count = 0;
+			const invoked = await invoke({ pass: 3 }, (g, tag) => {
+				g.describe('inner', () => {
+					g.beforeEach(({ addTestParameter }) => {
+						addTestParameter(count);
+						++count;
+					});
+
+					tagWithArgs(g, tag, 'test 1');
+					tagWithArgs(g, tag, 'test 2');
+				});
+
+				tagWithArgs(g, tag, 'test 3');
+			});
+
+			expect(invoked, equals([
+				'test 1: [0]',
+				'test 2: [1]',
+				'test 3: []',
+			]));
+		},
+
+		async 'added parameters stack'() {
+			let count = 0;
+			const invoked = await invoke({ pass: 3 }, (g, tag) => {
+				g.beforeAll(({ addTestParameter }) => {
+					addTestParameter(count);
+					++count;
+				});
+
+				g.beforeEach(({ addTestParameter }) => {
+					addTestParameter('a');
+				});
+
+				g.describe('inner', () => {
+					g.beforeEach(({ addTestParameter }) => {
+						addTestParameter(count);
+						++count;
+					});
+
+					g.beforeEach(({ addTestParameter }) => {
+						addTestParameter('b');
+						addTestParameter('c');
+					});
+
+					tagWithArgs(g, tag, 'test 1');
+					tagWithArgs(g, tag, 'test 2');
+				});
+
+				tagWithArgs(g, tag, 'test 3');
+			});
+
+			expect(invoked, equals([
+				'test 1: [0, a, 1, b, c]',
+				'test 2: [0, a, 2, b, c]',
+				'test 3: [0, a]',
+			]));
+		},
+	},
 });
+
+function tagWithArgs(g, tag, name) {
+	g.test(name, (...args) => tag(`${name}: [${args.join(', ')}]`));
+}
 
 async function invoke(expectedResults, block) {
 	const invoked = [];
 	const tag = (label) => invoked.push(label);
+	await testRunner(PLUGINS, expectedResults, (g) => block(g, tag));
+	return invoked;
+}
 
-	await testRunner(PLUGINS, expectedResults, (g) => {
+async function invokeWithCommonTags(expectedResults, block) {
+	return invoke(expectedResults, (g, tag) => {
 		g.beforeAll(() => { tag('ba1'); return () => tag('end-ba1'); });
 		g.beforeAll(() => { tag('ba2'); return () => tag('end-ba2'); });
 		g.beforeEach(() => { tag('be1'); return () => tag('end-be1'); });
@@ -287,6 +357,4 @@ async function invoke(expectedResults, block) {
 
 		block(g, tag);
 	});
-
-	return invoked;
 }

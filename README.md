@@ -482,6 +482,29 @@ describe('lifecycle', () => {
 });
 ```
 
+You can also add test parameters from a `beforeAll` or `beforeEach` hook.
+These parameters will be available to all tests which are inside the hook's
+scope.
+
+```javascript
+describe('lifecycle', () => {
+	beforeEach('launch server', async ({ addTestParameter }) => {
+		const server = await runServer();
+		addTestParameter(server);
+
+		return () => server.close();
+	});
+
+	it('does a thing', (server) => {
+		server.get('foobar');
+		// ...
+	});
+});
+```
+
+This pattern can be useful for fully decoupling tests from global state, allowing
+them to run in parallel.
+
 ## Standard Matchers
 
 - `equals(value)`:<br>
