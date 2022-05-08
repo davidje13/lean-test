@@ -457,12 +457,12 @@ describe('lifecycle', () => {
 
 Registers execution listeners which will run before and after the whole block, or before
 and after each test within the block. Multiple hooks will be executed in the order they
-are defined. Nested blocks will be executed from outermost to innermost for `begin`, and
+are defined. Nested blocks will be executed from outermost to innermost for `before`, and
 innermost to outermost for `after`.
 
 All methods can be asynchronous.
 
-`begin` hooks can also return a function which will act like a corresponding `after`
+`before` hooks can also return a function which will act like a corresponding `after`
 hook:
 
 ```javascript
