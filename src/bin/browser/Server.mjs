@@ -118,7 +118,7 @@ export default class Server {
 	}
 }
 
-Server.directory = (base, dir) => async (server, url, res) => {
+Server.directory = (base, dir, preprocessor) => async (server, url, res) => {
 	if (!url.startsWith(base)) {
 		return false;
 	}
@@ -126,9 +126,16 @@ Server.directory = (base, dir) => async (server, url, res) => {
 	if (!path.startsWith(dir)) {
 		throw new HttpError(400, 'Invalid resource path');
 	}
-	await server.sendFile(path, res);
+	const loaded = await (preprocessor ?? fileLoader).load(path);
+	if (!loaded) {
+		throw new HttpError(404, 'Not Found');
+	}
+	res.setHeader('Content-Type', server.getContentType(loaded.path));
+	res.end(loaded.content);
 	return true;
 };
+
+const fileLoader = { load: async (path) => ({ path, content: await readFile(path).catch(() => null) }) };
 
 class HttpError extends Error {
 	constructor(status, message) {

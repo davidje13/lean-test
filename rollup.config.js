@@ -35,6 +35,7 @@ export default [
 			'os',
 			'child_process',
 			'http',
+			'typescript',
 			'../lean-test.mjs',
 			'../../lean-test.mjs', // duplicated because this must exactly match import lines in all files
 		],

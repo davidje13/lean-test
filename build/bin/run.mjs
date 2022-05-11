@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import process, { platform, getuid, env } from 'process';
+import process, { platform, getuid, env, cwd } from 'process';
 import { join, resolve, dirname, relative } from 'path';
 import { AbstractRunner, ExitHook, standardRunner, outputs, reporters, ParallelRunner } from '../lean-test.mjs';
 import { readdir, access, mkdtemp, rm, writeFile, readFile, realpath } from 'fs/promises';
@@ -537,7 +537,7 @@ class Server {
 	}
 }
 
-Server.directory = (base, dir) => async (server, url, res) => {
+Server.directory = (base, dir, preprocessor) => async (server, url, res) => {
 	if (!url.startsWith(base)) {
 		return false;
 	}
@@ -545,9 +545,16 @@ Server.directory = (base, dir) => async (server, url, res) => {
 	if (!path.startsWith(dir)) {
 		throw new HttpError(400, 'Invalid resource path');
 	}
-	await server.sendFile(path, res);
+	const loaded = await (preprocessor ?? fileLoader).load(path);
+	if (!loaded) {
+		throw new HttpError(404, 'Not Found');
+	}
+	res.setHeader('Content-Type', server.getContentType(loaded.path));
+	res.end(loaded.content);
 	return true;
 };
+
+const fileLoader = { load: async (path) => ({ path, content: await readFile(path).catch(() => null) }) };
 
 class HttpError extends Error {
 	constructor(status, message) {
@@ -678,10 +685,11 @@ const handleMappedImport = (importMap) => async (server, url, res) => {
 };
 
 class HttpServerRunner extends AbstractRunner {
-	constructor({ port, host, ...browserConfig }, paths) {
+	constructor({ port, host, preprocessor, ...browserConfig }, paths) {
 		super();
 		this.port = port;
 		this.host = host;
+		this.preprocessor = preprocessor;
 		this.browserConfig = browserConfig;
 		this.paths = paths;
 	}
@@ -701,7 +709,7 @@ class HttpServerRunner extends AbstractRunner {
 		const server = new Server(index, sharedState[HttpServerRunner.POST_LISTENER].handle, [
 			Server.directory('/.lean-test/', resolve(selfPath, '..')),
 			importMap && handleMappedImport(importMap),
-			Server.directory('/', basePath),
+			Server.directory('/', basePath, this.preprocessor),
 		]);
 		await server.listen(Number(this.port), this.host);
 		sharedState[HttpServerRunner.SERVER] = server;
@@ -1093,6 +1101,72 @@ async function inProcessNodeRunner(config, paths) {
 	return builder.build();
 }
 
+// TODO: support nodejs runtime (see https://nodejs.org/api/esm.html#loaders)
+
+var tsc = async () => {
+	const { default: ts } = await loadTypescript();
+	const baseDir = cwd();
+
+	const rawCompilerOptions = readCompilerOptions(ts, baseDir);
+	const compilerOptions = { ...rawCompilerOptions, noEmit: false, sourceMap: false, module: 'es2015' };
+	const host = ts.createCompilerHost(compilerOptions);
+	const cache = ts.createModuleResolutionCache(baseDir, host.getCanonicalFileName, compilerOptions);
+
+	const resolver = (path) => ts.resolveModuleName(path, baseDir, compilerOptions, host, cache).resolvedModule?.resolvedFileName;
+
+	return {
+		async load(path) {
+			const fullPath = await resolveFilename(path, resolver);
+			if (!path) {
+				return null;
+			}
+			const source = await readFile(fullPath, 'utf8');
+			const result = ts.transpileModule(source, { fileName: fullPath, compilerOptions });
+			if (result.diagnostics?.length) {
+				throw new Error(JSON.stringify(result.diagnostics));
+			}
+			return { path: fullPath.replace(/(.*)\.ts/i, '\\1.js'), content: Buffer.from(result.outputText, 'utf8') };
+		},
+	};
+};
+
+function loadTypescript() {
+	try {
+		return import('typescript');
+	} catch (e) {
+		throw new Error('Must install typescript to use tsc preprocessor (npm install --save-dev typescript)');
+	}
+}
+
+function readCompilerOptions(ts, path) {
+	const configPath = ts.findConfigFile(path, ts.sys.fileExists, 'tsconfig.json');
+	if (!configPath) {
+		return {};
+	}
+	const config = ts.readConfigFile(configPath, ts.sys.readFile);
+	const options = ts.parseJsonConfigFileContent(config.config, ts.sys, dirname(configPath))?.options ?? {};
+
+	// explicit values for defaults which may change when we change the module mode:
+	if (!options.moduleResolution) {
+		if ((options.module ?? 'commonjs').toLowerCase() === 'commonjs') {
+			options.moduleResolution = 'node';
+		} else {
+			options.moduleResolution = 'classic';
+		}
+	}
+
+	return options;
+}
+
+async function resolveFilename(path, resolver) {
+	try {
+		await access(path);
+		return path;
+	} catch (e) {
+		return resolver(path);
+	}
+}
+
 const targets = new Map([
 	['node', { name: 'Node.js', make: inProcessNodeRunner }],
 	['url', { name: 'Custom Browser', make: manualBrowserRunner }],
@@ -1100,11 +1174,17 @@ const targets = new Map([
 	['firefox', { name: 'Mozilla Firefox', make: autoBrowserRunner('firefox', launchFirefox) }],
 ]);
 
+const preprocs = new Map([
+	['none', null],
+	['tsc', tsc],
+]);
+
 const argparse = new ArgumentParser({
 	parallelDiscovery: { names: ['parallel-discovery', 'P'], env: 'PARALLEL_DISCOVERY', type: 'boolean', default: false },
 	parallelSuites: { names: ['parallel-suites', 'parallel', 'p'], env: 'PARALLEL_SUITES', type: 'boolean', default: false },
 	pathsInclude: { names: ['include', 'i'], type: 'set', default: ['**/*.{spec|test}.{js|mjs|cjs|jsx}'] },
 	pathsExclude: { names: ['exclude', 'x'], type: 'set', default: [] },
+	preprocessor: { names: ['preprocess', 'c'], type: 'string', default: 'none', mapping: preprocs },
 	noDefaultExclude: { names: ['no-default-exclude'], type: 'boolean', default: false },
 	target: { names: ['target', 't'], env: 'TARGET', type: 'set', default: ['node'], mapping: targets },
 	colour: { names: ['colour', 'color'], env: 'OUTPUT_COLOUR', type: 'boolean', default: null },
@@ -1120,6 +1200,7 @@ try {
 	const exclusion = [...config.pathsExclude, ...(config.noDefaultExclude ? [] : ['**/node_modules', '**/.*'])];
 	const scanDirs = config.scan.map((path) => resolve(process.cwd(), path));
 	const paths = await asyncListToSync(findPathsMatching(scanDirs, config.pathsInclude, exclusion));
+	config.preprocessor = await config.preprocessor?.();
 
 	const forceTTY = (
 		config.colour ??

@@ -2,9 +2,10 @@
   "name": "lean-test-package-test",
   "private": true,
   "scripts": {
-    "test": "lean-test --target=node,chrome"
+    "test": "lean-test --target=node,chrome && lean-test -i '**/*.spec.ts' --preprocess=tsc --target=chrome"
   },
   "devDependencies": {
-    "lean-test": "file:lean-test.tgz"
+    "lean-test": "file:lean-test.tgz",
+    "typescript": "^4.6.4"
   }
 }

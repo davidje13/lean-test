@@ -8,6 +8,7 @@ import ArgumentParser from './ArgumentParser.mjs';
 import { launchChrome, launchFirefox } from './browser/launchBrowser.mjs';
 import { autoBrowserRunner, manualBrowserRunner } from './browser/browserRunner.mjs';
 import inProcessNodeRunner from './node/inProcessNodeRunner.mjs';
+import * as preprocessors from './preprocessors/index.mjs';
 import { asyncListToSync } from './utils.mjs';
 
 const targets = new Map([
@@ -17,11 +18,17 @@ const targets = new Map([
 	['firefox', { name: 'Mozilla Firefox', make: autoBrowserRunner('firefox', launchFirefox) }],
 ]);
 
+const preprocs = new Map([
+	['none', null],
+	['tsc', preprocessors.tsc],
+]);
+
 const argparse = new ArgumentParser({
 	parallelDiscovery: { names: ['parallel-discovery', 'P'], env: 'PARALLEL_DISCOVERY', type: 'boolean', default: false },
 	parallelSuites: { names: ['parallel-suites', 'parallel', 'p'], env: 'PARALLEL_SUITES', type: 'boolean', default: false },
 	pathsInclude: { names: ['include', 'i'], type: 'set', default: ['**/*.{spec|test}.{js|mjs|cjs|jsx}'] },
 	pathsExclude: { names: ['exclude', 'x'], type: 'set', default: [] },
+	preprocessor: { names: ['preprocess', 'c'], type: 'string', default: 'none', mapping: preprocs },
 	noDefaultExclude: { names: ['no-default-exclude'], type: 'boolean', default: false },
 	target: { names: ['target', 't'], env: 'TARGET', type: 'set', default: ['node'], mapping: targets },
 	colour: { names: ['colour', 'color'], env: 'OUTPUT_COLOUR', type: 'boolean', default: null },
@@ -37,6 +44,7 @@ try {
 	const exclusion = [...config.pathsExclude, ...(config.noDefaultExclude ? [] : ['**/node_modules', '**/.*'])];
 	const scanDirs = config.scan.map((path) => resolve(process.cwd(), path));
 	const paths = await asyncListToSync(findPathsMatching(scanDirs, config.pathsInclude, exclusion));
+	config.preprocessor = await config.preprocessor?.();
 
 	const forceTTY = (
 		config.colour ??

@@ -22,10 +22,11 @@ const handleMappedImport = (importMap) => async (server, url, res) => {
 };
 
 export default class HttpServerRunner extends AbstractRunner {
-	constructor({ port, host, ...browserConfig }, paths) {
+	constructor({ port, host, preprocessor, ...browserConfig }, paths) {
 		super();
 		this.port = port;
 		this.host = host;
+		this.preprocessor = preprocessor;
 		this.browserConfig = browserConfig;
 		this.paths = paths;
 	}
@@ -45,7 +46,7 @@ export default class HttpServerRunner extends AbstractRunner {
 		const server = new Server(index, sharedState[HttpServerRunner.POST_LISTENER].handle, [
 			Server.directory('/.lean-test/', resolve(selfPath, '..')),
 			importMap && handleMappedImport(importMap),
-			Server.directory('/', basePath),
+			Server.directory('/', basePath, this.preprocessor),
 		]);
 		await server.listen(Number(this.port), this.host);
 		sharedState[HttpServerRunner.SERVER] = server;
