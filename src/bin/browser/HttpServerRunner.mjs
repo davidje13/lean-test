@@ -3,12 +3,8 @@ import { realpath } from 'fs/promises';
 import process from 'process';
 import EventListener from './EventListener.mjs';
 import Server from './Server.mjs';
-import ActiveTestTracker from './ActiveTestTracker.mjs';
-import { AbstractRunner } from '../../lean-test.mjs';
+import { ExternalRunner } from '../../lean-test.mjs';
 import ImportMap from '../filesystem/ImportMap.mjs';
-
-const INITIAL_CONNECT_TIMEOUT = 30000;
-const PING_TIMEOUT = 2000;
 
 const handleMappedImport = (importMap) => async (server, url, res) => {
 	const path = await importMap.resolve(url.substr(1)).catch(() => {
@@ -21,7 +17,7 @@ const handleMappedImport = (importMap) => async (server, url, res) => {
 	return true;
 };
 
-export default class HttpServerRunner extends AbstractRunner {
+export default class HttpServerRunner extends ExternalRunner {
 	constructor({ port, host, preprocessor, ...browserConfig }, paths) {
 		super();
 		this.port = port;
@@ -29,6 +25,7 @@ export default class HttpServerRunner extends AbstractRunner {
 		this.preprocessor = preprocessor;
 		this.browserConfig = browserConfig;
 		this.paths = paths;
+		this.browserID = null;
 	}
 
 	async prepare(sharedState) {
@@ -62,10 +59,17 @@ export default class HttpServerRunner extends AbstractRunner {
 		server?.close();
 	}
 
+	setBrowserID(id) {
+		this.browserID = id;
+	}
+
 	async invoke(listener, sharedState) {
-		const { browserID, url } = this.makeUniqueTarget(sharedState);
-		process.stderr.write(`Ready to run test: ${url}\n`);
-		return this.invokeWithBrowserID(listener, sharedState, browserID);
+		if (this.browserID === null) {
+			const { browserID, url } = this.makeUniqueTarget(sharedState);
+			this.setBrowserID(browserID);
+			process.stderr.write(`Ready to run test: ${url}\n`);
+		}
+		return super.invoke(listener, sharedState);
 	}
 
 	makeUniqueTarget(sharedState, overrideAddr = null) {
@@ -76,69 +80,9 @@ export default class HttpServerRunner extends AbstractRunner {
 		return { browserID, url: server.baseurl(overrideAddr) + '#' + browserID };
 	}
 
-	invokeWithBrowserID(listener, sharedState, browserID) {
+	registerEventListener(listener, sharedState) {
 		const postListener = sharedState[HttpServerRunner.POST_LISTENER];
-		const tracker = new ActiveTestTracker();
-
-		return new Promise((res, reject) => {
-			let connectedUntil = Date.now() + INITIAL_CONNECT_TIMEOUT;
-			let connected = false;
-			const checkPing = setInterval(() => {
-				if (Date.now() > connectedUntil) {
-					clearInterval(checkPing);
-					if (!connected) {
-						reject(new Error('browser launch timed out'));
-					} else {
-						reject(new DisconnectError('unknown disconnect'));
-					}
-				}
-			}, 250);
-			postListener.addListener(browserID, (event) => {
-				connectedUntil = Date.now() + PING_TIMEOUT;
-				switch (event.type) {
-					case 'ping':
-						break;
-					case 'browser-connect':
-						if (connected) {
-							clearInterval(checkPing);
-							reject(new DisconnectError('multiple browser connections (maybe page reloaded?)'));
-						}
-						connected = true;
-						break;
-					case 'browser-end':
-						clearInterval(checkPing);
-						res(event.result);
-						break;
-					case 'browser-error':
-						clearInterval(checkPing);
-						reject(new DisconnectError(`browser error: ${event.error}`));
-						break;
-					case 'browser-unsupported':
-						clearInterval(checkPing);
-						reject(new UnsupportedError(event.error));
-						break;
-					case 'browser-unload':
-						clearInterval(checkPing);
-						reject(new DisconnectError(`test page closed (did a test change window.location?)`));
-						break;
-					default:
-						tracker.eventListener(event);
-						listener(event);
-				}
-			});
-		}).catch((e) => {
-			if (e instanceof UnsupportedError) {
-				throw e;
-			}
-			if (e instanceof DisconnectError) {
-				throw new Error(`Browser disconnected: ${e.message}\nActive tests:\n${tracker.get().map((p) => '- ' + p.join(' -> ')).join('\n') || 'none'}\n`);
-			}
-			throw new Error(`Error running browser: ${e}\n${this.debug()}\nUnhandled events: ${postListener.unhandled()}\n`);
-		});
-	}
-
-	debug() {
-		return 'unknown';
+		postListener.addListener(this.browserID, listener);
 	}
 }
 
@@ -163,7 +107,7 @@ run(id, /*CONFIG*/, /*SUITES*/).then(() => window.close());
 async function buildIndex(config, paths, basePath, importMap) {
 	const suites = [];
 	for await (const path of paths) {
-		suites.push([path.relative, '/' + relative(basePath, path.path)]);
+		suites.push({ path: '/' + relative(basePath, path.path), relative: path.relative });
 	}
 	const importMapScript = importMap ? (
 		'<script type="importmap">' +
@@ -174,17 +118,4 @@ async function buildIndex(config, paths, basePath, importMap) {
 		.replace('/*IMPORT_MAP*/', importMapScript)
 		.replace('/*CONFIG*/', JSON.stringify(config))
 		.replace('/*SUITES*/', JSON.stringify(suites));
-}
-
-class UnsupportedError extends Error {
-	constructor(message) {
-		super(message);
-		this.skipFrames = Number.POSITIVE_INFINITY;
-	}
-}
-
-class DisconnectError extends Error {
-	constructor(message) {
-		super(message);
-	}
 }

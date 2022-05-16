@@ -17,7 +17,7 @@ function interceptWrite(original, type, chunk, encoding, callback) {
 		encoding = null;
 	}
 	if (typeof chunk === 'string') {
-		chunk = Buffer.from(chunk, encoding ?? 'utf8');
+		chunk = Buffer.from(chunk, encoding ?? 'utf-8');
 	}
 	target.push({ type, chunk });
 	callback?.();
@@ -87,7 +87,7 @@ function combineOutput(parts, binary) {
 			.join('')
 	} else {
 		const all = Buffer.concat(parts.map((i) => i.chunk));
-		return binary ? all : all.toString('utf8');
+		return binary ? all : all.toString('utf-8');
 	}
 }
 

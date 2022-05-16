@@ -50,6 +50,9 @@ export async function launchChrome(url, opts) {
 		{ path: 'chromium-browser' },
 		{ path: 'chromium' },
 	]);
+	if (!executable) {
+		throw new Error('Chrome / Chromium executable not found');
+	}
 	const extraArgs = [];
 	if (IS_ROOT) { // required to prevent "Running as root without --no-sandbox is not supported"
 		extraArgs.push('--no-sandbox', '--disable-setuid-sandbox');
@@ -71,6 +74,9 @@ export async function launchFirefox(url, opts) {
 		{ path: 'firefox' },
 		{ path: 'iceweasel' },
 	]);
+	if (!executable) {
+		throw new Error('Firefox / Iceweasel executable not found');
+	}
 
 	const profileDir = await makeTempDir();
 	await writeFile(join(profileDir, 'prefs.js'), FIREFOX_PREFS);
@@ -82,7 +88,7 @@ export async function launchFirefox(url, opts) {
 		'--no-remote',
 		'--new-instance',
 		url,
-	], { ...opts, env: { MOZ_DISABLE_AUTO_SAFE_MODE: 'true' } });
+	], { ...opts, env: { ...env, MOZ_DISABLE_AUTO_SAFE_MODE: 'true' } });
 	return {
 		proc,
 		teardown: () => removeTempDir(profileDir),

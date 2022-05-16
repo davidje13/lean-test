@@ -1,4 +1,4 @@
-import { standardRunner, setIdNamespace } from './lean-test.mjs';
+import { standardRunner } from './lean-test.mjs';
 
 class Aggregator {
 	constructor(next) {
@@ -66,35 +66,33 @@ export default async function run(id, config, suites) {
 		body: JSON.stringify({ id, events }),
 		keepalive: true, // allow sending in background even after page unloads
 	}));
-	eventDispatcher.invoke({ type: 'browser-connect' });
+	eventDispatcher.invoke({ type: 'runner-connect' });
 
 	if (config.importMap && HTMLScriptElement.supports && !HTMLScriptElement.supports('importmap')) {
 		eventDispatcher.invoke({
-			type: 'browser-unsupported',
+			type: 'runner-unsupported',
 			error: 'Browser does not support import map',
 		});
 		await eventDispatcher.wait();
 		return;
 	}
 
-	const ping = setInterval(() => eventDispatcher.invoke({ type: 'browser-ping' }), 500);
+	const ping = setInterval(() => eventDispatcher.invoke({ type: 'runner-ping' }), 500);
 
 	const unload = () => {
-		eventDispatcher.invoke({ type: 'browser-unload' });
+		eventDispatcher.invoke({ type: 'runner-disconnect' });
 		eventDispatcher.sendNow();
 	};
 
 	window.addEventListener('beforeunload', unload, { once: true });
 
 	try {
-		setIdNamespace(id);
-
 		const builder = standardRunner()
 			.useParallelDiscovery(false)
 			.useParallelSuites(config.parallelSuites);
 
-		suites.forEach(([name, path]) => {
-			builder.addSuite(name, async (globals) => {
+		suites.forEach(({ path, relative }) => {
+			builder.addSuite(relative, async (globals) => {
 				Object.assign(window, globals);
 				const result = await import(path);
 				return result.default;
@@ -106,11 +104,11 @@ export default async function run(id, config, suites) {
 
 		window.title = `Lean Test Runner (${id}) - complete`;
 		document.body.innerText = 'Test run complete.';
-		eventDispatcher.invoke({ type: 'browser-end', result });
+		eventDispatcher.invoke({ type: 'runner-end', result });
 	} catch (e) {
 		window.title = `Lean Test Runner (${id}) - error`;
 		console.error(e);
-		eventDispatcher.invoke({ type: 'browser-error', error: String(e) });
+		eventDispatcher.invoke({ type: 'runner-error', error: String(e) });
 	} finally {
 		clearInterval(ping);
 		window.removeEventListener('beforeunload', unload);

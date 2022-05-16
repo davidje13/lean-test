@@ -38,7 +38,8 @@ export default class WebdriverRunner extends HttpServerRunner {
 		const postListener = sharedState[HttpServerRunner.POST_LISTENER];
 
 		const browserID = await makeConnection(this.session, server, postListener);
-		return super.invokeWithBrowserID(listener, sharedState, browserID);
+		this.setBrowserID(browserID);
+		return super.invoke(listener, sharedState);
 	}
 
 	debug() {

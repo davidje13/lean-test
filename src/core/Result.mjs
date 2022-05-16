@@ -1,11 +1,6 @@
 import ResultStage from './ResultStage.mjs';
 
-let idNamespace = '';
 let nextID = 0;
-
-export function setIdNamespace(namespace) {
-	idNamespace = namespace + '-';
-}
 
 const filterSummary = ({ tangible, time, fail }, summary) => ({
 	count: tangible ? summary.count : 0,
@@ -19,7 +14,7 @@ const filterSummary = ({ tangible, time, fail }, summary) => ({
 
 export default class Result {
 	constructor(label, parent, { isBoring = false } = {}) {
-		this.id = `${idNamespace}${++nextID}`;
+		this.id = String(++nextID);
 		this.label = label;
 		this.parent = parent;
 		this.isBoring = isBoring;

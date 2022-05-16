@@ -27,8 +27,13 @@ export default class ParallelRunner extends AbstractRunner {
 			return this.runners[0].runner.invoke(listener, sharedState);
 		}
 		return Result.of(null, async (baseResult) => {
-			const subResults = await Promise.all(this.runners.map(async ({ label, runner }) => {
-				const convert = (o) => ((o.parent === null) ? { ...o, parent: baseResult.id, label } : o);
+			const subResults = await Promise.all(this.runners.map(async ({ label, runner }, index) => {
+				const convert = (o) => ({
+					...o,
+					id: `${index}-${o.id}`,
+					parent: o.parent ? `${index}-${o.parent}` : baseResult.id,
+					label: o.parent ? o.label : label,
+				});
 				const subListener = listener ? ((event) => listener(convert(event))) : null;
 				const subResult = await runner.invoke(subListener, sharedState)
 					.catch((e) => Result.of(null, () => { throw e; }, { isBlock: true }));

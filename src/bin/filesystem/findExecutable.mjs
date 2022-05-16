@@ -39,5 +39,5 @@ export default async function findExecutable(options) {
 			return path;
 		}
 	}
-	throw new Error('browser executable not found');
+	return null;
 }

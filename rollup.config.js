@@ -26,6 +26,32 @@ export default [
 		},
 	},
 	{
+		input: 'src/node-runtime.mjs',
+		external: [
+			'process',
+			'fs',
+			'./lean-test.mjs',
+		],
+		output: {
+			file: 'build/node-runtime.mjs',
+			format: 'es',
+		},
+	},
+	{
+		input: 'src/preprocessor.mjs',
+		external: [
+			'process',
+			'path',
+			'fs/promises',
+			'typescript',
+			'./lean-test.mjs',
+		],
+		output: {
+			file: 'build/preprocessor.mjs',
+			format: 'es',
+		},
+	},
+	{
 		input: 'src/bin/run.mjs',
 		external: [
 			'process',
@@ -35,7 +61,7 @@ export default [
 			'os',
 			'child_process',
 			'http',
-			'typescript',
+			'../preprocessor.mjs',
 			'../lean-test.mjs',
 			'../../lean-test.mjs', // duplicated because this must exactly match import lines in all files
 		],

@@ -389,12 +389,7 @@ ResultStage.of = async (label, fn, { errorStackSkipFrames = 0, context = null } 
 
 ResultStage.getContext = () => RESULT_STAGE_SCOPE.get();
 
-let idNamespace = '';
 let nextID = 0;
-
-function setIdNamespace(namespace) {
-	idNamespace = namespace + '-';
-}
 
 const filterSummary = ({ tangible, time, fail }, summary) => ({
 	count: tangible ? summary.count : 0,
@@ -408,7 +403,7 @@ const filterSummary = ({ tangible, time, fail }, summary) => ({
 
 class Result {
 	constructor(label, parent, { isBoring = false } = {}) {
-		this.id = `${idNamespace}${++nextID}`;
+		this.id = String(++nextID);
 		this.label = label;
 		this.parent = parent;
 		this.isBoring = isBoring;
@@ -1716,7 +1711,7 @@ function interceptWrite(original, type, chunk, encoding, callback) {
 		encoding = null;
 	}
 	if (typeof chunk === 'string') {
-		chunk = Buffer.from(chunk, encoding ?? 'utf8');
+		chunk = Buffer.from(chunk, encoding ?? 'utf-8');
 	}
 	target.push({ type, chunk });
 	callback?.();
@@ -1786,7 +1781,7 @@ function combineOutput(parts, binary) {
 			.join('')
 	} else {
 		const all = Buffer.concat(parts.map((i) => i.chunk));
-		return binary ? all : all.toString('utf8');
+		return binary ? all : all.toString('utf-8');
 	}
 }
 
@@ -2199,6 +2194,132 @@ var index$3 = /*#__PURE__*/Object.freeze({
 	timeout: timeout
 });
 
+class ActiveTestTracker {
+	constructor() {
+		this.active = new Map();
+		this.eventListener = (event) => {
+			if (event.type === 'begin') {
+				this.active.set(event.id, event);
+			} else if (event.type === 'complete') {
+				this.active.delete(event.id);
+			}
+		};
+	}
+
+	get() {
+		const result = [];
+		this.active.forEach((beginEvent) => {
+			if (!beginEvent.isBlock) {
+				const parts = [];
+				for (let e = beginEvent; e; e = this.active.get(e.parent)) {
+					if (e.label !== null) {
+						parts.push(e.label);
+					}
+				}
+				result.push(parts.reverse());
+			}
+		});
+		return result;
+	}
+}
+
+const INITIAL_CONNECT_TIMEOUT = 30000;
+const PING_TIMEOUT = 2000;
+
+class ExternalRunner extends AbstractRunner {
+	async launch(sharedState) {
+	}
+
+	registerEventListener(listener, sharedState) {
+		throw new Error('registerEventListener not overridden');
+	}
+
+	debug() {
+		return 'unknown';
+	}
+
+	async invoke(listener, sharedState) {
+		const tracker = new ActiveTestTracker();
+
+		await this.launch(sharedState);
+		try {
+			return await new Promise((resolve, reject) => {
+				let connectedUntil = Date.now() + INITIAL_CONNECT_TIMEOUT;
+				let connected = false;
+				const checkPing = setInterval(() => {
+					if (Date.now() > connectedUntil) {
+						clearInterval(checkPing);
+						if (!connected) {
+							reject(new Error('runner launch timed out'));
+						} else {
+							reject(new DisconnectError('unknown runner disconnect'));
+						}
+					}
+				}, 250);
+				this.registerEventListener((event) => {
+					connectedUntil = Date.now() + PING_TIMEOUT;
+					switch (event.type) {
+						case 'runner-ping':
+							break;
+						case 'runner-connect':
+							if (connected) {
+								clearInterval(checkPing);
+								reject(new DisconnectError('multiple external connections (maybe page reloaded?)'));
+							}
+							connected = true;
+							break;
+						case 'runner-end':
+							clearInterval(checkPing);
+							resolve(event.result);
+							break;
+						case 'runner-error':
+							clearInterval(checkPing);
+							reject(new DisconnectError(`runner error: ${event.error}`));
+							break;
+						case 'runner-unsupported':
+							clearInterval(checkPing);
+							reject(new UnsupportedError(event.error));
+							break;
+						case 'runner-disconnect':
+							clearInterval(checkPing);
+							reject(new DisconnectError(`runner closed (did a test change window.location?)`));
+							break;
+						default:
+							tracker.eventListener(event);
+							listener(event);
+					}
+				}, sharedState);
+			});
+		} catch(e) {
+			if (e instanceof UnsupportedError) {
+				throw e;
+			}
+			if (e instanceof DisconnectError) {
+				throw new Error(`Runner disconnected: ${e.message}\nActive tests:\n${tracker.get().map((p) => '- ' + p.join(' -> ')).join('\n') || 'none'}`);
+			}
+			let debugInfo = '';
+			try {
+				debugInfo = this.debug();
+			} catch (ignore) {
+			}
+			throw new Error(`Error in runner: ${e}\n${debugInfo}`);
+		}
+	}
+}
+
+class UnsupportedError extends Error {
+	constructor(message) {
+		super(message);
+		this.skipFrames = Number.POSITIVE_INFINITY;
+	}
+}
+
+class DisconnectError extends Error {
+	constructor(message) {
+		super(message);
+	}
+}
+
 class ParallelRunner extends AbstractRunner {
 	constructor() {
 		super();
@@ -2225,8 +2346,13 @@ class ParallelRunner extends AbstractRunner {
 			return this.runners[0].runner.invoke(listener, sharedState);
 		}
 		return Result.of(null, async (baseResult) => {
-			const subResults = await Promise.all(this.runners.map(async ({ label, runner }) => {
-				const convert = (o) => ((o.parent === null) ? { ...o, parent: baseResult.id, label } : o);
+			const subResults = await Promise.all(this.runners.map(async ({ label, runner }, index) => {
+				const convert = (o) => ({
+					...o,
+					id: `${index}-${o.id}`,
+					parent: o.parent ? `${index}-${o.parent}` : baseResult.id,
+					label: o.parent ? o.label : label,
+				});
 				const subListener = listener ? ((event) => listener(convert(event))) : null;
 				const subResult = await runner.invoke(subListener, sharedState)
 					.catch((e) => Result.of(null, () => { throw e; }, { isBlock: true }));
@@ -2574,4 +2700,4 @@ function standardRunner() {
 		.addPlugin(timeout());
 }
 
-export { AbstractRunner, ExitHook, ParallelRunner, Runner, TestAssertionError, TestAssumptionError, index$2 as helpers, matchers, index$1 as outputs, index$3 as plugins, index as reporters, setIdNamespace, standardRunner };
+export { AbstractRunner, ExitHook, ExternalRunner, ParallelRunner, Runner, TestAssertionError, TestAssumptionError, index$2 as helpers, matchers, index$1 as outputs, index$3 as plugins, index as reporters, standardRunner };

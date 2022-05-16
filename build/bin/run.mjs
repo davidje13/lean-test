@@ -1,12 +1,13 @@
 #!/usr/bin/env node
-import process, { platform, getuid, env, cwd } from 'process';
+import process$1, { platform, getuid, env } from 'process';
 import { join, resolve, dirname, relative } from 'path';
-import { AbstractRunner, ExitHook, standardRunner, outputs, reporters, ParallelRunner } from '../lean-test.mjs';
+import { ExternalRunner, ExitHook, standardRunner, outputs, reporters, ParallelRunner } from '../lean-test.mjs';
 import { readdir, access, mkdtemp, rm, writeFile, readFile, realpath } from 'fs/promises';
 import { constants } from 'fs';
 import { spawn } from 'child_process';
 import { tmpdir, networkInterfaces } from 'os';
 import { createServer, request } from 'http';
+import { preprocessors } from '../preprocessor.mjs';
 
 const SPECIAL = /[^-a-zA-Z0-9 _]/g;
 const SPECIAL_REPLACE = (v) => {
@@ -270,7 +271,7 @@ async function findExecutable(options) {
 			return path;
 		}
 	}
-	throw new Error('browser executable not found');
+	return null;
 }
 
 const TEMP_BASE = join(tmpdir(), 'lean-test-');
@@ -332,6 +333,9 @@ async function launchChrome(url, opts) {
 		{ path: 'chromium-browser' },
 		{ path: 'chromium' },
 	]);
+	if (!executable) {
+		throw new Error('Chrome / Chromium executable not found');
+	}
 	const extraArgs = [];
 	if (IS_ROOT) { // required to prevent "Running as root without --no-sandbox is not supported"
 		extraArgs.push('--no-sandbox', '--disable-setuid-sandbox');
@@ -353,6 +357,9 @@ async function launchFirefox(url, opts) {
 		{ path: 'firefox' },
 		{ path: 'iceweasel' },
 	]);
+	if (!executable) {
+		throw new Error('Firefox / Iceweasel executable not found');
+	}
 
 	const profileDir = await makeTempDir();
 	await writeFile(join(profileDir, 'prefs.js'), FIREFOX_PREFS);
@@ -364,7 +371,7 @@ async function launchFirefox(url, opts) {
 		'--no-remote',
 		'--new-instance',
 		url,
-	], { ...opts, env: { MOZ_DISABLE_AUTO_SAFE_MODE: 'true' } });
+	], { ...opts, env: { ...env, MOZ_DISABLE_AUTO_SAFE_MODE: 'true' } });
 	return {
 		proc,
 		teardown: () => removeTempDir(profileDir),
@@ -545,7 +552,11 @@ Server.directory = (base, dir, preprocessor) => async (server, url, res) => {
 	if (!path.startsWith(dir)) {
 		throw new HttpError(400, 'Invalid resource path');
 	}
-	const loaded = await (preprocessor ?? fileLoader).load(path);
+	const fullPath = await (preprocessor ?? fileLoader).resolve(path);
+	if (!fullPath) {
+		throw new HttpError(404, 'Not Found');
+	}
+	const loaded = await (preprocessor ?? fileLoader).load(fullPath);
 	if (!loaded) {
 		throw new HttpError(404, 'Not Found');
 	}
@@ -554,7 +565,10 @@ Server.directory = (base, dir, preprocessor) => async (server, url, res) => {
 	return true;
 };
 
-const fileLoader = { load: async (path) => ({ path, content: await readFile(path).catch(() => null) }) };
+const fileLoader = {
+	resolve: (path) => path,
+	load: async (path) => ({ path, content: await readFile(path).catch(() => null) }),
+};
 
 class HttpError extends Error {
 	constructor(status, message) {
@@ -564,35 +578,6 @@ class HttpError extends Error {
 }
 
 Server.HttpError = HttpError;
-
-class ActiveTestTracker {
-	constructor() {
-		this.active = new Map();
-		this.eventListener = (event) => {
-			if (event.type === 'begin') {
-				this.active.set(event.id, event);
-			} else if (event.type === 'complete') {
-				this.active.delete(event.id);
-			}
-		};
-	}
-
-	get() {
-		const result = [];
-		this.active.forEach((beginEvent) => {
-			if (!beginEvent.isBlock) {
-				const parts = [];
-				for (let e = beginEvent; e; e = this.active.get(e.parent)) {
-					if (e.label !== null) {
-						parts.push(e.label);
-					}
-				}
-				result.push(parts.reverse());
-			}
-		});
-		return result;
-	}
-}
 
 const MARKER = '.import-map-resolve';
 
@@ -670,9 +655,6 @@ function emplace(o, key, v) {
 	return v;
 }
 
-const INITIAL_CONNECT_TIMEOUT = 30000;
-const PING_TIMEOUT = 2000;
-
 const handleMappedImport = (importMap) => async (server, url, res) => {
 	const path = await importMap.resolve(url.substr(1)).catch(() => {
 		throw new Server.HttpError(404, 'Not Found');
@@ -684,7 +666,7 @@ const handleMappedImport = (importMap) => async (server, url, res) => {
 	return true;
 };
 
-class HttpServerRunner extends AbstractRunner {
+class HttpServerRunner extends ExternalRunner {
 	constructor({ port, host, preprocessor, ...browserConfig }, paths) {
 		super();
 		this.port = port;
@@ -692,6 +674,7 @@ class HttpServerRunner extends AbstractRunner {
 		this.preprocessor = preprocessor;
 		this.browserConfig = browserConfig;
 		this.paths = paths;
+		this.browserID = null;
 	}
 
 	async prepare(sharedState) {
@@ -701,8 +684,8 @@ class HttpServerRunner extends AbstractRunner {
 		sharedState[HttpServerRunner.POST_LISTENER] = new EventListener();
 
 		// must use realpath because npm will install the binary as a symlink in a different folder (.bin)
-		const selfPath = dirname(await realpath(process.argv[1]));
-		const basePath = process.cwd();
+		const selfPath = dirname(await realpath(process$1.argv[1]));
+		const basePath = process$1.cwd();
 
 		const importMap = this.browserConfig.importMap ? new ImportMap(basePath) : null;
 		const index = await buildIndex(this.browserConfig, this.paths, basePath, importMap);
@@ -725,10 +708,17 @@ class HttpServerRunner extends AbstractRunner {
 		server?.close();
 	}
 
+	setBrowserID(id) {
+		this.browserID = id;
+	}
+
 	async invoke(listener, sharedState) {
-		const { browserID, url } = this.makeUniqueTarget(sharedState);
-		process.stderr.write(`Ready to run test: ${url}\n`);
-		return this.invokeWithBrowserID(listener, sharedState, browserID);
+		if (this.browserID === null) {
+			const { browserID, url } = this.makeUniqueTarget(sharedState);
+			this.setBrowserID(browserID);
+			process$1.stderr.write(`Ready to run test: ${url}\n`);
+		}
+		return super.invoke(listener, sharedState);
 	}
 
 	makeUniqueTarget(sharedState, overrideAddr = null) {
@@ -739,69 +729,9 @@ class HttpServerRunner extends AbstractRunner {
 		return { browserID, url: server.baseurl(overrideAddr) + '#' + browserID };
 	}
 
-	invokeWithBrowserID(listener, sharedState, browserID) {
+	registerEventListener(listener, sharedState) {
 		const postListener = sharedState[HttpServerRunner.POST_LISTENER];
-		const tracker = new ActiveTestTracker();
-
-		return new Promise((res, reject) => {
-			let connectedUntil = Date.now() + INITIAL_CONNECT_TIMEOUT;
-			let connected = false;
-			const checkPing = setInterval(() => {
-				if (Date.now() > connectedUntil) {
-					clearInterval(checkPing);
-					if (!connected) {
-						reject(new Error('browser launch timed out'));
-					} else {
-						reject(new DisconnectError('unknown disconnect'));
-					}
-				}
-			}, 250);
-			postListener.addListener(browserID, (event) => {
-				connectedUntil = Date.now() + PING_TIMEOUT;
-				switch (event.type) {
-					case 'ping':
-						break;
-					case 'browser-connect':
-						if (connected) {
-							clearInterval(checkPing);
-							reject(new DisconnectError('multiple browser connections (maybe page reloaded?)'));
-						}
-						connected = true;
-						break;
-					case 'browser-end':
-						clearInterval(checkPing);
-						res(event.result);
-						break;
-					case 'browser-error':
-						clearInterval(checkPing);
-						reject(new DisconnectError(`browser error: ${event.error}`));
-						break;
-					case 'browser-unsupported':
-						clearInterval(checkPing);
-						reject(new UnsupportedError(event.error));
-						break;
-					case 'browser-unload':
-						clearInterval(checkPing);
-						reject(new DisconnectError(`test page closed (did a test change window.location?)`));
-						break;
-					default:
-						tracker.eventListener(event);
-						listener(event);
-				}
-			});
-		}).catch((e) => {
-			if (e instanceof UnsupportedError) {
-				throw e;
-			}
-			if (e instanceof DisconnectError) {
-				throw new Error(`Browser disconnected: ${e.message}\nActive tests:\n${tracker.get().map((p) => '- ' + p.join(' -> ')).join('\n') || 'none'}\n`);
-			}
-			throw new Error(`Error running browser: ${e}\n${this.debug()}\nUnhandled events: ${postListener.unhandled()}\n`);
-		});
-	}
-
-	debug() {
-		return 'unknown';
+		postListener.addListener(this.browserID, listener);
 	}
 }
 
@@ -826,7 +756,7 @@ run(id, /*CONFIG*/, /*SUITES*/).then(() => window.close());
 async function buildIndex(config, paths, basePath, importMap) {
 	const suites = [];
 	for await (const path of paths) {
-		suites.push([path.relative, '/' + relative(basePath, path.path)]);
+		suites.push({ path: '/' + relative(basePath, path.path), relative: path.relative });
 	}
 	const importMapScript = importMap ? (
 		'<script type="importmap">' +
@@ -839,25 +769,10 @@ async function buildIndex(config, paths, basePath, importMap) {
 		.replace('/*SUITES*/', JSON.stringify(suites));
 }
 
-class UnsupportedError extends Error {
-	constructor(message) {
-		super(message);
-		this.skipFrames = Number.POSITIVE_INFINITY;
-	}
-}
-
-class DisconnectError extends Error {
-	constructor(message) {
-		super(message);
-	}
-}
-
 class BrowserProcessRunner extends HttpServerRunner {
 	constructor(config, paths, browserLauncher) {
 		super(config, paths);
 		this.browserLauncher = browserLauncher;
-		this.stdout = () => '';
-		this.stderr = () => '';
 		this.launched = null;
 	}
 
@@ -873,19 +788,22 @@ class BrowserProcessRunner extends HttpServerRunner {
 		}
 	}
 
+	registerEventListener(listener, sharedState) {
+		this.launched.proc.once('error', (error) => listener({ type: 'runner-error', error }));
+		super.registerEventListener(listener, sharedState);
+	}
+
 	async invoke(listener, sharedState) {
 		const { browserID, url } = this.makeUniqueTarget(sharedState);
 		this.launched = await this.browserLauncher(url, { stdio: ['ignore', 'pipe', 'pipe'] });
 		this.stdout = addDataListener(this.launched.proc.stdout);
 		this.stderr = addDataListener(this.launched.proc.stderr);
-		return Promise.race([
-			new Promise((_, reject) => this.launched.proc.once('error', (err) => reject(err))),
-			super.invokeWithBrowserID(listener, sharedState, browserID),
-		]);
+		this.setBrowserID(browserID);
+		return super.invoke(listener, sharedState);
 	}
 
 	debug() {
-		return `stderr:\n${this.stdout().toString('utf-8')}\nstdout:\n${this.stderr().toString('utf-8')}`;
+		return `stdout:\n${this.stdout().toString('utf-8')}\nstderr:\n${this.stderr().toString('utf-8')}`;
 	}
 }
 
@@ -1023,7 +941,8 @@ class WebdriverRunner extends HttpServerRunner {
 		const postListener = sharedState[HttpServerRunner.POST_LISTENER];
 
 		const browserID = await makeConnection(this.session, server, postListener);
-		return super.invokeWithBrowserID(listener, sharedState, browserID);
+		this.setBrowserID(browserID);
+		return super.invoke(listener, sharedState);
 	}
 
 	debug() {
@@ -1037,7 +956,7 @@ class WebdriverRunner extends HttpServerRunner {
 async function makeConnection(session, server, postListener) {
 	// try various URLs until something works, because we don't know what environment we're in
 	const urls = [...new Set([
-		server.baseurl(process.env.WEBDRIVER_TESTRUNNER_HOST),
+		server.baseurl(process$1.env.WEBDRIVER_TESTRUNNER_HOST),
 		server.baseurl(),
 		server.baseurl('host.docker.internal'), // See https://stackoverflow.com/a/43541732/1180785
 		...Object.values(networkInterfaces())
@@ -1085,7 +1004,87 @@ const autoBrowserRunner = (browser, launcher) => (config, paths) => {
 	}
 };
 
-async function inProcessNodeRunner(config, paths) {
+class ProcessRunner extends ExternalRunner {
+	constructor({ preprocessor, ...subConfig }, paths) {
+		super();
+		this.preprocessor = preprocessor;
+		this.subConfig = subConfig;
+		this.paths = paths;
+	}
+
+	async getCommand() {
+		// must use realpath because npm will install the binary as a symlink in a different folder (.bin)
+		const selfPath = dirname(await realpath(process.argv[1]));
+		const node = await findExecutable([{ path: 'node' }, { path: 'nodejs' }]);
+		return [
+			node,
+			'--experimental-loader',
+			resolve(selfPath, '../preprocessor.mjs'),
+			resolve(selfPath, '../node-runtime.mjs'),
+		];
+	}
+
+	async launch() {
+		const [executable, ...args] = await this.getCommand();
+		this.launched = spawn(executable, args, {
+			stdio: ['ignore', 'pipe', 'pipe', 'pipe'],
+			env: {
+				...env,
+				__LEAN_TEST_PREPROC: this.preprocessor?.name ?? '',
+				__LEAN_TEST_CONFIG: JSON.stringify(this.subConfig),
+				__LEAN_TEST_PATHS: JSON.stringify(this.paths),
+			},
+		});
+		this.stdout = addDataListener(this.launched.stdout);
+		this.stderr = addDataListener(this.launched.stderr);
+	}
+
+	registerEventListener(listener) {
+		this.launched.stdio[3].addListener(
+			'data',
+			splitStream(0x1E, (item) => listener(JSON.parse(item.toString('utf-8')))),
+		);
+		this.launched.once('error', (error) => listener({ type: 'runner-error', error }));
+	}
+
+	async teardown() {
+		this.launched?.kill();
+		this.launched = null;
+	}
+
+	debug() {
+		return `stdout:\n${this.stdout().toString('utf-8')}\nstderr:\n${this.stderr().toString('utf-8')}`;
+	}
+}
+
+function splitStream(delimiterByte, callback) {
+	const store = [];
+	return (d) => {
+		const items = [];
+		while (d.length > 0) {
+			const p = d.indexOf(delimiterByte);
+			if (p === -1) {
+				store.push(d);
+				break;
+			}
+			if (store.length) {
+				store.push(d.slice(0, p));
+				items.push(Buffer.concat(store));
+				store.length = 0;
+			} else {
+				items.push(d.slice(0, p));
+			}
+			d = d.slice(p + 1);
+		}
+		items.forEach(callback);
+	};
+}
+
+async function nodeRunner(config, paths) {
+	if (config.preprocessor) {
+		return new ProcessRunner(config, paths);
+	}
+
 	const builder = standardRunner()
 		.useParallelDiscovery(config.parallelDiscovery)
 		.useParallelSuites(config.parallelSuites);
@@ -1101,74 +1100,8 @@ async function inProcessNodeRunner(config, paths) {
 	return builder.build();
 }
 
-// TODO: support nodejs runtime (see https://nodejs.org/api/esm.html#loaders)
-
-var tsc = async () => {
-	const { default: ts } = await loadTypescript();
-	const baseDir = cwd();
-
-	const rawCompilerOptions = readCompilerOptions(ts, baseDir);
-	const compilerOptions = { ...rawCompilerOptions, noEmit: false, sourceMap: false, module: 'es2015' };
-	const host = ts.createCompilerHost(compilerOptions);
-	const cache = ts.createModuleResolutionCache(baseDir, host.getCanonicalFileName, compilerOptions);
-
-	const resolver = (path) => ts.resolveModuleName(path, baseDir, compilerOptions, host, cache).resolvedModule?.resolvedFileName;
-
-	return {
-		async load(path) {
-			const fullPath = await resolveFilename(path, resolver);
-			if (!path) {
-				return null;
-			}
-			const source = await readFile(fullPath, 'utf8');
-			const result = ts.transpileModule(source, { fileName: fullPath, compilerOptions });
-			if (result.diagnostics?.length) {
-				throw new Error(JSON.stringify(result.diagnostics));
-			}
-			return { path: fullPath.replace(/(.*)\.ts/i, '\\1.js'), content: Buffer.from(result.outputText, 'utf8') };
-		},
-	};
-};
-
-function loadTypescript() {
-	try {
-		return import('typescript');
-	} catch (e) {
-		throw new Error('Must install typescript to use tsc preprocessor (npm install --save-dev typescript)');
-	}
-}
-
-function readCompilerOptions(ts, path) {
-	const configPath = ts.findConfigFile(path, ts.sys.fileExists, 'tsconfig.json');
-	if (!configPath) {
-		return {};
-	}
-	const config = ts.readConfigFile(configPath, ts.sys.readFile);
-	const options = ts.parseJsonConfigFileContent(config.config, ts.sys, dirname(configPath))?.options ?? {};
-
-	// explicit values for defaults which may change when we change the module mode:
-	if (!options.moduleResolution) {
-		if ((options.module ?? 'commonjs').toLowerCase() === 'commonjs') {
-			options.moduleResolution = 'node';
-		} else {
-			options.moduleResolution = 'classic';
-		}
-	}
-
-	return options;
-}
-
-async function resolveFilename(path, resolver) {
-	try {
-		await access(path);
-		return path;
-	} catch (e) {
-		return resolver(path);
-	}
-}
-
 const targets = new Map([
-	['node', { name: 'Node.js', make: inProcessNodeRunner }],
+	['node', { name: 'Node.js', make: nodeRunner }],
 	['url', { name: 'Custom Browser', make: manualBrowserRunner }],
 	['chrome', { name: 'Google Chrome', make: autoBrowserRunner('chrome', launchChrome) }],
 	['firefox', { name: 'Mozilla Firefox', make: autoBrowserRunner('firefox', launchFirefox) }],
@@ -1176,7 +1109,7 @@ const targets = new Map([
 
 const preprocs = new Map([
 	['none', null],
-	['tsc', tsc],
+	[preprocessors.tsc.name, preprocessors.tsc],
 ]);
 
 const argparse = new ArgumentParser({
@@ -1195,19 +1128,19 @@ const argparse = new ArgumentParser({
 });
 
 try {
-	const config = argparse.parse(process.env, process.argv);
+	const config = argparse.parse(process$1.env, process$1.argv);
 
 	const exclusion = [...config.pathsExclude, ...(config.noDefaultExclude ? [] : ['**/node_modules', '**/.*'])];
-	const scanDirs = config.scan.map((path) => resolve(process.cwd(), path));
+	const scanDirs = config.scan.map((path) => resolve(process$1.cwd(), path));
 	const paths = await asyncListToSync(findPathsMatching(scanDirs, config.pathsInclude, exclusion));
 	config.preprocessor = await config.preprocessor?.();
 
 	const forceTTY = (
 		config.colour ??
-		(Boolean(process.env.CI || process.env.CONTINUOUS_INTEGRATION) || null)
+		(Boolean(process$1.env.CI || process$1.env.CONTINUOUS_INTEGRATION) || null)
 	);
-	const stdout = new outputs.Writer(process.stdout, forceTTY);
-	const stderr = new outputs.Writer(process.stderr, forceTTY);
+	const stdout = new outputs.Writer(process$1.stdout, forceTTY);
+	const stderr = new outputs.Writer(process$1.stderr, forceTTY);
 	const liveReporter = new reporters.Dots(stderr);
 	const finalReporters = [
 		new reporters.Full(stdout),
@@ -1225,14 +1158,14 @@ try {
 	// TODO: warn or error if any node contains 0 tests
 
 	if (result.summary.error || result.summary.fail || !result.summary.pass) {
-		process.exit(1);
+		process$1.exit(1);
 	} else {
-		process.exit(0); // explicitly exit to avoid hanging on dangling promises
+		process$1.exit(0); // explicitly exit to avoid hanging on dangling promises
 	}
 } catch (e) {
 	if (!(e instanceof Error)) {
 		throw e;
 	}
-	process.stdout.write(`\n${e.message}\n`);
-	process.exit(1);
+	process$1.stdout.write(`\n${e.message}\n`);
+	process$1.exit(1);
 }

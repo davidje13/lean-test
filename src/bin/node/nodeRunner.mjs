@@ -1,6 +1,11 @@
+import ProcessRunner from './ProcessRunner.mjs';
 import { standardRunner } from '../../lean-test.mjs';
 
-export default async function inProcessNodeRunner(config, paths) {
+export async function nodeRunner(config, paths) {
+	if (config.preprocessor) {
+		return new ProcessRunner(config, paths);
+	}
+
 	const builder = standardRunner()
 		.useParallelDiscovery(config.parallelDiscovery)
 		.useParallelSuites(config.parallelSuites);

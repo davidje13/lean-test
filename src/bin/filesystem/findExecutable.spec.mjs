@@ -4,7 +4,7 @@ import { canExec, which } from './findExecutable.mjs';
 
 describe('canExec', {
 	async 'returns true if the target file exists and is executable'() {
-		await expect(canExec(argv[1]), resolves(true));
+		await expect(canExec(argv[0]), resolves(true));
 	},
 
 	async 'returns false if the target does not exist'() {

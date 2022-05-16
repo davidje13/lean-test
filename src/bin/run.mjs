@@ -7,12 +7,12 @@ import findPathsMatching from './filesystem/findPathsMatching.mjs';
 import ArgumentParser from './ArgumentParser.mjs';
 import { launchChrome, launchFirefox } from './browser/launchBrowser.mjs';
 import { autoBrowserRunner, manualBrowserRunner } from './browser/browserRunner.mjs';
-import inProcessNodeRunner from './node/inProcessNodeRunner.mjs';
-import * as preprocessors from './preprocessors/index.mjs';
+import { nodeRunner } from './node/nodeRunner.mjs';
+import { preprocessors } from '../preprocessor.mjs';
 import { asyncListToSync } from './utils.mjs';
 
 const targets = new Map([
-	['node', { name: 'Node.js', make: inProcessNodeRunner }],
+	['node', { name: 'Node.js', make: nodeRunner }],
 	['url', { name: 'Custom Browser', make: manualBrowserRunner }],
 	['chrome', { name: 'Google Chrome', make: autoBrowserRunner('chrome', launchChrome) }],
 	['firefox', { name: 'Mozilla Firefox', make: autoBrowserRunner('firefox', launchFirefox) }],
@@ -20,7 +20,7 @@ const targets = new Map([
 
 const preprocs = new Map([
 	['none', null],
-	['tsc', preprocessors.tsc],
+	[preprocessors.tsc.name, preprocessors.tsc],
 ]);
 
 const argparse = new ArgumentParser({
