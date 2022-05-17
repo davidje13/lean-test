@@ -87,7 +87,8 @@ export default class Server {
 		const address = overrideAddr ?? this.address;
 		let hostname;
 		if (typeof address === 'object') {
-			if (address.family.toLowerCase() === 'ipv6') {
+			// check for Node 18 (numeric) and Node <18 (string) APIs for address.family
+			if (address.family === 6 || address.family === 'IPv6') {
 				hostname = `[${address.address}]`;
 			} else {
 				hostname = address.address;
