@@ -1,4 +1,4 @@
-import { cwd, env } from 'process';
+import { cwd, versions, env } from 'process';
 import { access, readFile } from 'fs/promises';
 import { dirname } from 'path';
 
@@ -65,7 +65,10 @@ var preprocessors = /*#__PURE__*/Object.freeze({
 	tsc: tsc
 });
 
+const NODE_MAJOR = Number(versions.node.split('.')[0]);
 const lazyPreprocessor = lazy(preprocessors[env.__LEAN_TEST_PREPROC]);
+
+// https://nodejs.org/api/esm.html#loaders
 
 async function resolve(specifier, context, defaultResolve, ...rest) {
 	if (!specifier.startsWith('.') && !specifier.startsWith('/')) {
@@ -78,6 +81,10 @@ async function resolve(specifier, context, defaultResolve, ...rest) {
 	}
 	if (fullPath.includes('/node_modules/')) {
 		return { url: 'file://' + fullPath };
+	}
+	if (NODE_MAJOR < 16) {
+		// legacy API
+		return { url: 'file-unprocessed://' + fullPath };
 	}
 	return { format: 'unprocessed', url: 'file://' + fullPath };
 }
@@ -110,4 +117,24 @@ function lazy(factory) {
 	};
 }
 
-export { load, preprocessors, resolve };
+// legacy API (Node < 16)
+
+const getFormat = NODE_MAJOR < 16 && function(url, context, defaultGetFormat, ...rest) {
+	const parsedURL = new URL(url);
+	if (parsedURL.protocol === 'file-unprocessed') {
+		return { format: 'module' };
+	}
+	return defaultGetFormat(url, context, defaultGetFormat, ...rest);
+};
+
+const getSource = NODE_MAJOR < 16 && async function(url, context, defaultGetSource, ...rest) {
+	const parsedURL = new URL(url);
+	if (parsedURL.protocol === 'file-unprocessed') {
+		const preprocessor = await lazyPreprocessor();
+		const parsed = await preprocessor.load(parsedURL.pathname);
+		return { source: parsed.content };
+	}
+	return defaultGetSource(url, context, defaultGetSource, ...rest);
+};
+
+export { getFormat, getSource, load, preprocessors, resolve };

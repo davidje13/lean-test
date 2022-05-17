@@ -21,4 +21,4 @@ node:16:
 
 node:17:
   <<: *common
-  image: node:17
+  image: node:18
