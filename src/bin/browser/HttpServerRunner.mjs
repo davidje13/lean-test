@@ -18,12 +18,19 @@ const handleMappedImport = (importMap) => async (server, url, res) => {
 };
 
 export default class HttpServerRunner extends ExternalRunner {
-	constructor({ port, host, preprocessor, ...browserConfig }, paths) {
+	constructor({
+		port,
+		host,
+		preprocessor,
+		parallelDiscovery,
+		parallelSuites,
+		importMap,
+	}, paths) {
 		super();
 		this.port = port;
 		this.host = host;
 		this.preprocessor = preprocessor;
-		this.browserConfig = browserConfig;
+		this.browserConfig = { parallelDiscovery, parallelSuites, importMap };
 		this.paths = paths;
 		this.browserID = null;
 	}

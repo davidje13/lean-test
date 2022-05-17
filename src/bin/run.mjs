@@ -18,10 +18,7 @@ const targets = new Map([
 	['firefox', { name: 'Mozilla Firefox', make: autoBrowserRunner('firefox', launchFirefox) }],
 ]);
 
-const preprocs = new Map([
-	['none', null],
-	[preprocessors.tsc.name, preprocessors.tsc],
-]);
+const preprocs = new Map([['none', null], ...Object.entries(preprocessors)]);
 
 const argparse = new ArgumentParser({
 	parallelDiscovery: { names: ['parallel-discovery', 'P'], env: 'PARALLEL_DISCOVERY', type: 'boolean', default: false },

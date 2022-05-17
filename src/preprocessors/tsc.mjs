@@ -13,7 +13,6 @@ export default async () => {
 	const resolver = (path, from) => ts.resolveModuleName(path, from, compilerOptions, host, cache).resolvedModule?.resolvedFileName;
 
 	return {
-		name: 'tsc',
 		async resolve(path, from = baseDir) {
 			try {
 				await access(path);

@@ -153,6 +153,9 @@ class ArgumentParser {
 	applyMappings(options) {
 		for (const { id, name, mapping } of this.mappings) {
 			const value = options[id];
+			if (mapping instanceof Map) {
+				options[id + 'Raw'] = value;
+			}
 			if (value === undefined) {
 				continue;
 			}
@@ -513,7 +516,8 @@ class Server {
 		const address = overrideAddr ?? this.address;
 		let hostname;
 		if (typeof address === 'object') {
-			if (address.family.toLowerCase() === 'ipv6') {
+			// check for Node 18 (numeric) and Node <18 (string) APIs for address.family
+			if (address.family === 6 || address.family === 'IPv6') {
 				hostname = `[${address.address}]`;
 			} else {
 				hostname = address.address;
@@ -667,12 +671,19 @@ const handleMappedImport = (importMap) => async (server, url, res) => {
 };
 
 class HttpServerRunner extends ExternalRunner {
-	constructor({ port, host, preprocessor, ...browserConfig }, paths) {
+	constructor({
+		port,
+		host,
+		preprocessor,
+		parallelDiscovery,
+		parallelSuites,
+		importMap,
+	}, paths) {
 		super();
 		this.port = port;
 		this.host = host;
 		this.preprocessor = preprocessor;
-		this.browserConfig = browserConfig;
+		this.browserConfig = { parallelDiscovery, parallelSuites, importMap };
 		this.paths = paths;
 		this.browserID = null;
 	}
@@ -1005,10 +1016,10 @@ const autoBrowserRunner = (browser, launcher) => (config, paths) => {
 };
 
 class ProcessRunner extends ExternalRunner {
-	constructor({ preprocessor, ...subConfig }, paths) {
+	constructor({ preprocessorRaw, parallelDiscovery, parallelSuites }, paths) {
 		super();
-		this.preprocessor = preprocessor;
-		this.subConfig = subConfig;
+		this.preprocessorRaw = preprocessorRaw;
+		this.subConfig = { parallelDiscovery, parallelSuites };
 		this.paths = paths;
 	}
 
@@ -1030,7 +1041,7 @@ class ProcessRunner extends ExternalRunner {
 			stdio: ['ignore', 'pipe', 'pipe', 'pipe'],
 			env: {
 				...env,
-				__LEAN_TEST_PREPROC: this.preprocessor?.name ?? '',
+				__LEAN_TEST_PREPROC: this.preprocessorRaw ?? '',
 				__LEAN_TEST_CONFIG: JSON.stringify(this.subConfig),
 				__LEAN_TEST_PATHS: JSON.stringify(this.paths),
 			},
@@ -1107,10 +1118,7 @@ const targets = new Map([
 	['firefox', { name: 'Mozilla Firefox', make: autoBrowserRunner('firefox', launchFirefox) }],
 ]);
 
-const preprocs = new Map([
-	['none', null],
-	[preprocessors.tsc.name, preprocessors.tsc],
-]);
+const preprocs = new Map([['none', null], ...Object.entries(preprocessors)]);
 
 const argparse = new ArgumentParser({
 	parallelDiscovery: { names: ['parallel-discovery', 'P'], env: 'PARALLEL_DISCOVERY', type: 'boolean', default: false },

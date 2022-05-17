@@ -13,7 +13,6 @@ var tsc = async () => {
 	const resolver = (path, from) => ts.resolveModuleName(path, from, compilerOptions, host, cache).resolvedModule?.resolvedFileName;
 
 	return {
-		name: 'tsc',
 		async resolve(path, from = baseDir) {
 			try {
 				await access(path);
@@ -121,7 +120,7 @@ function lazy(factory) {
 
 const getFormat = NODE_MAJOR < 16 && function(url, context, defaultGetFormat, ...rest) {
 	const parsedURL = new URL(url);
-	if (parsedURL.protocol === 'file-unprocessed') {
+	if (parsedURL.protocol === 'file-unprocessed:') {
 		return { format: 'module' };
 	}
 	return defaultGetFormat(url, context, defaultGetFormat, ...rest);
@@ -129,7 +128,7 @@ const getFormat = NODE_MAJOR < 16 && function(url, context, defaultGetFormat, ..
 
 const getSource = NODE_MAJOR < 16 && async function(url, context, defaultGetSource, ...rest) {
 	const parsedURL = new URL(url);
-	if (parsedURL.protocol === 'file-unprocessed') {
+	if (parsedURL.protocol === 'file-unprocessed:') {
 		const preprocessor = await lazyPreprocessor();
 		const parsed = await preprocessor.load(parsedURL.pathname);
 		return { source: parsed.content };

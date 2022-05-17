@@ -76,6 +76,9 @@ export default class ArgumentParser {
 	applyMappings(options) {
 		for (const { id, name, mapping } of this.mappings) {
 			const value = options[id];
+			if (mapping instanceof Map) {
+				options[id + 'Raw'] = value;
+			}
 			if (value === undefined) {
 				continue;
 			}

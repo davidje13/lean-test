@@ -7,10 +7,10 @@ import { ExternalRunner } from '../../lean-test.mjs';
 import findExecutable from '../filesystem/findExecutable.mjs';
 
 export default class ProcessRunner extends ExternalRunner {
-	constructor({ preprocessor, ...subConfig }, paths) {
+	constructor({ preprocessorRaw, parallelDiscovery, parallelSuites }, paths) {
 		super();
-		this.preprocessor = preprocessor;
-		this.subConfig = subConfig;
+		this.preprocessorRaw = preprocessorRaw;
+		this.subConfig = { parallelDiscovery, parallelSuites };
 		this.paths = paths;
 	}
 
@@ -32,7 +32,7 @@ export default class ProcessRunner extends ExternalRunner {
 			stdio: ['ignore', 'pipe', 'pipe', 'pipe'],
 			env: {
 				...env,
-				__LEAN_TEST_PREPROC: this.preprocessor?.name ?? '',
+				__LEAN_TEST_PREPROC: this.preprocessorRaw ?? '',
 				__LEAN_TEST_CONFIG: JSON.stringify(this.subConfig),
 				__LEAN_TEST_PATHS: JSON.stringify(this.paths),
 			},
