@@ -631,7 +631,7 @@ The `lean-test` executable can be configured in various ways:
 	- `babel`:<br>
 		The Babel transpiler. Looks for a `babel.config.*` or `.babelrc.*` file, or the
 		`babel` section of a `package.json` for configuration.
-		Requires `babel` (`npm install --save-dev babel`).
+		Requires `babel` (`npm install --save-dev @babel/core`).
 
 	- `tsc`:<br>
 		The Typescript transpiler. Looks for a `tsconfig.json` file for configuration.
