@@ -1,6 +1,29 @@
 import { cwd, versions, env } from 'process';
+import { resolve as resolve$1, dirname } from 'path';
 import { access, readFile } from 'fs/promises';
-import { dirname } from 'path';
+
+var babel = async () => {
+	const { default: babel } = await loadBabel();
+	const baseDir = cwd();
+
+	return {
+		resolve(path, from = baseDir) {
+			return resolve$1(dirname(from), path);
+		},
+		async load(fullPath) {
+			const { code } = await babel.transformFileAsync(fullPath);
+			return { path: fullPath.replace(/(.*)\.[cm]?jsx?/i, '\\1.js'), content: code };
+		},
+	};
+};
+
+function loadBabel() {
+	try {
+		return import('@babel/core');
+	} catch (e) {
+		throw new Error('Must install @babel/core to use babel preprocessor (npm install --save-dev @babel/core)');
+	}
+}
 
 var tsc = async () => {
 	const { default: ts } = await loadTypescript();
@@ -14,9 +37,10 @@ var tsc = async () => {
 
 	return {
 		async resolve(path, from = baseDir) {
+			const fullPath = resolve$1(dirname(from), path);
 			try {
-				await access(path);
-				return path;
+				await access(fullPath);
+				return fullPath;
 			} catch (e) {
 				return resolver(path, from);
 			}
@@ -36,7 +60,7 @@ var tsc = async () => {
 			if (result.diagnostics?.length) {
 				throw new Error(JSON.stringify(result.diagnostics));
 			}
-			return { path: fullPath.replace(/(.*)\.ts/i, '\\1.js'), content: result.outputText };
+			return { path: fullPath.replace(/(.*)\.[cm]?[tj]sx?/i, '\\1.js'), content: result.outputText };
 		},
 	};
 };
@@ -61,6 +85,7 @@ function readCompilerOptions(ts, path) {
 
 var preprocessors = /*#__PURE__*/Object.freeze({
 	__proto__: null,
+	babel: babel,
 	tsc: tsc
 });
 

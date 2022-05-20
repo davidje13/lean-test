@@ -20,6 +20,7 @@ npx lean-test --target chrome --target firefox
 
 - Run tests from the commandline against NodeJS and/or browsers;
 - Natively supports ES6 modules and promises (`async` tests);
+- Transpile source with your chosen tooling before running;
 - Fluent and matcher-style expectations, easy to add custom matchers;
 - Parallel test running;
 - Low overhead (fast tests);
@@ -216,23 +217,23 @@ and can be checked to see if they were called with particular arguments (see
 The extra methods available on mocks and spies are:
 
 - `whenCalled()`:<br>
-  Begins a context for configuring behaviour when the function is called.
+	Begins a context for configuring behaviour when the function is called.
 	The returned object has several fluent-API methods:
 
 	- `with(...arguments)`:<br>
-	  Filters for invocations with matching arguments (can be literal values,
+		Filters for invocations with matching arguments (can be literal values,
 		matchers, or a combination). By default, the arguments are not checked.
 
 	- `times(n)`:<br>
-	  Limits the current configuration to a fixed number of invocations, after
+		Limits the current configuration to a fixed number of invocations, after
 		which it is removed. This can be useful for configuring return values which
 		change in subsequent invocations. By default, there is no limit.
 
 	- `once()`:<br>
-	  Shorthand for `.times(1)`.
+		Shorthand for `.times(1)`.
 
 	- `then(func)`:<br>
-	  Configures the mock to invoke the given function when an invocation matches
+		Configures the mock to invoke the given function when an invocation matches
 		the current configuration. The function will be called with all provided
 		arguments, and its return value will be returned, so this acts as a
 		pass-through.
@@ -240,40 +241,40 @@ The extra methods available on mocks and spies are:
 		configurations can be chained easily.
 
 	- `thenReturn(value)`:<br>
-	  Shorthand for `.then(() => value)`
+		Shorthand for `.then(() => value)`
 
 	- `thenThrow(error)`:<br>
-	  Shorthand for `.then(() => { throw error; })`
+		Shorthand for `.then(() => { throw error; })`
 
 	- `thenResolve(value)`:<br>
-	  Shorthand for `.thenReturn(Promise.resolve(value))`
+		Shorthand for `.thenReturn(Promise.resolve(value))`
 
 	- `thenReject(error)`:<br>
-	  Shorthand for `.thenReturn(Promise.reject(error))`
+		Shorthand for `.thenReturn(Promise.reject(error))`
 
 	- `thenCallThrough()`:<br>
-	  Configures the spy to invoke the original method when an invocation matches
+		Configures the spy to invoke the original method when an invocation matches
 		the current configuration. This is the default for spies.
 		As a convenience, this returns the original mock function, so multiple
 		configurations can be chained easily.
 
 - `whenCalledWith(...arguments)`:<br>
-  Shorthand for `.whenCalled().with(...arguments)`.
+	Shorthand for `.whenCalled().with(...arguments)`.
 
 - `whenCalledNext()`:<br>
-  Shorthand for `.whenCalled().times(1)`.
+	Shorthand for `.whenCalled().times(1)`.
 
 - `returning(value)`:<br>
-  Shorthand for `.whenCalled().thenReturn(value)`.
+	Shorthand for `.whenCalled().thenReturn(value)`.
 
 - `throwing(error)`:<br>
-  Shorthand for `.whenCalled().thenThrow(error)`.
+	Shorthand for `.whenCalled().thenThrow(error)`.
 
 - `reset()`:<br>
-  Resets the mock configuration and recorded invocations.
+	Resets the mock configuration and recorded invocations.
 
 - `revert()`:<br>
-  Removes the spy, returning the original function (note that this only exists
+	Removes the spy, returning the original function (note that this only exists
 	for spies; it does not exist for mock functions).
 
 If multiple `whenCalled*` configurations match an invocation, the first one is
@@ -563,7 +564,7 @@ them to run in parallel.
 	supported are:
 	- `{ tolerance: n }` sets an explicit permitted range (+/- `n`)
 	- `{ decimalPlaces: n }` sets an explicit number of decimal places to check
-	  (+/- `0.5 * 10^-n`)
+		(+/- `0.5 * 10^-n`)
 
 - `resolves(expectation)`:<br>
 	Checks if the given function or promise returns a value which matches the given
@@ -622,6 +623,20 @@ them to run in parallel.
 
 The `lean-test` executable can be configured in various ways:
 
+- `--preprocess <tool>` / `-c <tool>`:<br>
+	Applies the specified tool as a preprocessor for all source files (excluding
+	`node_modules` sources).
+
+	Current supported tooling:
+	- `babel`:<br>
+		The Babel transpiler. Looks for a `babel.config.*` or `.babelrc.*` file, or the
+		`babel` section of a `package.json` for configuration.
+		Requires `babel` (`npm install --save-dev babel`).
+
+	- `tsc`:<br>
+		The Typescript transpiler. Looks for a `tsconfig.json` file for configuration.
+		Requires `typescript` (`npm install --save-dev typescript`).
+
 - `--target <name>` / `-t <name>` / environment `TARGET=<name>`:<br>
 	Runs the tests in the chosen target. Currently `node`, `chrome` and `firefox` are
 	supported, or use `url` then open the printed URL in any browser to start the tests.
@@ -672,7 +687,7 @@ The `lean-test` executable can be configured in various ways:
 	available over the network).
 
 - `--import-map` / environment `IMPORT_MAP=true`:<br>
-  Generates an [import map](https://github.com/WICG/import-maps) for `node_modules`
+	Generates an [import map](https://github.com/WICG/import-maps) for `node_modules`
 	imports. This only takes effect if the tests are running in a browser.
 	This allows non-relative imports like `import foo from 'foo';`, which will be
 	resolved by looking in `node_modules`, which means some projects can be tested
@@ -687,7 +702,7 @@ The `lean-test` executable can be configured in various ways:
 
 - `--include <pattern>` / `-i <pattern>`:<br>
 	Configures the search pattern glob. Can be set multiple times. By default, this is
-	`**/*.{spec|test}.{js|mjs|cjs|jsx}`.
+	`**/*.{spec|test}.*`.
 
 - `--exclude <pattern>` / `-x <pattern>`:<br>
 	Configures the exclusion pattern glob. Can be set multiple times.

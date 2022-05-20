@@ -2,9 +2,14 @@
   "name": "lean-test-package-test",
   "private": true,
   "scripts": {
-    "test": "lean-test --target=node,chrome && lean-test -i '**/*.spec.ts' --preprocess=tsc --target=node,chrome"
+    "test:plain": "lean-test --target=node,chrome plain",
+    "test:ts": "lean-test --preprocess=tsc --target=node,chrome plain ts jsx",
+    "test:babel": "lean-test --preprocess=babel --target=node,chrome plain jsx",
+    "test": "npm run test:plain && npm run test:ts && npm run test:babel"
   },
   "devDependencies": {
+    "@babel/core": "^7.18.0",
+    "@babel/plugin-transform-react-jsx": "^7.17.12",
     "lean-test": "file:lean-test.tgz",
     "typescript": "^4.6.4"
   }

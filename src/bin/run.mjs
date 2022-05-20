@@ -23,7 +23,7 @@ const preprocs = new Map([['none', null], ...Object.entries(preprocessors)]);
 const argparse = new ArgumentParser({
 	parallelDiscovery: { names: ['parallel-discovery', 'P'], env: 'PARALLEL_DISCOVERY', type: 'boolean', default: false },
 	parallelSuites: { names: ['parallel-suites', 'parallel', 'p'], env: 'PARALLEL_SUITES', type: 'boolean', default: false },
-	pathsInclude: { names: ['include', 'i'], type: 'set', default: ['**/*.{spec|test}.{js|mjs|cjs|jsx}'] },
+	pathsInclude: { names: ['include', 'i'], type: 'set', default: ['**/*.{spec|test}.*'] },
 	pathsExclude: { names: ['exclude', 'x'], type: 'set', default: [] },
 	preprocessor: { names: ['preprocess', 'c'], type: 'string', default: 'none', mapping: preprocs },
 	noDefaultExclude: { names: ['no-default-exclude'], type: 'boolean', default: false },

@@ -1,5 +1,5 @@
 import { access, readFile } from 'fs/promises';
-import { dirname } from 'path';
+import { dirname, resolve } from 'path';
 import { cwd } from 'process';
 
 export default async () => {
@@ -14,9 +14,10 @@ export default async () => {
 
 	return {
 		async resolve(path, from = baseDir) {
+			const fullPath = resolve(dirname(from), path);
 			try {
-				await access(path);
-				return path;
+				await access(fullPath);
+				return fullPath;
 			} catch (e) {
 				return resolver(path, from);
 			}
@@ -36,7 +37,7 @@ export default async () => {
 			if (result.diagnostics?.length) {
 				throw new Error(JSON.stringify(result.diagnostics));
 			}
-			return { path: fullPath.replace(/(.*)\.ts/i, '\\1.js'), content: result.outputText };
+			return { path: fullPath.replace(/(.*)\.[cm]?[tj]sx?/i, '\\1.js'), content: result.outputText };
 		},
 	};
 }
