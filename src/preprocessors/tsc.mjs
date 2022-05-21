@@ -1,9 +1,10 @@
 import { access, readFile } from 'fs/promises';
 import { dirname, resolve } from 'path';
 import { cwd } from 'process';
+import { dynamicImport } from './utils.mjs';
 
 export default async () => {
-	const { default: ts } = await loadTypescript();
+	const { default: ts } = await dynamicImport('typescript', 'tsc preprocessor');
 	const baseDir = cwd();
 
 	const compilerOptions = readCompilerOptions(ts, baseDir);
@@ -13,7 +14,7 @@ export default async () => {
 	const resolver = (path, from) => ts.resolveModuleName(path, from, compilerOptions, host, cache).resolvedModule?.resolvedFileName;
 
 	return {
-		async resolve(path, from = baseDir) {
+		async resolve(path, from) {
 			const fullPath = resolve(dirname(from), path);
 			try {
 				await access(fullPath);
@@ -37,17 +38,12 @@ export default async () => {
 			if (result.diagnostics?.length) {
 				throw new Error(JSON.stringify(result.diagnostics));
 			}
-			return { path: fullPath.replace(/(.*)\.[cm]?[tj]sx?/i, '\\1.js'), content: result.outputText };
+			return {
+				path: fullPath.replace(/(.*)\.[cm]?[tj]sx?/i, '\\1.js'),
+				content: result.outputText,
+			};
 		},
 	};
-}
-
-function loadTypescript() {
-	try {
-		return import('typescript');
-	} catch (e) {
-		throw new Error('Must install typescript to use tsc preprocessor (npm install --save-dev typescript)');
-	}
 }
 
 function readCompilerOptions(ts, path) {

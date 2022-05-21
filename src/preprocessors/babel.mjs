@@ -1,25 +1,20 @@
 import { dirname, resolve } from 'path';
-import { cwd } from 'process';
+import { dynamicImport } from './utils.mjs';
 
 export default async () => {
-	const { default: babel } = await loadBabel();
-	const baseDir = cwd();
+	const { default: babel } = await dynamicImport('@babel/core', 'babel preprocessor');
 
 	return {
-		resolve(path, from = baseDir) {
+		resolve(path, from) {
 			return resolve(dirname(from), path);
 		},
+
 		async load(fullPath) {
 			const { code } = await babel.transformFileAsync(fullPath);
-			return { path: fullPath.replace(/(.*)\.[cm]?jsx?/i, '\\1.js'), content: code };
+			return {
+				path: fullPath.replace(/(.*)\.[cm]?jsx?/i, '\\1.js'),
+				content: code,
+			};
 		},
 	};
-}
-
-function loadBabel() {
-	try {
-		return import('@babel/core');
-	} catch (e) {
-		throw new Error('Must install @babel/core to use babel preprocessor (npm install --save-dev @babel/core)');
-	}
 }

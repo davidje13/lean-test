@@ -2,31 +2,30 @@ import { cwd, versions, env } from 'process';
 import { resolve as resolve$1, dirname } from 'path';
 import { access, readFile } from 'fs/promises';
 
+const dynamicImport = (dependency, name) => import(dependency).catch(() => {
+	throw new Error(`Must install ${dependency} to use ${name} (npm install --save-dev ${dependency})`);
+});
+
 var babel = async () => {
-	const { default: babel } = await loadBabel();
-	const baseDir = cwd();
+	const { default: babel } = await dynamicImport('@babel/core', 'babel preprocessor');
 
 	return {
-		resolve(path, from = baseDir) {
+		resolve(path, from) {
 			return resolve$1(dirname(from), path);
 		},
+
 		async load(fullPath) {
 			const { code } = await babel.transformFileAsync(fullPath);
-			return { path: fullPath.replace(/(.*)\.[cm]?jsx?/i, '\\1.js'), content: code };
+			return {
+				path: fullPath.replace(/(.*)\.[cm]?jsx?/i, '\\1.js'),
+				content: code,
+			};
 		},
 	};
 };
 
-function loadBabel() {
-	try {
-		return import('@babel/core');
-	} catch (e) {
-		throw new Error('Must install @babel/core to use babel preprocessor (npm install --save-dev @babel/core)');
-	}
-}
-
 var tsc = async () => {
-	const { default: ts } = await loadTypescript();
+	const { default: ts } = await dynamicImport('typescript', 'tsc preprocessor');
 	const baseDir = cwd();
 
 	const compilerOptions = readCompilerOptions(ts, baseDir);
@@ -36,7 +35,7 @@ var tsc = async () => {
 	const resolver = (path, from) => ts.resolveModuleName(path, from, compilerOptions, host, cache).resolvedModule?.resolvedFileName;
 
 	return {
-		async resolve(path, from = baseDir) {
+		async resolve(path, from) {
 			const fullPath = resolve$1(dirname(from), path);
 			try {
 				await access(fullPath);
@@ -60,18 +59,13 @@ var tsc = async () => {
 			if (result.diagnostics?.length) {
 				throw new Error(JSON.stringify(result.diagnostics));
 			}
-			return { path: fullPath.replace(/(.*)\.[cm]?[tj]sx?/i, '\\1.js'), content: result.outputText };
+			return {
+				path: fullPath.replace(/(.*)\.[cm]?[tj]sx?/i, '\\1.js'),
+				content: result.outputText,
+			};
 		},
 	};
 };
-
-function loadTypescript() {
-	try {
-		return import('typescript');
-	} catch (e) {
-		throw new Error('Must install typescript to use tsc preprocessor (npm install --save-dev typescript)');
-	}
-}
 
 function readCompilerOptions(ts, path) {
 	const configPath = ts.findConfigFile(path, ts.sys.fileExists, 'tsconfig.json');

@@ -556,7 +556,7 @@ Server.directory = (base, dir, preprocessor) => async (server, url, res) => {
 	if (!path.startsWith(dir)) {
 		throw new HttpError(400, 'Invalid resource path');
 	}
-	const fullPath = await (preprocessor ?? fileLoader).resolve(path);
+	const fullPath = await (preprocessor ?? fileLoader).resolve(path, dir + 'index.htm');
 	if (!fullPath) {
 		throw new HttpError(404, 'Not Found');
 	}
