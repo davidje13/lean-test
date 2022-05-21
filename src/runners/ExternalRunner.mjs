@@ -34,8 +34,10 @@ export default class ExternalRunner extends AbstractRunner {
 						}
 					}
 				}, 250);
+				const decompress = ExternalRunner.decompressor();
 				this.registerEventListener((event) => {
 					connectedUntil = Date.now() + PING_TIMEOUT;
+					event = decompress(event);
 					switch (event.type) {
 						case 'runner-ping':
 							break;
@@ -88,6 +90,59 @@ export default class ExternalRunner extends AbstractRunner {
 		}
 	}
 }
+
+ExternalRunner.decompressor = () => {
+	const results = new Map();
+	const decompress = (result) => {
+		if (result.type === 'runner-end') {
+			return {
+				...result,
+				result: decompress(result.result),
+			};
+		}
+		if (result?.children?.length) {
+			result = {
+				...result,
+				children: result.children.map((c) => {
+					if (typeof c === 'object') {
+						return c;
+					}
+					return results.get(c);
+				}),
+			};
+		}
+		if (result.type === 'complete') {
+			results.set(result.id, result);
+		}
+		return result;
+	};
+	return decompress;
+};
+
+ExternalRunner.compressor = () => {
+	const sent = new Set();
+	const compress = (result) => {
+		if (result.type === 'runner-end') {
+			return {
+				...result,
+				result: compress(result.result),
+			};
+		}
+		if (!result?.children?.length) {
+			return result;
+		}
+		return {
+			...result,
+			children: result.children.map((c) => {
+				if (sent.has(c.id)) {
+					return c.id;
+				}
+				return c;
+			}),
+		};
+	};
+	return compress;
+};
 
 class UnsupportedError extends Error {
 	constructor(message) {

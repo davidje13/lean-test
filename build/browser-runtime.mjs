@@ -1,4 +1,4 @@
-import { standardRunner } from './lean-test.mjs';
+import { ExternalRunner, standardRunner } from './lean-test.mjs';
 
 class Aggregator {
 	constructor(next) {
@@ -36,13 +36,16 @@ class Aggregator {
 		if (!this.queue.length) {
 			return;
 		}
-		const current = this.queue.slice();
 		this.sending = true;
-		this.queue.length = 0;
 		try {
-			await this.next(current);
+			// break up into chunks to avoid POST content limits (~25kb?)
+			while (this.queue.length) {
+				const current = this.queue.splice(0, 50);
+				await this.next(current);
+			}
 		} catch (e) {
 			console.error('error during throttled call', e);
+			await this.next([{ type: 'runner-error', message: `communication error in throttled call: ${e}` }]);
 		} finally {
 			this.sending = false;
 		}
@@ -61,9 +64,10 @@ class Aggregator {
 
 async function run(id, config, suites) {
 	window.title = `Lean Test Runner (${id}) - running`;
+	const compress = ExternalRunner.compressor();
 	const eventDispatcher = new Aggregator((events) => fetch('/', {
 		method: 'POST',
-		body: JSON.stringify({ id, events }),
+		body: JSON.stringify({ id, events: events.map(compress) }),
 		keepalive: true, // allow sending in background even after page unloads
 	}));
 	eventDispatcher.invoke({ type: 'runner-connect' });

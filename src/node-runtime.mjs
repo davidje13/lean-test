@@ -1,10 +1,11 @@
 import { env } from 'process';
 import { createWriteStream } from 'fs';
-import { standardRunner } from './lean-test.mjs';
+import { standardRunner, ExternalRunner } from './lean-test.mjs';
 
 const parentComm = createWriteStream(null, { fd: 3 });
+const compress = ExternalRunner.compressor();
 function send(data) {
-	parentComm.write(JSON.stringify(data) + '\u001E', 'utf-8');
+	parentComm.write(JSON.stringify(compress(data)) + '\u001E', 'utf-8');
 }
 
 async function run(config, suites) {
