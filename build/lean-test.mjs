@@ -2250,7 +2250,7 @@ class ExternalRunner extends AbstractRunner {
 					if (Date.now() > connectedUntil) {
 						clearInterval(checkPing);
 						if (!connected) {
-							reject(new Error('runner launch timed out'));
+							reject(new RunnerError('launch timed out'));
 						} else {
 							reject(new DisconnectError('unknown runner disconnect'));
 						}
@@ -2274,15 +2274,19 @@ class ExternalRunner extends AbstractRunner {
 							break;
 						case 'runner-error':
 							clearInterval(checkPing);
-							reject(new DisconnectError(`runner error: ${event.error}`));
+							reject(new DisconnectError(event.message ?? 'runner error'));
+							break;
+						case 'runner-internal-error':
+							clearInterval(checkPing);
+							reject(event.error instanceof Error ? event.error : new RunnerError(event.error));
 							break;
 						case 'runner-unsupported':
 							clearInterval(checkPing);
-							reject(new UnsupportedError(event.error));
+							reject(new UnsupportedError(event.message));
 							break;
 						case 'runner-disconnect':
 							clearInterval(checkPing);
-							reject(new DisconnectError(`runner closed (did a test change window.location?)`));
+							reject(new DisconnectError(event.message ?? 'runner disconnected'));
 							break;
 						default:
 							tracker.eventListener(event);
@@ -2302,7 +2306,7 @@ class ExternalRunner extends AbstractRunner {
 				debugInfo = this.debug();
 			} catch (ignore) {
 			}
-			throw new Error(`Error in runner: ${e}\n${debugInfo}`);
+			throw new RunnerError(`Test runner ${(e instanceof RunnerError) ? e.message : e}\n${debugInfo}`);
 		}
 	}
 }
@@ -2315,6 +2319,12 @@ class UnsupportedError extends Error {
 }
 
 class DisconnectError extends Error {
+	constructor(message) {
+		super(message);
+	}
+}
+
+class RunnerError extends Error {
 	constructor(message) {
 		super(message);
 	}

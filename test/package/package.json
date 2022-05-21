@@ -3,14 +3,16 @@
   "private": true,
   "scripts": {
     "test:plain": "lean-test --target=node,chrome plain",
-    "test:ts": "lean-test --preprocess=tsc --target=node,chrome plain ts jsx",
     "test:babel": "lean-test --preprocess=babel --target=node,chrome plain jsx",
-    "test": "npm run test:plain && npm run test:ts && npm run test:babel"
+    "test:rollup": "lean-test --preprocess=rollup --target=node,chrome plain replaced",
+    "test:ts": "lean-test --preprocess=tsc --target=node,chrome plain ts jsx",
+    "test": "npm run test:plain && npm run test:babel && npm run test:rollup && npm run test:ts"
   },
   "devDependencies": {
     "@babel/core": "^7.18.0",
     "@babel/plugin-transform-react-jsx": "^7.17.12",
     "lean-test": "file:lean-test.tgz",
+    "rollup": "^2.74.1",
     "typescript": "^4.6.4"
   }
 }

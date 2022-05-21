@@ -71,7 +71,7 @@ async function run(id, config, suites) {
 	if (config.importMap && HTMLScriptElement.supports && !HTMLScriptElement.supports('importmap')) {
 		eventDispatcher.invoke({
 			type: 'runner-unsupported',
-			error: 'Browser does not support import map',
+			message: 'Browser does not support import map',
 		});
 		await eventDispatcher.wait();
 		return;
@@ -80,7 +80,7 @@ async function run(id, config, suites) {
 	const ping = setInterval(() => eventDispatcher.invoke({ type: 'runner-ping' }), 500);
 
 	const unload = () => {
-		eventDispatcher.invoke({ type: 'runner-disconnect' });
+		eventDispatcher.invoke({ type: 'runner-disconnect', message: 'page closed (did a test change window.location?)' });
 		eventDispatcher.sendNow();
 	};
 
@@ -108,7 +108,7 @@ async function run(id, config, suites) {
 	} catch (e) {
 		window.title = `Lean Test Runner (${id}) - error`;
 		console.error(e);
-		eventDispatcher.invoke({ type: 'runner-error', error: String(e) });
+		eventDispatcher.invoke({ type: 'runner-error', message: String(e) });
 	} finally {
 		clearInterval(ping);
 		window.removeEventListener('beforeunload', unload);

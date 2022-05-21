@@ -46,7 +46,14 @@ export default class ProcessRunner extends ExternalRunner {
 			'data',
 			splitStream(0x1E, (item) => listener(JSON.parse(item.toString('utf-8')))),
 		);
-		this.launched.once('error', (error) => listener({ type: 'runner-error', error }));
+		this.launched.once('error', (error) => listener({ type: 'runner-internal-error', error }));
+		this.launched.once('exit', (code, signal) => {
+			if (signal) {
+				listener({ type: 'runner-disconnect', message: `killed by signal ${signal}` });
+			} else if (code !== 0) {
+				listener({ type: 'runner-internal-error', error: `exited with code ${code}` });
+			}
+		});
 	}
 
 	async teardown() {

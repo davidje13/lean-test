@@ -21,7 +21,7 @@ export default class BrowserProcessRunner extends HttpServerRunner {
 	}
 
 	registerEventListener(listener, sharedState) {
-		this.launched.proc.once('error', (error) => listener({ type: 'runner-error', error }));
+		this.launched.proc.once('error', (error) => listener({ type: 'runner-internal-error', error }));
 		super.registerEventListener(listener, sharedState);
 	}
 

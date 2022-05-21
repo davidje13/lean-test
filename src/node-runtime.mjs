@@ -30,7 +30,7 @@ async function run(config, suites) {
 		send({ type: 'runner-end', result });
 	} catch (e) {
 		console.error(e);
-		send({ type: 'runner-error', error: String(e) });
+		send({ type: 'runner-error', message: String(e) });
 	} finally {
 		clearInterval(ping);
 		parentComm.close();

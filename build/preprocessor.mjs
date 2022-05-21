@@ -1,5 +1,5 @@
 import { cwd, versions, env } from 'process';
-import { resolve as resolve$1, dirname } from 'path';
+import path, { resolve as resolve$1, dirname } from 'path';
 import { access, readFile } from 'fs/promises';
 
 const dynamicImport = (dependency, name) => import(dependency).catch(() => {
@@ -20,6 +20,53 @@ var babel = async () => {
 				path: fullPath.replace(/(.*)\.[cm]?jsx?/i, '\\1.js'),
 				content: code,
 			};
+		},
+	};
+};
+
+var rollup = async () => {
+	const { rollup } = await dynamicImport('rollup', 'rollup preprocessor');
+	const { default: loadConfigFile } = await dynamicImport('rollup/loadConfigFile', 'rollup preprocessor');
+
+	const { options } = await loadConfigFile(resolve$1(cwd(), 'rollup.config.js'), { format: 'es', silent: true }).catch((e) => {
+		throw new Error(`Failed to read rollup.config.js: ${e}`);
+	});
+	const config = options[0] ?? {};
+	const outputConfig = (Array.isArray(config.output) ? config.output[0] : config.output) ?? {};
+
+	return {
+		resolve(path, from) {
+			return resolve$1(dirname(from), path);
+		},
+
+		async load(fullPath) {
+			const bundle = await rollup({
+				...config,
+				input: fullPath,
+				cache: undefined,
+			});
+			try {
+				const { output } = await bundle.generate({
+					...outputConfig,
+					format: 'es',
+					file: undefined,
+					dir: undefined,
+					sourcemap: false,
+				});
+				if (!output.length) {
+					throw new Error('No output from rollup');
+				}
+				if (output.length > 1) {
+					throw new Error('Too much output from rollup: ' + output.map((o) => o.fileName).join(', '));
+				}
+				const result = output[0];
+				return {
+					path: result.fileName,
+					content: result.code ?? result.source,
+				};
+			} finally {
+				await bundle.close();
+			}
 		},
 	};
 };
@@ -80,6 +127,7 @@ function readCompilerOptions(ts, path) {
 var preprocessors = /*#__PURE__*/Object.freeze({
 	__proto__: null,
 	babel: babel,
+	rollup: rollup,
 	tsc: tsc
 });
 
@@ -92,8 +140,13 @@ async function resolve(specifier, context, defaultResolve, ...rest) {
 	if (!specifier.startsWith('.') && !specifier.startsWith('/')) {
 		return defaultResolve(specifier, context, defaultResolve, ...rest);
 	}
+	const from = new URL(context.parentURL).pathname;
+	if (path.resolve(from, specifier).includes('/node_modules/')) {
+		// naïve node_modules check to avoid deadlocks when loading preprocessor files
+		return defaultResolve(specifier, context, defaultResolve, ...rest);
+	}
 	const preprocessor = await lazyPreprocessor();
-	const fullPath = await preprocessor?.resolve(specifier, new URL(context.parentURL).pathname);
+	const fullPath = await preprocessor?.resolve(specifier, from);
 	if (!fullPath) {
 		return defaultResolve(specifier, context, defaultResolve, ...rest);
 	}

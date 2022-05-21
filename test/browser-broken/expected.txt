@@ -1,5 +1,5 @@
 
-Runner disconnected: runner closed (did a test change window.location?)
+Runner disconnected: page closed (did a test change window.location?)
 Active tests:
 - suite: disconnect.spec.mjs -> test: changing URL is detected and reported
 EXIT: 1

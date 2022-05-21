@@ -41,7 +41,11 @@ try {
 	const exclusion = [...config.pathsExclude, ...(config.noDefaultExclude ? [] : ['**/node_modules', '**/.*'])];
 	const scanDirs = config.scan.map((path) => resolve(process.cwd(), path));
 	const paths = await asyncListToSync(findPathsMatching(scanDirs, config.pathsInclude, exclusion));
-	config.preprocessor = await config.preprocessor?.();
+	try {
+		config.preprocessor = await config.preprocessor?.();
+	} catch (e) {
+		throw new Error(`Failed to configure ${config.preprocessorRaw} preprocessor for testing: ${e}`);
+	}
 
 	const forceTTY = (
 		config.colour ??

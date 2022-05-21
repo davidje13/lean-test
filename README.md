@@ -633,6 +633,10 @@ The `lean-test` executable can be configured in various ways:
 		`babel` section of a `package.json` for configuration.
 		Requires `babel` (`npm install --save-dev @babel/core`).
 
+	- `rollup`:<br>
+		The Rollup bundler. Looks for a `rollup.config.js` file for configuration.
+		Requires `rollup` (`npm install --save-dev rollup`).
+
 	- `tsc`:<br>
 		The Typescript transpiler. Looks for a `tsconfig.json` file for configuration.
 		Requires `typescript` (`npm install --save-dev typescript`).

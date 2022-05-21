@@ -1,5 +1,6 @@
 import { env, versions } from 'process';
 import * as preprocessors from './preprocessors/index.mjs';
+import path from 'path';
 
 export { preprocessors };
 
@@ -12,8 +13,13 @@ export async function resolve(specifier, context, defaultResolve, ...rest) {
 	if (!specifier.startsWith('.') && !specifier.startsWith('/')) {
 		return defaultResolve(specifier, context, defaultResolve, ...rest);
 	}
+	const from = new URL(context.parentURL).pathname;
+	if (path.resolve(from, specifier).includes('/node_modules/')) {
+		// naïve node_modules check to avoid deadlocks when loading preprocessor files
+		return defaultResolve(specifier, context, defaultResolve, ...rest);
+	}
 	const preprocessor = await lazyPreprocessor();
-	const fullPath = await preprocessor?.resolve(specifier, new URL(context.parentURL).pathname);
+	const fullPath = await preprocessor?.resolve(specifier, from);
 	if (!fullPath) {
 		return defaultResolve(specifier, context, defaultResolve, ...rest);
 	}
