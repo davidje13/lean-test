@@ -128,6 +128,9 @@ ExternalRunner.compressor = () => {
 				result: compress(result.result),
 			};
 		}
+		if (result.type === 'complete') {
+			sent.add(result.id);
+		}
 		if (!result?.children?.length) {
 			return result;
 		}

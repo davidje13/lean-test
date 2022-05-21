@@ -30,7 +30,7 @@ class Aggregator {
 		});
 	}
 
-	async sendNow() {
+	async sendNow(unbatched) {
 		clearTimeout(this.timer);
 		this.timer = null;
 		if (!this.queue.length) {
@@ -38,9 +38,8 @@ class Aggregator {
 		}
 		this.sending = true;
 		try {
-			// break up into chunks to avoid POST content limits (~25kb?)
 			while (this.queue.length) {
-				const current = this.queue.splice(0, 50);
+				const current = this.queue.splice(0, unbatched ? this.queue.length : 200);
 				await this.next(current);
 			}
 		} catch (e) {
@@ -68,7 +67,7 @@ async function run(id, config, suites) {
 	const eventDispatcher = new Aggregator((events) => fetch('/', {
 		method: 'POST',
 		body: JSON.stringify({ id, events: events.map(compress) }),
-		keepalive: true, // allow sending in background even after page unloads
+		// cannot use keepalive on all requests as it imposes a low limit on size of POSTed data
 	}));
 	eventDispatcher.invoke({ type: 'runner-connect' });
 
@@ -84,8 +83,17 @@ async function run(id, config, suites) {
 	const ping = setInterval(() => eventDispatcher.invoke({ type: 'runner-ping' }), 500);
 
 	const unload = () => {
-		eventDispatcher.invoke({ type: 'runner-disconnect', message: 'page closed (did a test change window.location?)' });
-		eventDispatcher.sendNow();
+		eventDispatcher.sendNow(true);
+		fetch('/', {
+			method: 'POST',
+			body: JSON.stringify({
+				id,
+				events: [
+					{ type: 'runner-disconnect', message: 'page closed (did a test change window.location?)' },
+				],
+			}),
+			keepalive: true, // allow sending in background even after page unloads
+		});
 	};
 
 	window.addEventListener('beforeunload', unload, { once: true });
