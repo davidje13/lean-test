@@ -43,8 +43,7 @@ export default [
 			'process',
 			'path',
 			'fs/promises',
-			'typescript',
-			'@babel/core',
+			'util',
 			'./lean-test.mjs',
 		],
 		output: {

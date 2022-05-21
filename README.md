@@ -634,12 +634,19 @@ The `lean-test` executable can be configured in various ways:
 		Requires `babel` (`npm install --save-dev @babel/core`).
 
 	- `rollup`:<br>
-		The Rollup bundler. Looks for a `rollup.config.js` file for configuration.
+		The Rollup bundler. Looks for a `rollup.config.js` file for configuration (uses
+		the first entry if multiple configurations are defined).
 		Requires `rollup` (`npm install --save-dev rollup`).
 
 	- `tsc`:<br>
 		The Typescript transpiler. Looks for a `tsconfig.json` file for configuration.
 		Requires `typescript` (`npm install --save-dev typescript`).
+
+	- `webpack`:<br>
+		The webpack bundler. Looks for a `.webpack/webpackfile`,
+		`.webpack/webpack.config.*`, or `webpack.config.*` file for configuration (uses
+		the first entry if multiple configurations are defined).
+		Requires `webpack` (`npm install --save-dev webpack`).
 
 - `--target <name>` / `-t <name>` / environment `TARGET=<name>`:<br>
 	Runs the tests in the chosen target. Currently `node`, `chrome` and `firefox` are

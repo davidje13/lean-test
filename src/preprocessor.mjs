@@ -14,7 +14,11 @@ export async function resolve(specifier, context, defaultResolve, ...rest) {
 		return defaultResolve(specifier, context, defaultResolve, ...rest);
 	}
 	const from = new URL(context.parentURL).pathname;
-	if (path.resolve(from, specifier).includes('/node_modules/')) {
+	const fromParts = from.split(path.sep);
+	if (
+		(fromParts.includes('node_modules') && fromParts.includes('preprocessor.mjs')) ||
+		path.resolve(from, specifier).split(path.sep).includes('node_modules')
+	) {
 		// naïve node_modules check to avoid deadlocks when loading preprocessor files
 		return defaultResolve(specifier, context, defaultResolve, ...rest);
 	}
@@ -23,7 +27,7 @@ export async function resolve(specifier, context, defaultResolve, ...rest) {
 	if (!fullPath) {
 		return defaultResolve(specifier, context, defaultResolve, ...rest);
 	}
-	if (fullPath.includes('/node_modules/')) {
+	if (fullPath.split(path.sep).includes('node_modules')) {
 		return { url: 'file://' + fullPath };
 	}
 	if (NODE_MAJOR < 16) {
