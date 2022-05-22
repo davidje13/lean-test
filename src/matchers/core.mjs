@@ -1,5 +1,5 @@
 import { seq, print } from '../utils.mjs';
-import { checkEquals, delegateMatcher, ANY, isIdentical } from './checkEquals.mjs';
+import { checkEquals, delegateMatcher, ANY } from './checkEquals.mjs';
 
 export const any = () => (actual) => ({
 	pass: true,
@@ -15,7 +15,7 @@ export const withMessage = (message, matcher) => (...args) =>
 export const equals = (expected) => (actual) => checkEquals(expected, actual, 'value');
 
 export const same = (expected) => (actual) => {
-	if (isIdentical(expected, actual)) {
+	if (Object.is(expected, actual)) {
 		return { pass: true, message: `Expected value not to be ${print(expected)}, but was.` };
 	}
 	const equalResult = checkEquals(expected, actual, 'value');
@@ -23,6 +23,17 @@ export const same = (expected) => (actual) => {
 		return { pass: false, message: `Expected exactly ${print(expected)}, but got a different (but matching) instance.` };
 	} else {
 		return equalResult;
+	}
+};
+
+export const matches = (pattern) => (actual) => {
+	if (!(pattern instanceof RegExp)) {
+		throw new Error('matches pattern must be a RegExp.');
+	}
+	if (typeof actual === 'string' && pattern.test(actual)) {
+		return { pass: true, message: `Expected not to match ${print(pattern)}, but got ${print(actual)}.` };
+	} else {
+		return { pass: false, message: `Expected to match ${print(pattern)}, but got ${print(actual)}.` };
 	}
 };
 
@@ -111,11 +122,20 @@ export const throws = (expected = ANY) => (input) => {
 		}
 	}
 	function reject(actual) {
-		if (typeof expected === 'string' && actual instanceof Error) {
-			if (actual.message.includes(expected)) {
-				return { pass: true, message: `Expected ${print(input)} not to throw error containing ${print(expected)} (threw ${print(actual)}).` };
-			} else {
-				return { pass: false, message: `Expected ${print(input)} to throw ${print(expected)}, but threw ${print(actual)}.` };
+		if (actual instanceof Error) {
+			if (typeof expected === 'string') {
+				if (actual.message.includes(expected)) {
+					return { pass: true, message: `Expected ${print(input)} not to throw error containing ${print(expected)} (threw ${print(actual)}).` };
+				} else {
+					return { pass: false, message: `Expected ${print(input)} to throw ${print(expected)}, but threw ${print(actual)}.` };
+				}
+			}
+			if (expected instanceof RegExp) {
+				if (expected.test(actual.message)) {
+					return { pass: true, message: `Expected ${print(input)} not to throw error matching ${print(expected)} (threw ${print(actual)}).` };
+				} else {
+					return { pass: false, message: `Expected ${print(input)} to throw error matching ${print(expected)}, but threw ${print(actual)}.` };
+				}
 			}
 		}
 		return delegateMatcher(expected, actual, 'thrown value');

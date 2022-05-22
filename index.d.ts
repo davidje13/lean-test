@@ -318,6 +318,7 @@ interface matchers {
 	any: () => SyncMatcher<unknown>;
 	equals: <T>(expected: T) => SyncMatcher<T>;
 	same: <T>(expected: T) => SyncMatcher<T>;
+	matches: (expected: RegExp) => SyncMatcher<string>;
 	not: <M extends Matcher<any>>(matcher: M) => M;
 	withMessage: <M extends Matcher<any>>(message: string, matcher: M) => M;
 	isTrue: () => SyncMatcher<boolean>;
@@ -336,13 +337,15 @@ interface matchers {
 		SyncMatcher<() => T> &
 		AsyncMatcher<Promise<T> | (() => Promise<T>)>
 	);
-	throws: (expectation?: SyncMatcher<unknown> | string) => (
+	throws: (expectation?: SyncMatcher<unknown> | RegExp | string) => (
 		SyncMatcher<() => unknown> &
 		AsyncMatcher<Promise<unknown> | (() => Promise<unknown>)>
 	);
 	hasLength: (expectation?: SyncMatcher<number> | number) => SyncMatcher<LengthHaver>;
 	isEmpty: () => SyncMatcher<LengthHaver>;
 	contains: (expectation?: SyncMatcher<any> | string | unknown) => SyncMatcher<string | Array<unknown> | Set<unknown>>;
+	startsWith: (expected: string) => SyncMatcher<string>;
+	endsWith: (expected: string) => SyncMatcher<string>;
 	isListOf: (...expectation?: (SyncMatcher<any> | unknown)[]) => SyncMatcher<Array<unknown>>;
 	hasProperty: (name: Symbol | string | number, expectation?: SyncMatcher<any> | unknown) => SyncMatcher<unknown>;
 
@@ -352,11 +355,12 @@ interface matchers {
 	// compatibility aliases
 	toEqual: <T>(expected: T) => SyncMatcher<T>;
 	toBe: <T>(expected: T) => SyncMatcher<T>;
+	toMatch: (expected: RegExp) => SyncMatcher<string>;
 	toBeTruthy: () => SyncMatcher<unknown>;
 	toBeFalsy: () => SyncMatcher<unknown>;
 	toBeNull: () => SyncMatcher<unknown>;
 	toBeUndefined: () => SyncMatcher<unknown>;
-	toThrow: (expectation?: SyncMatcher<any> | string) => (
+	toThrow: (expectation?: SyncMatcher<any> | RegExp | string) => (
 		SyncMatcher<() => unknown> &
 		AsyncMatcher<Promise<unknown> | (() => Promise<unknown>)>
 	);
@@ -420,6 +424,7 @@ declare global { // same as DiscoveryGlobals + matchers
 	const any: () => SyncMatcher<unknown>;
 	const equals: <T>(expected: T) => SyncMatcher<T>;
 	const same: <T>(expected: T) => SyncMatcher<T>;
+	const matches: (expected: RegExp) => SyncMatcher<string>;
 	const not: <M extends Matcher<any>>(matcher: M) => M;
 	const withMessage: <M extends Matcher<any>>(message: string, matcher: M) => M;
 	const isTrue: () => SyncMatcher<boolean>;
@@ -438,13 +443,15 @@ declare global { // same as DiscoveryGlobals + matchers
 		SyncMatcher<() => T> &
 		AsyncMatcher<Promise<T> | (() => Promise<T>)>
 	);
-	const throws: (expectation?: SyncMatcher<any> | string) => (
+	const throws: (expectation?: SyncMatcher<any> | RegExp | string) => (
 		SyncMatcher<() => unknown> &
 		AsyncMatcher<Promise<unknown> | (() => Promise<unknown>)>
 	);
 	const hasLength: (expectation?: SyncMatcher<number> | number) => SyncMatcher<LengthHaver>;
 	const isEmpty: () => SyncMatcher<LengthHaver>;
 	const contains: (expectation?: SyncMatcher<any> | string | unknown) => SyncMatcher<string | Array<unknown> | Set<unknown>>;
+	const startsWith: (expected: string) => SyncMatcher<string>;
+	const endsWith: (expected: string) => SyncMatcher<string>;
 	const isListOf: (...expectation?: (SyncMatcher<any> | unknown)[]) => SyncMatcher<Array<unknown>>;
 	const hasProperty: (name: Symbol | string | number, expectation?: SyncMatcher<any> | unknown) => SyncMatcher<unknown>;
 
@@ -454,11 +461,12 @@ declare global { // same as DiscoveryGlobals + matchers
 	// compatibility aliases
 	const toEqual: <T>(expected: T) => SyncMatcher<T>;
 	const toBe: <T>(expected: T) => SyncMatcher<T>;
+	const toMatch: (expected: RegExp) => SyncMatcher<string>;
 	const toBeTruthy: () => SyncMatcher<unknown>;
 	const toBeFalsy: () => SyncMatcher<unknown>;
 	const toBeNull: () => SyncMatcher<unknown>;
 	const toBeUndefined: () => SyncMatcher<unknown>;
-	const toThrow: (expectation?: SyncMatcher<any> | string) => (
+	const toThrow: (expectation?: SyncMatcher<any> | RegExp | string) => (
 		SyncMatcher<() => unknown> &
 		AsyncMatcher<Promise<unknown> | (() => Promise<unknown>)>
 	);

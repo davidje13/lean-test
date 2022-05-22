@@ -276,6 +276,25 @@ describe('same', () => {
 	});
 });
 
+describe('matches', {
+	'checks if a string matches a regular expression'() {
+		const resultPass = matchers.matches(/fo+/)('abcfoodef');
+		expect(resultPass.pass, isTrue());
+
+		const resultFail = matchers.matches(/fo+/)('abcdef');
+		expect(resultFail.pass, isFalse());
+	},
+
+	'errors if given a non-RegExp'() {
+		expect(() => matchers.matches('foo')('abcfoodef'), throws('must be a RegExp'));
+	},
+
+	'rejects other types'() {
+		expect(matchers.matches(/fo+/)(7).pass, isFalse());
+		expect(matchers.matches(/fo+/)(Symbol()).pass, isFalse());
+	},
+});
+
 const ASYNC_PASS = () => Promise.resolve({ pass: true, message: 'msg' });
 const ASYNC_FAIL = () => Promise.resolve({ pass: false, message: 'msg' });
 
@@ -547,6 +566,17 @@ describe('throws', {
 		expect(rMismatch.pass, equals(false));
 
 		const rResolve = matchers.throws('anything')(() => 1);
+		expect(rResolve.pass, equals(false));
+	},
+
+	'checks error message against a given RegExp'() {
+		const rThrow = matchers.throws(/lo+ng/)(() => { throw new Error('long message'); });
+		expect(rThrow.pass, equals(true));
+
+		const rMismatch = matchers.throws(/nope/)(() => { throw new Error('long message'); });
+		expect(rMismatch.pass, equals(false));
+
+		const rResolve = matchers.throws(/any/)(() => 1);
 		expect(rResolve.pass, equals(false));
 	},
 

@@ -23,11 +23,6 @@ export const delegateMatcher = (matcher, actual, name) => {
 	}
 };
 
-export const isIdentical = (a, b) => (
-	(a === b && (a !== 0 || Math.sign(1 / a) === Math.sign(1 / b))) ||
-	(a !== a && b !== b)
-);
-
 const readItemMap = (v) => {
 	if (v instanceof Map) {
 		return new Map(v.entries());
@@ -58,7 +53,7 @@ const getAndRemove = (map, key, exact, seen) => {
 };
 
 function getDiffs(a, b, failFast, seen) {
-	if (isIdentical(a, b)) {
+	if (Object.is(a, b)) {
 		return [];
 	}
 	if (

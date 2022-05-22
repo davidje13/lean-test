@@ -184,3 +184,41 @@ describe('isListOf', {
 		expect(resultFail.pass, isFalse());
 	},
 });
+
+describe('startsWith', {
+	'checks if a string starts with a substring'() {
+		const resultPass = matchers.startsWith('abc')('abcdef');
+		expect(resultPass.pass, isTrue());
+
+		const resultFail = matchers.startsWith('abc')('def');
+		expect(resultFail.pass, isFalse());
+	},
+
+	'errors if given a non-string'() {
+		expect(() => matchers.startsWith(7)('abcfoodef'), throws('must be a string'));
+	},
+
+	'rejects other types'() {
+		expect(matchers.startsWith('abc')(7).pass, isFalse());
+		expect(matchers.startsWith('abc')(Symbol()).pass, isFalse());
+	},
+});
+
+describe('endsWith', {
+	'checks if a string ends with a substring'() {
+		const resultPass = matchers.endsWith('def')('abcdef');
+		expect(resultPass.pass, isTrue());
+
+		const resultFail = matchers.endsWith('abc')('def');
+		expect(resultFail.pass, isFalse());
+	},
+
+	'errors if given a non-string'() {
+		expect(() => matchers.endsWith(7)('abcfoodef'), throws('must be a string'));
+	},
+
+	'rejects other types'() {
+		expect(matchers.endsWith('abc')(7).pass, isFalse());
+		expect(matchers.endsWith('abc')(Symbol()).pass, isFalse());
+	},
+});

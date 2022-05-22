@@ -521,6 +521,9 @@ them to run in parallel.
 - `any()`:<br>
 	Always matches. The negation `not(any())` always fails. Useful as a sub-matcher.
 
+- `matches(regexp)`:<br>
+	Checks if a string matches the given regular expression.
+
 - `withMessage(message, expectation)`:<br>
 	Customises the error message of another matcher.<br>
 	e.g. `expect(7, withMessage('hmm, not 7', equals(7)))`
@@ -602,6 +605,12 @@ them to run in parallel.
 - `contains(sub)`:<br>
 	Checks if the value (a string, array, or `Set`) contains the given substring or
 	sub-element.
+
+- `startsWith(sub)`:<br>
+	Checks if a string starts with the given substring.
+
+- `endsWith(sub)`:<br>
+	Checks if a string ends with the given substring.
 
 - `isListOf(...elements)`:<br>
 	Checks if the value contains the given elements in the listed order. Elements can be

@@ -85,3 +85,25 @@ export const isListOf = (...items) => (actual) => {
 	}
 	return { pass: true, message: `Expected not to contain ${print(items)}, but did.` };
 };
+
+export const startsWith = (sub) => (actual) => {
+	if (typeof sub !== 'string') {
+		throw new Error('startsWith check must be a string.');
+	}
+	if (typeof actual === 'string' && actual.startsWith(sub)) {
+		return { pass: true, message: `Expected not to start with ${print(sub)}, but got ${print(actual)}.` };
+	} else {
+		return { pass: false, message: `Expected to start with ${print(sub)}, but got ${print(actual)}.` };
+	}
+};
+
+export const endsWith = (sub) => (actual) => {
+	if (typeof sub !== 'string') {
+		throw new Error('endsWith check must be a string.');
+	}
+	if (typeof actual === 'string' && actual.endsWith(sub)) {
+		return { pass: true, message: `Expected not to end with ${print(sub)}, but got ${print(actual)}.` };
+	} else {
+		return { pass: false, message: `Expected to end with ${print(sub)}, but got ${print(actual)}.` };
+	}
+};

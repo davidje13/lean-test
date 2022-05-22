@@ -1028,11 +1028,6 @@ const delegateMatcher = (matcher, actual, name) => {
 	}
 };
 
-const isIdentical = (a, b) => (
-	(a === b && (a !== 0 || Math.sign(1 / a) === Math.sign(1 / b))) ||
-	(a !== a && b !== b)
-);
-
 const readItemMap = (v) => {
 	if (v instanceof Map) {
 		return new Map(v.entries());
@@ -1063,7 +1058,7 @@ const getAndRemove = (map, key, exact, seen) => {
 };
 
 function getDiffs(a, b, failFast, seen) {
-	if (isIdentical(a, b)) {
+	if (Object.is(a, b)) {
 		return [];
 	}
 	if (
@@ -1155,7 +1150,7 @@ const withMessage = (message, matcher) => (...args) =>
 const equals = (expected) => (actual) => checkEquals(expected, actual, 'value');
 
 const same = (expected) => (actual) => {
-	if (isIdentical(expected, actual)) {
+	if (Object.is(expected, actual)) {
 		return { pass: true, message: `Expected value not to be ${print(expected)}, but was.` };
 	}
 	const equalResult = checkEquals(expected, actual, 'value');
@@ -1163,6 +1158,17 @@ const same = (expected) => (actual) => {
 		return { pass: false, message: `Expected exactly ${print(expected)}, but got a different (but matching) instance.` };
 	} else {
 		return equalResult;
+	}
+};
+
+const matches = (pattern) => (actual) => {
+	if (!(pattern instanceof RegExp)) {
+		throw new Error('matches pattern must be a RegExp.');
+	}
+	if (typeof actual === 'string' && pattern.test(actual)) {
+		return { pass: true, message: `Expected not to match ${print(pattern)}, but got ${print(actual)}.` };
+	} else {
+		return { pass: false, message: `Expected to match ${print(pattern)}, but got ${print(actual)}.` };
 	}
 };
 
@@ -1251,11 +1257,20 @@ const throws = (expected = ANY) => (input) => {
 		}
 	}
 	function reject(actual) {
-		if (typeof expected === 'string' && actual instanceof Error) {
-			if (actual.message.includes(expected)) {
-				return { pass: true, message: `Expected ${print(input)} not to throw error containing ${print(expected)} (threw ${print(actual)}).` };
-			} else {
-				return { pass: false, message: `Expected ${print(input)} to throw ${print(expected)}, but threw ${print(actual)}.` };
+		if (actual instanceof Error) {
+			if (typeof expected === 'string') {
+				if (actual.message.includes(expected)) {
+					return { pass: true, message: `Expected ${print(input)} not to throw error containing ${print(expected)} (threw ${print(actual)}).` };
+				} else {
+					return { pass: false, message: `Expected ${print(input)} to throw ${print(expected)}, but threw ${print(actual)}.` };
+				}
+			}
+			if (expected instanceof RegExp) {
+				if (expected.test(actual.message)) {
+					return { pass: true, message: `Expected ${print(input)} not to throw error matching ${print(expected)} (threw ${print(actual)}).` };
+				} else {
+					return { pass: false, message: `Expected ${print(input)} to throw error matching ${print(expected)}, but threw ${print(actual)}.` };
+				}
 			}
 		}
 		return delegateMatcher(expected, actual, 'thrown value');
@@ -1411,6 +1426,28 @@ const isListOf = (...items) => (actual) => {
 	return { pass: true, message: `Expected not to contain ${print(items)}, but did.` };
 };
 
+const startsWith = (sub) => (actual) => {
+	if (typeof sub !== 'string') {
+		throw new Error('startsWith check must be a string.');
+	}
+	if (typeof actual === 'string' && actual.startsWith(sub)) {
+		return { pass: true, message: `Expected not to start with ${print(sub)}, but got ${print(actual)}.` };
+	} else {
+		return { pass: false, message: `Expected to start with ${print(sub)}, but got ${print(actual)}.` };
+	}
+};
+
+const endsWith = (sub) => (actual) => {
+	if (typeof sub !== 'string') {
+		throw new Error('endsWith check must be a string.');
+	}
+	if (typeof actual === 'string' && actual.endsWith(sub)) {
+		return { pass: true, message: `Expected not to end with ${print(sub)}, but got ${print(actual)}.` };
+	} else {
+		return { pass: false, message: `Expected to end with ${print(sub)}, but got ${print(actual)}.` };
+	}
+};
+
 const hasProperty = (name, expected = ANY) => (actual) => {
 	if (actual !== null && actual !== undefined && Object.prototype.hasOwnProperty.call(actual, name)) {
 		return delegateMatcher(expected, actual[name], print(name));
@@ -1463,6 +1500,7 @@ var matchers = /*#__PURE__*/Object.freeze({
 	withMessage: withMessage,
 	equals: equals,
 	same: same,
+	matches: matches,
 	isTrue: isTrue,
 	isTruthy: isTruthy,
 	isFalse: isFalse,
@@ -1481,11 +1519,14 @@ var matchers = /*#__PURE__*/Object.freeze({
 	isEmpty: isEmpty,
 	contains: contains,
 	isListOf: isListOf,
+	startsWith: startsWith,
+	endsWith: endsWith,
 	hasProperty: hasProperty,
 	hasBeenCalled: hasBeenCalled,
 	hasBeenCalledWith: hasBeenCalledWith,
 	toEqual: equals,
 	toBe: same,
+	toMatch: matches,
 	toBeTruthy: isTruthy,
 	toBeFalsy: isFalsy,
 	toBeNull: isNull,

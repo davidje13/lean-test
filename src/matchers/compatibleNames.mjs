@@ -1,6 +1,7 @@
 export {
 	equals as toEqual,
 	same as toBe,
+	matches as toMatch,
 	isTruthy as toBeTruthy,
 	isFalsy as toBeFalsy,
 	isNull as toBeNull,
