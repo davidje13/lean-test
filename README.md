@@ -356,6 +356,8 @@ will run, and the rest will be reported as skipped.
 ### repeat
 
 ```javascript
+it('will run multiple times', { repeat: 3 }, () => { /* ... */ });
+
 it('will run multiple times', () => { /* ... */ }, { repeat: 3 });
 ```
 
@@ -366,10 +368,6 @@ a failure tolerance:
 it('will run multiple times', { repeat: { total: 3, maxFailures: 1 } }, () => {
 	// ...
 });
-
-it('will run multiple times', () => {
-	// ...
-}, { repeat: { total: 3, maxFailures: 1 } });
 ```
 
 ### retry
