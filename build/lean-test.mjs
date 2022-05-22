@@ -671,6 +671,9 @@ const TEST_FN_NAME = Symbol();
 const SUB_FN_NAME = Symbol();
 
 const OPTIONS_FACTORY$1 = (name, content, opts) => {
+	if (typeof content === 'object' && typeof opts === 'function') {
+		[content, opts] = [opts, content];
+	}
 	if (!content || (typeof content !== 'function' && typeof content !== 'object')) {
 		throw new Error('Invalid content');
 	}
@@ -2173,7 +2176,12 @@ var stopAtFirstFailure = () => (builder) => {
 const id = Symbol();
 const TEST_FN = Symbol();
 
-const OPTIONS_FACTORY = (name, fn, opts) => ({ ...opts, name: name.trim(), [TEST_FN]: fn });
+const OPTIONS_FACTORY = (name, fn, opts) => {
+	if (typeof fn === 'object' && typeof opts === 'function') {
+		[fn, opts] = [opts, fn];
+	}
+	return { ...opts, name: name.trim(), [TEST_FN]: fn }
+};
 const CONFIG = { display: 'test' };
 
 var test = (fnName = 'test') => (builder) => {

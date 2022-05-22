@@ -323,6 +323,10 @@ it.ignore('will not run', () => { /* ... */ });
 
 describe.ignore('will not run', () => { /* ... */ });
 
+it('will not run', { ignore: true }, () => { /* ... */ });
+
+describe('will not run', { ignore: true }, () => { /* ... */ });
+
 it('will not run', () => { /* ... */ }, { ignore: true });
 
 describe('will not run', () => { /* ... */ }, { ignore: true });
@@ -336,6 +340,10 @@ Ignores a test or block. This will be reported as a skipped test.
 it.focus('only this will run', () => { /* ... */ });
 
 describe.focus('only this will run', () => { /* ... */ });
+
+it('only this will run', { focus: true }, () => { /* ... */ });
+
+describe('only this will run', { focus: true }, () => { /* ... */ });
 
 it('only this will run', () => { /* ... */ }, { focus: true });
 
@@ -355,6 +363,10 @@ Runs a test multiple times, expecting every run to succeed. Can also be configur
 a failure tolerance:
 
 ```javascript
+it('will run multiple times', { repeat: { total: 3, maxFailures: 1 } }, () => {
+	// ...
+});
+
 it('will run multiple times', () => {
 	// ...
 }, { repeat: { total: 3, maxFailures: 1 } });
@@ -363,6 +375,8 @@ it('will run multiple times', () => {
 ### retry
 
 ```javascript
+it('will retry on failure', { retry: 3 }, () => { /* ... */ });
+
 it('will retry on failure', () => { /* ... */ }, { retry: 3 });
 ```
 
@@ -372,6 +386,8 @@ considered a success.
 ### parameters
 
 ```javascript
+it('will run with multiple parameters', { parameters: [1, 2] }, (v) => { /* ... */ });
+
 it('will run with multiple parameters', (v) => { /* ... */ }, { parameters: [1, 2] });
 ```
 
@@ -411,6 +427,8 @@ parameters:
 ### timeout
 
 ```javascript
+it('will time out', { timeout: 1000 }, () => { /* ... */ });
+
 it('will time out', () => { /* ... */ }, { timeout: 1000 });
 ```
 
@@ -424,6 +442,10 @@ ignored.
 ### stopAtFirstFailure
 
 ```javascript
+describe('my flow test', { stopAtFirstFailure: true }, () => {
+	// tests here
+});
+
 describe('my flow test', () => {
 	// tests here
 }, { stopAtFirstFailure: true });

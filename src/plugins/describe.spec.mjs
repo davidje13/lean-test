@@ -95,6 +95,23 @@ describe('describe', {
 		expect(invoked, equals(['begin 1', 'begin 2', 'begin 3', 'end 2', 'end 3', 'begin 4', 'end 1', 'end 4']));
 	},
 
+	async 'allows swapping test definition and optional config'() {
+		const invoked = [];
+		const simulateSlow = async (label, delay) => {
+			invoked.push(`begin ${label}`);
+			await sleep(delay);
+			invoked.push(`end ${label}`);
+		};
+		await testRunner([describePlugin()], { count: 2, pass: 2 }, (g) => {
+			g.describe('parallel base', { parallel: true }, () => {
+				g.test('test 1', () => simulateSlow('1', 8));
+				g.test('test 2', () => simulateSlow('2', 5));
+			});
+		});
+
+		expect(invoked, equals(['begin 1', 'begin 2', 'end 2', 'end 1']));
+	},
+
 	async 'can be configured with multiple names'() {
 		await testRunner([describePlugin('foo'), describePlugin('bar')], { count: 3, pass: 3 }, (g) => {
 			g.foo('block', () => {

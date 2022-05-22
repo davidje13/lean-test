@@ -3,7 +3,12 @@ import TestAssumptionError from '../core/TestAssumptionError.mjs';
 const id = Symbol();
 const TEST_FN = Symbol();
 
-const OPTIONS_FACTORY = (name, fn, opts) => ({ ...opts, name: name.trim(), [TEST_FN]: fn });
+const OPTIONS_FACTORY = (name, fn, opts) => {
+	if (typeof fn === 'object' && typeof opts === 'function') {
+		[fn, opts] = [opts, fn];
+	}
+	return { ...opts, name: name.trim(), [TEST_FN]: fn }
+};
 const CONFIG = { display: 'test' };
 
 export default (fnName = 'test') => (builder) => {

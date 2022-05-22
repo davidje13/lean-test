@@ -124,8 +124,14 @@ type WithOptions<T> = T & {
 	ignore: T;
 	focus: T;
 };
-type Describe = WithOptions<(name: string, fn: DescribeImplementation, options?: NodeOptions) => void>;
-type Test = WithOptions<(name: string, fn: TestImplementation, options?: NodeOptions) => void>;
+type Describe = WithOptions<
+	((name: string, fn: DescribeImplementation, options?: NodeOptions) => void) |
+	((name: string, options: NodeOptions, fn: DescribeImplementation) => void)
+>;
+type Test = WithOptions<
+	((name: string, fn: TestImplementation, options?: NodeOptions) => void) |
+	((name: string, options: NodeOptions, fn: TestImplementation) => void)
+>;
 
 interface LifecycleHookBeforeOps {
 	addTestParameter: (...parameters: unknown[]) => void;

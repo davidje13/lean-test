@@ -4,6 +4,9 @@ const TEST_FN_NAME = Symbol();
 const SUB_FN_NAME = Symbol();
 
 const OPTIONS_FACTORY = (name, content, opts) => {
+	if (typeof content === 'object' && typeof opts === 'function') {
+		[content, opts] = [opts, content];
+	}
 	if (!content || (typeof content !== 'function' && typeof content !== 'object')) {
 		throw new Error('Invalid content');
 	}

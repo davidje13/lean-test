@@ -8,6 +8,13 @@ describe('test', {
 		});
 	},
 
+	async 'allows extra config before or after the function'() {
+		await testRunner([test()], { count: 2, pass: 2 }, (g) => {
+			g.test('test after', () => {}, {});
+			g.test('test before', {}, () => {});
+		});
+	},
+
 	async 'reports errors'() {
 		await testRunner([test()], { count: 1, error: 1 }, (g) => {
 			g.test('test', () => {
