@@ -1,4 +1,5 @@
-import { access, readFile } from 'fs/promises';
+import { access, readFile, stat } from 'fs/promises';
+import { constants } from 'fs';
 import { dirname, resolve } from 'path';
 import { cwd } from 'process';
 import { dynamicImport } from './utils.mjs';
@@ -17,11 +18,14 @@ export default async () => {
 		async resolve(path, from) {
 			const fullPath = resolve(dirname(from), path);
 			try {
-				await access(fullPath);
-				return fullPath;
-			} catch (e) {
-				return resolver(path, from);
+				await access(fullPath, constants.R_OK);
+				const stats = await stat(fullPath);
+				if (stats.isFile()) {
+					return fullPath;
+				}
+			} catch (_) {
 			}
+			return resolver(path, from);
 		},
 		async load(fullPath) {
 			const subCompilerOptions = readCompilerOptions(ts, dirname(fullPath));

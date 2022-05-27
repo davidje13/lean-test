@@ -1,6 +1,7 @@
 import { cwd, versions, env } from 'process';
 import path, { resolve as resolve$1, dirname } from 'path';
-import { access, readFile } from 'fs/promises';
+import { access, stat, readFile } from 'fs/promises';
+import { constants } from 'fs';
 import { promisify } from 'util';
 
 const dynamicImport = (dependency, name) => import(dependency).catch(() => {
@@ -86,11 +87,14 @@ var tsc = async () => {
 		async resolve(path, from) {
 			const fullPath = resolve$1(dirname(from), path);
 			try {
-				await access(fullPath);
-				return fullPath;
-			} catch (e) {
-				return resolver(path, from);
+				await access(fullPath, constants.R_OK);
+				const stats = await stat(fullPath);
+				if (stats.isFile()) {
+					return fullPath;
+				}
+			} catch (_) {
 			}
+			return resolver(path, from);
 		},
 		async load(fullPath) {
 			const subCompilerOptions = readCompilerOptions(ts, dirname(fullPath));
@@ -187,8 +191,8 @@ async function loadWebpackConfig(dir) {
 	for (const option of WEBPACK_CONFIG_FILES) {
 		const file = resolve$1(dir, option);
 		try {
-			await access(file);
-		} catch (e) {
+			await access(file, constants.R_OK);
+		} catch (_) {
 			continue;
 		}
 		let c = await import(file);

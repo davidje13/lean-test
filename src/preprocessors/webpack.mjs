@@ -1,4 +1,5 @@
 import { access } from 'fs/promises';
+import { constants } from 'fs';
 import { dirname, resolve } from 'path';
 import { cwd } from 'process';
 import { promisify } from 'util';
@@ -66,8 +67,8 @@ async function loadWebpackConfig(dir) {
 	for (const option of WEBPACK_CONFIG_FILES) {
 		const file = resolve(dir, option);
 		try {
-			await access(file);
-		} catch (e) {
+			await access(file, constants.R_OK);
+		} catch (_) {
 			continue;
 		}
 		let c = await import(file);

@@ -42,6 +42,7 @@ export default [
 		external: [
 			'process',
 			'path',
+			'fs',
 			'fs/promises',
 			'util',
 			'./lean-test.mjs',
