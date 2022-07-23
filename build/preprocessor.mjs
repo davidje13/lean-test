@@ -272,9 +272,9 @@ const HASH_MARKER = `#!preprocessed`;
 
 // https://nodejs.org/api/esm.html#loaders
 
-async function resolve(specifier, context, defaultResolve, ...rest) {
+async function resolve(specifier, context, nextResolve) {
 	if (!specifier.startsWith('.') && !specifier.startsWith('/')) {
-		return defaultResolve(specifier, context, defaultResolve, ...rest);
+		return nextResolve(specifier, context);
 	}
 	const from = new URL(context.parentURL).pathname;
 	const fromParts = from.split(path.sep);
@@ -283,25 +283,25 @@ async function resolve(specifier, context, defaultResolve, ...rest) {
 		path.resolve(from, specifier).split(path.sep).includes('node_modules')
 	) {
 		// naïve node_modules check to avoid deadlocks when loading preprocessor files
-		return defaultResolve(specifier, context, defaultResolve, ...rest);
+		return nextResolve(specifier, context);
 	}
 	const fullPath = await preprocessor?.resolve(specifier, from);
 	if (!fullPath) {
-		return defaultResolve(specifier, context, defaultResolve, ...rest);
+		return nextResolve(specifier, context);
 	}
 	if (fullPath.split(path.sep).includes('node_modules')) {
-		return { url: 'file://' + fullPath };
+		return { url: 'file://' + fullPath, shortCircuit: true };
 	}
-	return { url: 'file://' + fullPath + HASH_MARKER };
+	return { url: 'file://' + fullPath + HASH_MARKER, shortCircuit: true };
 }
 
-async function load(url, context, defaultLoad, ...rest) {
+async function load(url, context, defaultLoad) {
 	const parsedURL = new URL(url);
 	if (parsedURL.hash === HASH_MARKER) {
 		const parsed = await preprocessor.load(parsedURL.pathname);
-		return { format: 'module', source: parsed.content };
+		return { format: 'module', source: parsed.content, shortCircuit: true };
 	}
-	return defaultLoad(url, context, defaultLoad, ...rest);
+	return defaultLoad(url, context, defaultLoad);
 }
 
 // legacy API (Node < 16)
