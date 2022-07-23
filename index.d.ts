@@ -125,11 +125,11 @@ type WithOptions<T> = T & {
 	focus: T;
 };
 type Describe = WithOptions<
-	((name: string, fn: DescribeImplementation, options?: NodeOptions) => void) |
+	((name: string, fn: DescribeImplementation, options?: NodeOptions) => void) &
 	((name: string, options: NodeOptions, fn: DescribeImplementation) => void)
 >;
 type Test = WithOptions<
-	((name: string, fn: TestImplementation, options?: NodeOptions) => void) |
+	((name: string, fn: TestImplementation, options?: NodeOptions) => void) &
 	((name: string, options: NodeOptions, fn: TestImplementation) => void)
 >;
 
@@ -240,14 +240,19 @@ export { Runner };
 
 export class ParallelRunner implements AbstractRunner {
 	constructor();
+	prepare(sharedState: SharedState): Promise<void>;
+	teardown(sharedState: SharedState): Promise<void>;
+	invoke(listener: TestEventHandler, sharedState: SharedState): Promise<Result>;
+	run(listener?: TestEventHandler, sharedState?: SharedState): Promise<Result>;
+
 	add(label: string, runner: AbstractRunner): void;
 }
 
-interface Methods<T> {
-	[k: keyof T]: T[k] extends (...args: any[]) => any ? T[k] : never;
-}
+type Methods<T> = {
+	[k in keyof T]: T[k] extends (...args: any[]) => any ? T[k] : never;
+};
 
-interface MockAction<T> {
+interface MockAction<T extends (...args: any[]) => any> {
 	with(...expectedArgs: Parameters<T>): MockAction<T>;
 	once(): MockAction<T>;
 	times(n: number): MockAction<T>;
@@ -270,7 +275,8 @@ type Mocking<T extends (...args: any) => any> = T & {
 export namespace helpers {
 	function mock<T extends (...args: any[]) => any>(name?: string, delegate?: T): Mocking<T>;
 	function mock<T extends (...args: any[]) => any>(delegate: T): Mocking<T>;
-	function mock<T, K extends keyof Methods<T>>(object: T, key: K): Mocking<T[K]> & { revert(): void };
+	function mock<T, K extends keyof Methods<T>>(object: T, key: K):
+		T[K] extends ((...args: any) => any) ? Mocking<T[K]> & { revert(): void } : never;
 }
 
 export namespace outputs {
@@ -316,9 +322,9 @@ type Precision =
 	{ tolerance: number } |
 	{ decimalPlaces: number };
 
-interface SyncMatchersOrValues<T> {
-	[k: keyof T]: SyncMatcher<T[k]> | T[k];
-}
+type SyncMatchersOrValues<T> = {
+	[k in keyof T]: SyncMatcher<T[k]> | T[k];
+};
 
 interface matchers {
 	any: () => SyncMatcher<unknown>;
@@ -352,11 +358,11 @@ interface matchers {
 	contains: (expectation?: SyncMatcher<any> | string | unknown) => SyncMatcher<string | Array<unknown> | Set<unknown>>;
 	startsWith: (expected: string) => SyncMatcher<string>;
 	endsWith: (expected: string) => SyncMatcher<string>;
-	isListOf: (...expectation?: (SyncMatcher<any> | unknown)[]) => SyncMatcher<Array<unknown>>;
+	isListOf: (...expectation: (SyncMatcher<any> | unknown)[]) => SyncMatcher<Array<unknown>>;
 	hasProperty: (name: Symbol | string | number, expectation?: SyncMatcher<any> | unknown) => SyncMatcher<unknown>;
 
 	hasBeenCalled: (options?: { times?: number }) => SyncMatcher<(...args: unknown[]) => unknown>;
-	hasBeenCalledWith: <T extends (...args: any[]) => any>(...args: SyncMatchersOrValues<Parameters<T>>) => SyncMatcher<T>;
+	hasBeenCalledWith: <T extends (...args: any[]) => any>(...args: SyncMatchersOrValues<Parameters<T>>[]) => SyncMatcher<T>;
 
 	// compatibility aliases
 	toEqual: <T>(expected: T) => SyncMatcher<T>;
@@ -380,7 +386,7 @@ interface matchers {
 	toHaveProperty: (name: Symbol | string | number, expectation?: SyncMatcher<any> | unknown) => SyncMatcher<unknown>;
 
 	toHaveBeenCalled: (options?: { times?: number }) => SyncMatcher<(...args: unknown[]) => unknown>;
-	toHaveBeenCalledWith: <T extends (...args: any[]) => any>(...args: SyncMatchersOrValues<Parameters<T>>) => SyncMatcher<T>;
+	toHaveBeenCalledWith: <T extends (...args: any[]) => any>(...args: SyncMatchersOrValues<Parameters<T>>[]) => SyncMatcher<T>;
 }
 export const matchers: matchers;
 
@@ -458,11 +464,11 @@ declare global { // same as DiscoveryGlobals + matchers
 	const contains: (expectation?: SyncMatcher<any> | string | unknown) => SyncMatcher<string | Array<unknown> | Set<unknown>>;
 	const startsWith: (expected: string) => SyncMatcher<string>;
 	const endsWith: (expected: string) => SyncMatcher<string>;
-	const isListOf: (...expectation?: (SyncMatcher<any> | unknown)[]) => SyncMatcher<Array<unknown>>;
+	const isListOf: (...expectation: (SyncMatcher<any> | unknown)[]) => SyncMatcher<Array<unknown>>;
 	const hasProperty: (name: Symbol | string | number, expectation?: SyncMatcher<any> | unknown) => SyncMatcher<unknown>;
 
 	const hasBeenCalled: (options?: { times?: number }) => SyncMatcher<(...args: unknown[]) => unknown>;
-	const hasBeenCalledWith: <T extends (...args: any[]) => any>(...args: SyncMatchersOrValues<Parameters<T>>) => SyncMatcher<T>;
+	const hasBeenCalledWith: <T extends (...args: any[]) => any>(...args: SyncMatchersOrValues<Parameters<T>>[]) => SyncMatcher<T>;
 
 	// compatibility aliases
 	const toEqual: <T>(expected: T) => SyncMatcher<T>;
@@ -486,5 +492,5 @@ declare global { // same as DiscoveryGlobals + matchers
 	const toHaveProperty: (name: Symbol | string | number, expectation?: SyncMatcher<any> | unknown) => SyncMatcher<unknown>;
 
 	const toHaveBeenCalled: (options?: { times?: number }) => SyncMatcher<(...args: unknown[]) => unknown>;
-	const toHaveBeenCalledWith: <T extends (...args: any[]) => any>(...args: SyncMatchersOrValues<Parameters<T>>) => SyncMatcher<T>;
+	const toHaveBeenCalledWith: <T extends (...args: any[]) => any>(...args: SyncMatchersOrValues<Parameters<T>>[]) => SyncMatcher<T>;
 }

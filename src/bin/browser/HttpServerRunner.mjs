@@ -7,8 +7,8 @@ import { ExternalRunner } from '../../lean-test.mjs';
 import ImportMap from '../filesystem/ImportMap.mjs';
 
 const handleMappedImport = (importMap) => async (server, url, res) => {
-	const path = await importMap.resolve(url.substr(1)).catch(() => {
-		throw new Server.HttpError(404, 'Not Found');
+	const path = await importMap.resolve(url.substr(1)).catch((e) => {
+		throw new Server.HttpError(404, `Import Map Error ${e.message}`);
 	});
 	if (path === null) {
 		return false;
@@ -26,7 +26,10 @@ export default class HttpServerRunner extends ExternalRunner {
 		parallelSuites,
 		importMap,
 	}, paths) {
-		super();
+		super({
+			initialConnectTimeout: 30_000,
+			pingTimeout: 2_000,
+		});
 		this.port = port;
 		this.host = host;
 		this.preprocessor = preprocessor;

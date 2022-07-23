@@ -93,7 +93,7 @@ function asString(o) {
 	if (!o) {
 		return '';
 	}
-	return o.toString('utf8');
+	return o.toString('utf-8');
 }
 
 class MemoryFileSystem {

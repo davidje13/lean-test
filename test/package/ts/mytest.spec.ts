@@ -1,3 +1,4 @@
+import 'lean-test';
 import foo from './imported';
 import bar from './sub';
 

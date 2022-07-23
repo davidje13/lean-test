@@ -19,6 +19,6 @@ node:16:
   <<: *common
   image: node:16
 
-node:17:
+node:18:
   <<: *common
   image: node:18

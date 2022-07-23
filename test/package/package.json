@@ -5,7 +5,7 @@
     "test:plain": "lean-test --target=node,chrome plain",
     "test:babel": "lean-test --preprocess=babel --target=node,chrome plain jsx",
     "test:rollup": "lean-test --preprocess=rollup --target=node,chrome plain replaced",
-    "test:ts": "lean-test --preprocess=tsc --target=node,chrome plain ts jsx",
+    "test:ts": "lean-test --preprocess=tsc --import-map --target=node,chrome plain ts jsx && tsc",
     "test:webpack": "lean-test --preprocess=webpack --target=node,chrome plain defined",
     "test": "npm run test:plain && npm run test:babel && npm run test:rollup && npm run test:ts && npm run test:webpack"
   },

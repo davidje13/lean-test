@@ -1,10 +1,16 @@
 import AbstractRunner from './AbstractRunner.mjs';
 import ActiveTestTracker from './ActiveTestTracker.mjs';
 
-const INITIAL_CONNECT_TIMEOUT = 30000;
-const PING_TIMEOUT = 2000;
-
 export default class ExternalRunner extends AbstractRunner {
+	constructor({
+		initialConnectTimeout,
+		pingTimeout,
+	}) {
+		super();
+		this.initialConnectTimeout = initialConnectTimeout;
+		this.pingTimeout = pingTimeout;
+	}
+
 	async launch(sharedState) {
 	}
 
@@ -22,7 +28,7 @@ export default class ExternalRunner extends AbstractRunner {
 		await this.launch(sharedState);
 		try {
 			return await new Promise((resolve, reject) => {
-				let connectedUntil = Date.now() + INITIAL_CONNECT_TIMEOUT;
+				let connectedUntil = Date.now() + this.initialConnectTimeout;
 				let connected = false;
 				const checkPing = setInterval(() => {
 					if (Date.now() > connectedUntil) {
@@ -36,7 +42,7 @@ export default class ExternalRunner extends AbstractRunner {
 				}, 250);
 				const decompress = ExternalRunner.decompressor();
 				this.registerEventListener((event) => {
-					connectedUntil = Date.now() + PING_TIMEOUT;
+					connectedUntil = Date.now() + this.pingTimeout;
 					event = decompress(event);
 					switch (event.type) {
 						case 'runner-ping':

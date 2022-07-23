@@ -508,7 +508,7 @@ class Server {
 			res.setHeader('Content-Type', this.getContentType(path));
 			res.end(data);
 		} catch (e) {
-			throw new HttpError(404, 'Not Found');
+			throw new HttpError(404, `File Not Found: ${path}`);
 		}
 	}
 
@@ -558,11 +558,11 @@ Server.directory = (base, dir, preprocessor) => async (server, url, res) => {
 	}
 	const fullPath = await (preprocessor ?? fileLoader).resolve(path, dir + '/index.htm');
 	if (!fullPath) {
-		throw new HttpError(404, 'Not Found');
+		throw new HttpError(404, `Not Found: ${dir + '/index.htm'} from ${path}`);
 	}
 	const loaded = await (preprocessor ?? fileLoader).load(fullPath);
 	if (!loaded) {
-		throw new HttpError(404, 'Not Found');
+		throw new HttpError(404, `Unable to load ${fullPath}`);
 	}
 	res.setHeader('Content-Type', server.getContentType(loaded.path));
 	res.end(loaded.content);
@@ -606,13 +606,25 @@ class ImportMap {
 		}
 		const prefix = parts.slice(0, mark);
 		const suffix = parts.slice(mark + 1);
-		// TODO: this could also support finding file extension if omitted,
-		// and using package.json config (main / module / etc.)
-		if (!suffix.length) {
-			suffix.push('index.mjs');
-		}
-		return join(this.basePath, ...prefix, ...suffix);
+		return resolveInPackage(join(this.basePath, ...prefix), suffix);
 	}
+}
+
+async function loadPackage(base) {
+	try {
+		return JSON.parse(await readFile(join(base, 'package.json'), { encoding: 'utf-8' }));
+	} catch (ignore) {
+		return {};
+	}
+}
+
+async function resolveInPackage(base, path) {
+	let suffix = path;
+	const pkg = await loadPackage(base);
+	if (!path.length) { // TODO: non-default paths
+		suffix = [pkg['module'] ?? pkg['main'] ?? 'index.js'];
+	}
+	return join(base, ...suffix);
 }
 
 async function* scanNodeModules(dir, scope) {
@@ -660,8 +672,8 @@ function emplace(o, key, v) {
 }
 
 const handleMappedImport = (importMap) => async (server, url, res) => {
-	const path = await importMap.resolve(url.substr(1)).catch(() => {
-		throw new Server.HttpError(404, 'Not Found');
+	const path = await importMap.resolve(url.substr(1)).catch((e) => {
+		throw new Server.HttpError(404, `Import Map Error ${e.message}`);
 	});
 	if (path === null) {
 		return false;
@@ -679,7 +691,10 @@ class HttpServerRunner extends ExternalRunner {
 		parallelSuites,
 		importMap,
 	}, paths) {
-		super();
+		super({
+			initialConnectTimeout: 30_000,
+			pingTimeout: 2_000,
+		});
 		this.port = port;
 		this.host = host;
 		this.preprocessor = preprocessor;
@@ -1017,7 +1032,12 @@ const autoBrowserRunner = (browser, launcher) => (config, paths) => {
 
 class ProcessRunner extends ExternalRunner {
 	constructor({ preprocessorRaw, parallelDiscovery, parallelSuites }, paths) {
-		super();
+		super({
+			// NodeJS loader runs in same thread as execution,
+			// so long compilation times will prevent pings
+			initialConnectTimeout: 40_000,
+			pingTimeout: 30_000,
+		});
 		this.preprocessorRaw = preprocessorRaw;
 		this.subConfig = { parallelDiscovery, parallelSuites };
 		this.paths = paths;

@@ -4,6 +4,7 @@
 		"jsx": "react",
 		"moduleResolution": "node",
 		"strict": true,
+		"noEmit": true,
 		"exactOptionalPropertyTypes": true,
 		"noImplicitOverride": true,
 		"noImplicitReturns": true,

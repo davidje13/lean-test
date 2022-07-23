@@ -1,4 +1,4 @@
-import { readdir } from 'fs/promises';
+import { readdir, readFile } from 'fs/promises';
 import { join } from 'path';
 
 const MARKER = '.import-map-resolve';
@@ -24,13 +24,25 @@ export default class ImportMap {
 		}
 		const prefix = parts.slice(0, mark);
 		const suffix = parts.slice(mark + 1);
-		// TODO: this could also support finding file extension if omitted,
-		// and using package.json config (main / module / etc.)
-		if (!suffix.length) {
-			suffix.push('index.mjs');
-		}
-		return join(this.basePath, ...prefix, ...suffix);
+		return resolveInPackage(join(this.basePath, ...prefix), suffix);
 	}
+}
+
+async function loadPackage(base) {
+	try {
+		return JSON.parse(await readFile(join(base, 'package.json'), { encoding: 'utf-8' }));
+	} catch (ignore) {
+		return {};
+	}
+}
+
+async function resolveInPackage(base, path) {
+	let suffix = path;
+	const pkg = await loadPackage(base);
+	if (!path.length) { // TODO: non-default paths
+		suffix = [pkg['module'] ?? pkg['main'] ?? 'index.js'];
+	}
+	return join(base, ...suffix);
 }
 
 async function* scanNodeModules(dir, scope) {

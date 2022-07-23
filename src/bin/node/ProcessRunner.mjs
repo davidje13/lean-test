@@ -8,7 +8,12 @@ import findExecutable from '../filesystem/findExecutable.mjs';
 
 export default class ProcessRunner extends ExternalRunner {
 	constructor({ preprocessorRaw, parallelDiscovery, parallelSuites }, paths) {
-		super();
+		super({
+			// NodeJS loader runs in same thread as execution,
+			// so long compilation times will prevent pings
+			initialConnectTimeout: 40_000,
+			pingTimeout: 30_000,
+		});
 		this.preprocessorRaw = preprocessorRaw;
 		this.subConfig = { parallelDiscovery, parallelSuites };
 		this.paths = paths;

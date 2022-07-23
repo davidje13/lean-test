@@ -79,7 +79,7 @@ export default class Server {
 			res.setHeader('Content-Type', this.getContentType(path));
 			res.end(data);
 		} catch (e) {
-			throw new HttpError(404, 'Not Found');
+			throw new HttpError(404, `File Not Found: ${path}`);
 		}
 	}
 
@@ -129,11 +129,11 @@ Server.directory = (base, dir, preprocessor) => async (server, url, res) => {
 	}
 	const fullPath = await (preprocessor ?? fileLoader).resolve(path, dir + '/index.htm');
 	if (!fullPath) {
-		throw new HttpError(404, 'Not Found');
+		throw new HttpError(404, `Not Found: ${dir + '/index.htm'} from ${path}`);
 	}
 	const loaded = await (preprocessor ?? fileLoader).load(fullPath);
 	if (!loaded) {
-		throw new HttpError(404, 'Not Found');
+		throw new HttpError(404, `Unable to load ${fullPath}`);
 	}
 	res.setHeader('Content-Type', server.getContentType(loaded.path));
 	res.end(loaded.content);

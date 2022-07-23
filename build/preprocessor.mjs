@@ -217,7 +217,7 @@ function asString(o) {
 	if (!o) {
 		return '';
 	}
-	return o.toString('utf8');
+	return o.toString('utf-8');
 }
 
 class MemoryFileSystem {
@@ -267,7 +267,8 @@ var preprocessors = /*#__PURE__*/Object.freeze({
 });
 
 const NODE_MAJOR = Number(versions.node.split('.')[0]);
-const lazyPreprocessor = lazy(preprocessors[env.__LEAN_TEST_PREPROC]);
+const preprocessor = await preprocessors[env.__LEAN_TEST_PREPROC]?.();
+const HASH_MARKER = `#!preprocessed`;
 
 // https://nodejs.org/api/esm.html#loaders
 
@@ -284,7 +285,6 @@ async function resolve(specifier, context, defaultResolve, ...rest) {
 		// naïve node_modules check to avoid deadlocks when loading preprocessor files
 		return defaultResolve(specifier, context, defaultResolve, ...rest);
 	}
-	const preprocessor = await lazyPreprocessor();
 	const fullPath = await preprocessor?.resolve(specifier, from);
 	if (!fullPath) {
 		return defaultResolve(specifier, context, defaultResolve, ...rest);
@@ -292,46 +292,23 @@ async function resolve(specifier, context, defaultResolve, ...rest) {
 	if (fullPath.split(path.sep).includes('node_modules')) {
 		return { url: 'file://' + fullPath };
 	}
-	if (NODE_MAJOR < 16) {
-		// legacy API
-		return { url: 'file-unprocessed://' + fullPath };
-	}
-	return { format: 'unprocessed', url: 'file://' + fullPath };
+	return { url: 'file://' + fullPath + HASH_MARKER };
 }
 
 async function load(url, context, defaultLoad, ...rest) {
-	if (context.format === 'unprocessed') {
-		const preprocessor = await lazyPreprocessor();
-		const parsed = await preprocessor.load(new URL(url).pathname);
+	const parsedURL = new URL(url);
+	if (parsedURL.hash === HASH_MARKER) {
+		const parsed = await preprocessor.load(parsedURL.pathname);
 		return { format: 'module', source: parsed.content };
 	}
 	return defaultLoad(url, context, defaultLoad, ...rest);
-}
-
-function lazy(factory) {
-	let value = null;
-	const callbacks = [];
-
-	return async () => {
-		if (!factory || value) {
-			return value;
-		}
-		const p = new Promise((resolve) => callbacks.push(resolve));
-		if (callbacks.length > 1) {
-			return p;
-		}
-		value = await factory();
-		callbacks.forEach((c) => c(value));
-		callbacks.length = 0;
-		return value;
-	};
 }
 
 // legacy API (Node < 16)
 
 const getFormat = NODE_MAJOR < 16 && function(url, context, defaultGetFormat, ...rest) {
 	const parsedURL = new URL(url);
-	if (parsedURL.protocol === 'file-unprocessed:') {
+	if (parsedURL.hash === HASH_MARKER) {
 		return { format: 'module' };
 	}
 	return defaultGetFormat(url, context, defaultGetFormat, ...rest);
@@ -339,8 +316,7 @@ const getFormat = NODE_MAJOR < 16 && function(url, context, defaultGetFormat, ..
 
 const getSource = NODE_MAJOR < 16 && async function(url, context, defaultGetSource, ...rest) {
 	const parsedURL = new URL(url);
-	if (parsedURL.protocol === 'file-unprocessed:') {
-		const preprocessor = await lazyPreprocessor();
+	if (parsedURL.hash === HASH_MARKER) {
 		const parsed = await preprocessor.load(parsedURL.pathname);
 		return { source: parsed.content };
 	}
