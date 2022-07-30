@@ -1,0 +1,36 @@
+[PASS] suite: suite.spec.mjs [xx]
+[PASS]   describe: es6 .spec import [xx]
+[PASS]     test: is discovered and has globals available [xx]
+[PASS] suite: suite.test.cjs [xx]
+[PASS]   describe: explicitly commonjs .test import [xx]
+[PASS]     test: is discovered and has globals available [xx]
+[PASS] suite: suite.test.mjs [xx]
+[PASS]   describe: es6 .test import [xx]
+[PASS]     test: is discovered and has globals available [xx]
+[PASS] suite: nested/sub.spec.mjs [xx]
+[PASS]   describe: sub file [xx]
+[PASS]     test: is discovered and has globals available [xx]
+[PASS] suite: function.spec.mjs [xx]
+[PASS]   describe: function-type definition [xx]
+[PASS]     test: is discovered and has globals passed in [xx]
+[PASS] suite: suite.spec.js [xx]
+[PASS]   describe: commonjs .spec import [xx]
+[PASS]     test: is discovered and has globals available [xx]
+[PASS] suite: object.spec.mjs [xx]
+[PASS]   describe: object-type definition [xx]
+[PASS]     test: is discovered and has globals available [xx]
+[PASS] suite: suite.test.js [xx]
+[PASS]   describe: commonjs .test import [xx]
+[PASS]     test: is discovered and has globals available [xx]
+
+Total:    8
+Pass:     8
+Errors:   0
+Failures: 0
+Skipped:  0
+Duration: xx
+
+PASS
+
+To re-run with the same test order: --random-seed=41fa8d97c5f70e550ab5391db9d3b0ed
+EXIT: 0

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import process$1, { platform, getuid, env } from 'process';
 import { join, resolve, dirname, relative } from 'path';
-import { ExternalRunner, ExitHook, standardRunner, outputs, reporters, ParallelRunner } from '../lean-test.mjs';
+import { ExternalRunner, ExitHook, standardRunner, orderers, outputs, reporters, ParallelRunner } from '../lean-test.mjs';
 import { readdir, access, mkdtemp, rm, writeFile, readFile, realpath } from 'fs/promises';
 import { constants } from 'fs';
 import { spawn } from 'child_process';
@@ -689,6 +689,7 @@ class HttpServerRunner extends ExternalRunner {
 		preprocessor,
 		parallelDiscovery,
 		parallelSuites,
+		orderingRandomSeed,
 		importMap,
 	}, paths) {
 		super({
@@ -698,7 +699,7 @@ class HttpServerRunner extends ExternalRunner {
 		this.port = port;
 		this.host = host;
 		this.preprocessor = preprocessor;
-		this.browserConfig = { parallelDiscovery, parallelSuites, importMap };
+		this.browserConfig = { parallelDiscovery, parallelSuites, orderingRandomSeed, importMap };
 		this.paths = paths;
 		this.browserID = null;
 	}
@@ -761,8 +762,8 @@ class HttpServerRunner extends ExternalRunner {
 	}
 }
 
-HttpServerRunner.SERVER = Symbol();
-HttpServerRunner.POST_LISTENER = Symbol();
+HttpServerRunner.SERVER = Symbol('SERVER');
+HttpServerRunner.POST_LISTENER = Symbol('PORT_LISTENER');
 
 const INDEX = `<!DOCTYPE html>
 <html lang="en">
@@ -1031,7 +1032,7 @@ const autoBrowserRunner = (browser, launcher) => (config, paths) => {
 };
 
 class ProcessRunner extends ExternalRunner {
-	constructor({ preprocessorRaw, parallelDiscovery, parallelSuites }, paths) {
+	constructor({ preprocessorRaw, parallelDiscovery, parallelSuites, orderingRandomSeed }, paths) {
 		super({
 			// NodeJS loader runs in same thread as execution,
 			// so long compilation times will prevent pings
@@ -1039,7 +1040,7 @@ class ProcessRunner extends ExternalRunner {
 			pingTimeout: 30_000,
 		});
 		this.preprocessorRaw = preprocessorRaw;
-		this.subConfig = { parallelDiscovery, parallelSuites };
+		this.subConfig = { parallelDiscovery, parallelSuites, orderingRandomSeed };
 		this.paths = paths;
 	}
 
@@ -1127,6 +1128,10 @@ async function nodeRunner(config, paths) {
 		.useParallelDiscovery(config.parallelDiscovery)
 		.useParallelSuites(config.parallelSuites);
 
+	if (config.orderingRandomSeed) {
+		builder.useExecutionOrderer(new orderers.SeededRandom(config.orderingRandomSeed));
+	}
+
 	for await (const { path, relative } of paths) {
 		builder.addSuite(relative, async (globals) => {
 			Object.assign(global, globals);
@@ -1150,6 +1155,7 @@ const preprocs = new Map([['none', null], ...Object.entries(preprocessors)]);
 const argparse = new ArgumentParser({
 	parallelDiscovery: { names: ['parallel-discovery', 'P'], env: 'PARALLEL_DISCOVERY', type: 'boolean', default: false },
 	parallelSuites: { names: ['parallel-suites', 'parallel', 'p'], env: 'PARALLEL_SUITES', type: 'boolean', default: false },
+	orderingRandomSeed: { names: ['random-seed', 's'], env: 'RANDOM_SEED', type: 'string', default: '' },
 	pathsInclude: { names: ['include', 'i'], type: 'set', default: ['**/*.{spec|test}.*'] },
 	pathsExclude: { names: ['exclude', 'x'], type: 'set', default: [] },
 	preprocessor: { names: ['preprocess', 'c'], type: 'string', default: 'none', mapping: preprocs },
@@ -1159,11 +1165,17 @@ const argparse = new ArgumentParser({
 	importMap: { names: ['import-map', 'm'], env: 'IMPORT_MAP', type: 'boolean', default: false },
 	port: { names: ['port'], env: 'TESTRUNNER_PORT', type: 'int', default: 0 },
 	host: { names: ['host'], env: 'TESTRUNNER_HOST', type: 'string', default: '127.0.0.1' },
-	scan: { names: ['scan', null], type: 'set', default: ['.'] }
+	scan: { names: ['scan', null], type: 'set', default: ['.'] },
 });
 
 try {
 	const config = argparse.parse(process$1.env, process$1.argv);
+
+	if (config.orderingRandomSeed === 'random') {
+		config.orderingRandomSeed = new orderers.SeededRandom().getSeed();
+	} else if (config.orderingRandomSeed) {
+		config.orderingRandomSeed = new orderers.SeededRandom(config.orderingRandomSeed).getSeed();
+	}
 
 	const exclusion = [...config.pathsExclude, ...(config.noDefaultExclude ? [] : ['**/node_modules', '**/.*'])];
 	const scanDirs = config.scan.map((path) => resolve(process$1.cwd(), path));
@@ -1195,6 +1207,14 @@ try {
 	finalReporters.forEach((reporter) => reporter.report(result));
 
 	// TODO: warn or error if any node contains 0 tests
+
+	if (config.orderingRandomSeed) {
+		stdout.write('');
+		stdout.write(`To re-run with the same test order: --random-seed=${stdout.bold(config.orderingRandomSeed)}`);
+		if (config.parallelSuites) {
+			stdout.write(stdout.yellow('WARNING: test order is not fully repeatable due to use of --parallel'));
+		}
+	}
 
 	if (result.summary.error || result.summary.fail || !result.summary.pass) {
 		process$1.exit(1);

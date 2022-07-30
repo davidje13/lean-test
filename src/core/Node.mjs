@@ -1,8 +1,8 @@
 import ResultStage from './ResultStage.mjs';
 import Result from './Result.mjs';
 
-export const RUN_INTERCEPTORS = Symbol();
-export const LISTENER = Symbol();
+export const RUN_INTERCEPTORS = Symbol('RUN_INTERCEPTORS');
+export const LISTENER = Symbol('LISTENER');
 
 function updateArgs(oldArgs, newArgs) {
 	if (!newArgs.length) {

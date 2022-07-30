@@ -1,7 +1,7 @@
 import { isListOf } from '../matchers/collections.mjs';
 import { print } from '../utils.mjs';
 
-const ACTIONS = Symbol();
+const ACTIONS = Symbol('ACTIONS');
 
 class MockAction {
 	constructor(mock) {

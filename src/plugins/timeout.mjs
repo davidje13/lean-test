@@ -20,5 +20,5 @@ export default ({ order = 1 } = {}) => (builder) => {
 				next(context, subResult).then(() => clearTimeout(tm)),
 			]),
 		);
-	}, { order });
+	}, { order, name: 'timeout' });
 };

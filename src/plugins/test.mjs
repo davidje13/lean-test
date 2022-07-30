@@ -1,7 +1,7 @@
 import TestAssumptionError from '../core/TestAssumptionError.mjs';
 
 const id = Symbol();
-const TEST_FN = Symbol();
+const TEST_FN = Symbol('TEST_FN');
 
 const OPTIONS_FACTORY = (name, fn, opts) => {
 	if (typeof fn === 'object' && typeof opts === 'function') {
@@ -24,5 +24,5 @@ export default (fnName = 'test') => (builder) => {
 			}
 			return node.options[TEST_FN](...(context.testParameters || []));
 		}, { errorStackSkipFrames: 1 });
-	}, { order: Number.POSITIVE_INFINITY, id });
+	}, { order: Number.POSITIVE_INFINITY, name: 'test', id });
 };

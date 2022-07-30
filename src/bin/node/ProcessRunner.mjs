@@ -7,7 +7,7 @@ import { ExternalRunner } from '../../lean-test.mjs';
 import findExecutable from '../filesystem/findExecutable.mjs';
 
 export default class ProcessRunner extends ExternalRunner {
-	constructor({ preprocessorRaw, parallelDiscovery, parallelSuites }, paths) {
+	constructor({ preprocessorRaw, parallelDiscovery, parallelSuites, orderingRandomSeed }, paths) {
 		super({
 			// NodeJS loader runs in same thread as execution,
 			// so long compilation times will prevent pings
@@ -15,7 +15,7 @@ export default class ProcessRunner extends ExternalRunner {
 			pingTimeout: 30_000,
 		});
 		this.preprocessorRaw = preprocessorRaw;
-		this.subConfig = { parallelDiscovery, parallelSuites };
+		this.subConfig = { parallelDiscovery, parallelSuites, orderingRandomSeed };
 		this.paths = paths;
 	}
 

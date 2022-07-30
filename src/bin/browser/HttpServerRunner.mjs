@@ -24,6 +24,7 @@ export default class HttpServerRunner extends ExternalRunner {
 		preprocessor,
 		parallelDiscovery,
 		parallelSuites,
+		orderingRandomSeed,
 		importMap,
 	}, paths) {
 		super({
@@ -33,7 +34,7 @@ export default class HttpServerRunner extends ExternalRunner {
 		this.port = port;
 		this.host = host;
 		this.preprocessor = preprocessor;
-		this.browserConfig = { parallelDiscovery, parallelSuites, importMap };
+		this.browserConfig = { parallelDiscovery, parallelSuites, orderingRandomSeed, importMap };
 		this.paths = paths;
 		this.browserID = null;
 	}
@@ -96,8 +97,8 @@ export default class HttpServerRunner extends ExternalRunner {
 	}
 }
 
-HttpServerRunner.SERVER = Symbol();
-HttpServerRunner.POST_LISTENER = Symbol();
+HttpServerRunner.SERVER = Symbol('SERVER');
+HttpServerRunner.POST_LISTENER = Symbol('PORT_LISTENER');
 
 const INDEX = `<!DOCTYPE html>
 <html lang="en">

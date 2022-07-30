@@ -1,5 +1,6 @@
 export default ({ order = 0 } = {}) => (builder) => {
 	const scope = builder.addScope({
+		name: 'lifecycle',
 		node: () => ({
 			beforeAll: [],
 			afterAll: [],
@@ -34,7 +35,7 @@ export default ({ order = 0 } = {}) => (builder) => {
 				active: !skip,
 			}));
 		}
-	}, { order });
+	}, { order, name: 'lifecycle' });
 
 	async function withWrappers(result, before, after, next) {
 		const extraParams = [];

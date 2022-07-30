@@ -1,4 +1,4 @@
-import { standardRunner, ExternalRunner } from './lean-test.mjs';
+import { standardRunner, ExternalRunner, orderers } from './lean-test.mjs';
 
 class Aggregator {
 	constructor(next) {
@@ -102,6 +102,10 @@ export default async function run(id, config, suites) {
 		const builder = standardRunner()
 			.useParallelDiscovery(false)
 			.useParallelSuites(config.parallelSuites);
+
+		if (config.orderingRandomSeed) {
+			builder.useExecutionOrderer(new orderers.SeededRandom(config.orderingRandomSeed));
+		}
 
 		suites.forEach(({ path, relative }) => {
 			builder.addSuite(relative, async (globals) => {

@@ -163,10 +163,12 @@ export type TestEventHandler = (e: TestEvent) => void;
 
 export type RunContext = Record<string | symbol, unknown>;
 
-export interface Node {
-	options: NodeOptions;
-	children: Node[];
+export interface ReadonlyNode {
+	readonly options: NodeOptions;
+	readonly children: Node[];
+}
 
+export interface Node extends ReadonlyNode {
 	run: (context: RunContext, parentResult?: Result) => MaybeAsync<void>;
 }
 
@@ -204,6 +206,11 @@ export class TestAssumptionError extends Error {
 
 export type SharedState = Record<string | symbol, unknown>;
 
+export interface Orderer {
+	order<T extends ReadonlyNode>(list: T[]): T[];
+	sub(node: ReadonlyNode): Orderer;
+}
+
 export interface AbstractRunner {
 	prepare(sharedState: SharedState): Promise<void>;
 	teardown(sharedState: SharedState): Promise<void>;
@@ -223,6 +230,7 @@ declare namespace Runner {
 		constructor();
 		useParallelDiscovery(enabled?: boolean): Builder;
 		useParallelSuites(enabled?: boolean): Builder;
+		useExecutionOrderer(orderer: Orderer | null | undefined): Builder;
 		addPlugin(...plugins: Plugin[]): Builder;
 		extend(key: ExtensionKey, ...values: unknown[]): Builder;
 		addRunInterceptor(fn: RunInterceptor, options?: { order?: number, id?: unknown }): Builder;
@@ -305,6 +313,16 @@ export namespace reporters {
 	class Dots implements LiveReporter {
 		constructor(output: Output);
 		eventListener: TestEventHandler;
+	}
+}
+
+export namespace orderers {
+	class SeededRandom implements Orderer {
+		constructor(seed?: SeededRandom | string | null | undefined);
+		getSeed(): string;
+		next(range: number): number;
+		order<T>(list: T[]): T[];
+		sub(): Orderer;
 	}
 }
 

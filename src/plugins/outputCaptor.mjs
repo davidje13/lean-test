@@ -109,6 +109,7 @@ export default ({ order = -1 } = {}) => (builder) => {
 			return combineOutput(getCapturedOutput(), binary);
 		}
 	});
+
 	builder.addRunInterceptor(async (next, _, result) => {
 		const target = [];
 		try {
@@ -120,5 +121,5 @@ export default ({ order = -1 } = {}) => (builder) => {
 				result.addOutput(combineOutput(target, false));
 			}
 		}
-	}, { order });
+	}, { order, name: 'outputCaptor' });
 };

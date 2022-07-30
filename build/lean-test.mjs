@@ -553,8 +553,8 @@ function combineSummary(a, b) {
 	return r;
 }
 
-const RUN_INTERCEPTORS = Symbol();
-const LISTENER = Symbol();
+const RUN_INTERCEPTORS = Symbol('RUN_INTERCEPTORS');
+const LISTENER = Symbol('LISTENER');
 
 function updateArgs(oldArgs, newArgs) {
 	if (!newArgs.length) {
@@ -666,9 +666,9 @@ class ExtensionStore {
 }
 
 const id$1 = Symbol();
-const CONTENT_FN_NAME = Symbol();
-const TEST_FN_NAME = Symbol();
-const SUB_FN_NAME = Symbol();
+const CONTENT_FN_NAME = Symbol('CONTENT_FN');
+const TEST_FN_NAME = Symbol('TEST_FN');
+const SUB_FN_NAME = Symbol('SUB_FN');
 
 const OPTIONS_FACTORY$1 = (name, content, opts) => {
 	if (typeof content === 'object' && typeof opts === 'function') {
@@ -721,12 +721,24 @@ var describe = (fnName = 'describe', {
 		}
 		if (node.options.parallel) {
 			return Promise.all(node.children.map((child) => child.run(context, result)));
+		} else if (context.executionOrderer) {
+			const subOrderers = new Map();
+			if (context.executionOrderer.sub) {
+				// compute all sub-orderers first and in-order so that they are as stable as possible
+				node.children.forEach((c) => subOrderers.set(c, context.executionOrderer.sub(c)));
+			}
+			for (const child of context.executionOrderer.order([...node.children])) {
+				await child.run({
+					...context,
+					executionOrderer: subOrderers.get(child) ?? context.executionOrderer,
+				}, result);
+			}
 		} else {
 			for (const child of node.children) {
 				await child.run(context, result);
 			}
 		}
-	}, { order: Number.POSITIVE_INFINITY, id: id$1 });
+	}, { order: Number.POSITIVE_INFINITY, name: 'describe', id: id$1 });
 };
 
 class Runner extends AbstractRunner {
@@ -747,13 +759,13 @@ class Runner extends AbstractRunner {
 	}
 }
 
-const GLOBALS = Symbol();
-const NODE_TYPES = Symbol();
-const NODE_OPTIONS = Symbol();
-const NODE_INIT = Symbol();
-const CONTEXT_INIT = Symbol();
-const BASENODE_FN = Symbol();
-const SUITE_FN = Symbol();
+const GLOBALS = Symbol('GLOBALS');
+const NODE_TYPES = Symbol('NODE_TYPES');
+const NODE_OPTIONS = Symbol('NODE_OPTIONS');
+const NODE_INIT = Symbol('NODE_INIT');
+const CONTEXT_INIT = Symbol('CONTEXT_INIT');
+const BASENODE_FN = Symbol('BASENODE_FN');
+const SUITE_FN = Symbol('SUITE_FN');
 
 Runner.Builder = class RunnerBuilder {
 	constructor() {
@@ -761,6 +773,7 @@ Runner.Builder = class RunnerBuilder {
 		this.config = {
 			parallelDiscovery: false,
 			parallelSuites: false,
+			executionOrderer: null,
 		};
 		this.runInterceptors = [];
 		this.suites = [];
@@ -779,6 +792,11 @@ Runner.Builder = class RunnerBuilder {
 		return this;
 	}
 
+	useExecutionOrderer(orderer) {
+		this.config.executionOrderer = orderer;
+		return this;
+	}
+
 	addPlugin(...plugins) {
 		plugins.forEach((plugin) => plugin(this));
 		return this;
@@ -789,19 +807,20 @@ Runner.Builder = class RunnerBuilder {
 		return this;
 	}
 
-	addRunInterceptor(fn, { order = 0, id = null } = {}) {
+	addRunInterceptor(fn, { order = 0, name = 'interceptor', id = null } = {}) {
 		if (id && this.runInterceptors.some((i) => (i.id === id))) {
 			return this;
 		}
+		Object.defineProperty(fn, 'name', { value: name });
 		this.runInterceptors.push({ order, fn, id });
 		return this;
 	}
 
-	addRunCondition(fn, { id = null } = {}) {
+	addRunCondition(fn, { name = 'condition', id = null } = {}) {
 		return this.addRunInterceptor(async (next, context, ...rest) => {
 			const result = await fn(context, ...rest);
 			return next(result ? context : { ...context, active: false });
-		}, { order: Number.NEGATIVE_INFINITY, id });
+		}, { order: Number.NEGATIVE_INFINITY, name, id });
 	}
 
 	addSuite(name, content, options = {}) {
@@ -814,8 +833,8 @@ Runner.Builder = class RunnerBuilder {
 		return this;
 	}
 
-	addScope({ node, context }) {
-		const scope = Symbol();
+	addScope({ name = 'unnamed', node, context }) {
+		const scope = Symbol(`${name}_scope`);
 		if (node) {
 			this.extend(NODE_INIT, { scope, value: node });
 		}
@@ -899,7 +918,7 @@ Runner.Builder = class RunnerBuilder {
 
 		exts.freeze(); // ensure config cannot change post-discovery
 
-		const baseContext = { active: true };
+		const baseContext = { active: true, executionOrderer: this.config.executionOrderer };
 		exts.get(CONTEXT_INIT).forEach(({ scope, value }) => { baseContext[scope] = Object.freeze(value()); });
 		baseContext[RUN_INTERCEPTORS] = Object.freeze(this.runInterceptors.sort((a, b) => (a.order - b.order)).map((i) => i.fn));
 
@@ -1008,7 +1027,7 @@ const _print = (v, seen, path, noQuote) => {
 
 const print = (v) => _print(v, new Map(), [], false);
 
-const ANY = Symbol();
+const ANY = Symbol('ANY');
 
 const checkEquals = (expected, actual, name) => {
 	const diffs = getDiffs(actual, expected, false, new Map());
@@ -1546,7 +1565,7 @@ var matchers = /*#__PURE__*/Object.freeze({
 	toHaveBeenCalledWith: hasBeenCalledWith
 });
 
-const FLUENT_MATCHERS = Symbol();
+const FLUENT_MATCHERS = Symbol('FLUENT_MATCHERS');
 
 const expect = () => (builder) => {
 	const invokeMatcher = (actual, matcher, ErrorType, skipFrames) =>
@@ -1606,6 +1625,7 @@ var focus = () => (builder) => {
 	builder.addNodeOption('focus', { focus: true });
 
 	const scope = builder.addScope({
+		name: 'focus',
 		context: () => ({
 			withinFocus: false,
 			anyFocus: null,
@@ -1623,16 +1643,17 @@ var focus = () => (builder) => {
 		} else {
 			return next({ ...context, [scope]: { withinFocus, anyFocus }, active: false });
 		}
-	}, { order: Number.NEGATIVE_INFINITY });
+	}, { order: Number.NEGATIVE_INFINITY, name: 'focus' });
 };
 
 var ignore = () => (builder) => {
 	builder.addNodeOption('ignore', { ignore: true });
-	builder.addRunCondition((_, _result, node) => (!node.options.ignore));
+	builder.addRunCondition((_, _result, node) => (!node.options.ignore), { name: 'ignore' });
 };
 
 var lifecycle = ({ order = 0 } = {}) => (builder) => {
 	const scope = builder.addScope({
+		name: 'lifecycle',
 		node: () => ({
 			beforeAll: [],
 			afterAll: [],
@@ -1667,7 +1688,7 @@ var lifecycle = ({ order = 0 } = {}) => (builder) => {
 				active: !skip,
 			}));
 		}
-	}, { order });
+	}, { order, name: 'lifecycle' });
 
 	async function withWrappers(result, before, after, next) {
 		const extraParams = [];
@@ -1847,6 +1868,7 @@ var outputCaptor = ({ order = -1 } = {}) => (builder) => {
 			return combineOutput(getCapturedOutput(), binary);
 		}
 	});
+
 	builder.addRunInterceptor(async (next, _, result) => {
 		const target = [];
 		try {
@@ -1858,7 +1880,7 @@ var outputCaptor = ({ order = -1 } = {}) => (builder) => {
 				result.addOutput(combineOutput(target, false));
 			}
 		}
-	}, { order });
+	}, { order, name: 'outputCaptor' });
 };
 
 var parameterised = ({ order = -4 } = {}) => (builder) => {
@@ -1882,7 +1904,7 @@ var parameterised = ({ order = -4 } = {}) => (builder) => {
 				{ isBoring: count > 10 },
 			);
 		}
-	}, { order });
+	}, { order, name: 'parameterised' });
 };
 
 const norm2 = (pSet) => {
@@ -1979,7 +2001,7 @@ var repeat = ({ order = -3 } = {}) => (builder) => {
 				break;
 			}
 		}
-	}, { order });
+	}, { order, name: 'repeat' });
 };
 
 var retry = ({ order = -2 } = {}) => (builder) => {
@@ -2000,10 +2022,10 @@ var retry = ({ order = -2 } = {}) => (builder) => {
 				break;
 			}
 		}
-	}, { order });
+	}, { order, name: 'retry' });
 };
 
-const ACTIONS = Symbol();
+const ACTIONS = Symbol('ACTIONS');
 
 class MockAction {
 	constructor(mock) {
@@ -2162,7 +2184,7 @@ var scopedMock = () => (builder) => {
 				mock.revert();
 			}
 		}
-	});
+	}, { name: 'scopedMock' });
 };
 
 var stopAtFirstFailure = () => (builder) => {
@@ -2170,11 +2192,11 @@ var stopAtFirstFailure = () => (builder) => {
 		node.parent &&
 		node.parent.options.stopAtFirstFailure &&
 		result.parent.hasFailed()
-	));
+	), { name: 'stopAtFirstFailure' });
 };
 
 const id = Symbol();
-const TEST_FN = Symbol();
+const TEST_FN = Symbol('TEST_FN');
 
 const OPTIONS_FACTORY = (name, fn, opts) => {
 	if (typeof fn === 'object' && typeof opts === 'function') {
@@ -2197,7 +2219,7 @@ var test = (fnName = 'test') => (builder) => {
 			}
 			return node.options[TEST_FN](...(context.testParameters || []));
 		}, { errorStackSkipFrames: 1 });
-	}, { order: Number.POSITIVE_INFINITY, id });
+	}, { order: Number.POSITIVE_INFINITY, name: 'test', id });
 };
 
 var timeout = ({ order = 1 } = {}) => (builder) => {
@@ -2222,10 +2244,10 @@ var timeout = ({ order = 1 } = {}) => (builder) => {
 				next(context, subResult).then(() => clearTimeout(tm)),
 			]),
 		);
-	}, { order });
+	}, { order, name: 'timeout' });
 };
 
-var index$3 = /*#__PURE__*/Object.freeze({
+var index$4 = /*#__PURE__*/Object.freeze({
 	__proto__: null,
 	describe: describe,
 	expect: expect,
@@ -2493,7 +2515,7 @@ class StaticResult {
 	}
 }
 
-var index$2 = /*#__PURE__*/Object.freeze({
+var index$3 = /*#__PURE__*/Object.freeze({
 	__proto__: null,
 	mock: mock
 });
@@ -2538,7 +2560,7 @@ class Writer {
 	}
 }
 
-var index$1 = /*#__PURE__*/Object.freeze({
+var index$2 = /*#__PURE__*/Object.freeze({
 	__proto__: null,
 	Writer: Writer
 });
@@ -2795,12 +2817,80 @@ class Full {
 	}
 }
 
-var index = /*#__PURE__*/Object.freeze({
+var index$1 = /*#__PURE__*/Object.freeze({
 	__proto__: null,
 	Dots: Dots,
 	ErrorList: ErrorList,
 	Full: Full$1,
 	Summary: Full
+});
+
+const CHARS_PER_INT = 8;
+const SEED_LENGTH = CHARS_PER_INT * 4;
+const VALID_SEED = new RegExp(`^[0-9A-Fa-f]{${SEED_LENGTH}}$`);
+
+class SeededRandom {
+	constructor(seed) {
+		this.s = new Uint32Array(4);
+
+		if (!seed) {
+			// secure randomness is not required here, and crypto API is not identical in NodeJS vs browser APIs
+			for (let i = 0; i < 4; ++i) {
+				this.s[i] = Math.random() * 0x100000000;
+			}
+		} else if (typeof seed === 'string') {
+			seed = seed.padStart(SEED_LENGTH, '0');
+			if (!VALID_SEED.test(seed)) {
+				throw new Error('invalid random seed');
+			}
+			for (let i = 0; i < 4; ++i) {
+				this.s[i] = Number.parseInt(seed.substr(i * CHARS_PER_INT, CHARS_PER_INT), 16);
+			}
+		} else if (seed instanceof SeededRandom) {
+			for (let i = 0; i < 4; ++i) {
+				this.s[i] = seed.next(0x100000000);
+			}
+		} else {
+			throw new Error('invalid random seed');
+		}
+	}
+
+	getSeed() {
+		return [...this.s].map((v) => v.toString(16).padStart(8, '0')).join('');
+	}
+
+	next(range = 0x100000000) {
+		let x0 = this.s[0];
+		let x1 = this.s[1];
+		const y0 = this.s[2];
+		const y1 = this.s[3];
+		this.s[0] = y0;
+		this.s[1] = y1;
+		x0 ^= (x0 << 23) | (x1 >>> 9);
+		x1 ^= (x1 << 23);
+		this.s[2] = x0 ^ y0 ^ (x0 >>> 17) ^ (y0 >>> 26);
+		this.s[3] = x1 ^ y1 ^ (x0 << 15 | x1 >>> 17) ^ (y0 << 6 | y1 >>> 26);
+		return ((this.s[3] + y1) >>> 0) % range;
+	}
+
+	order(list) {
+		for (let i = list.length; (i--) > 1;) {
+			const j = this.next(i + 1);
+			const temp = list[i];
+			list[i] = list[j];
+			list[j] = temp;
+		}
+		return list;
+	}
+
+	sub() {
+		return new SeededRandom(this);
+	}
+}
+
+var index = /*#__PURE__*/Object.freeze({
+	__proto__: null,
+	SeededRandom: SeededRandom
 });
 
 function standardRunner() {
@@ -2823,4 +2913,4 @@ function standardRunner() {
 		.addPlugin(timeout());
 }
 
-export { AbstractRunner, ExitHook, ExternalRunner, ParallelRunner, Runner, TestAssertionError, TestAssumptionError, index$2 as helpers, matchers, index$1 as outputs, index$3 as plugins, index as reporters, standardRunner };
+export { AbstractRunner, ExitHook, ExternalRunner, ParallelRunner, Runner, TestAssertionError, TestAssumptionError, index$3 as helpers, matchers, index as orderers, index$2 as outputs, index$4 as plugins, index$1 as reporters, standardRunner };

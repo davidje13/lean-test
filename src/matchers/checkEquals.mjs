@@ -1,6 +1,6 @@
 import { allKeys, print } from '../utils.mjs';
 
-export const ANY = Symbol();
+export const ANY = Symbol('ANY');
 
 export const checkEquals = (expected, actual, name) => {
 	const diffs = getDiffs(actual, expected, false, new Map());

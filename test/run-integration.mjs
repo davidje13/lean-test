@@ -11,20 +11,21 @@ process.stdout.write('Running integration tests...\n\n');
 
 const results = [];
 results.push(...await Promise.all([
-	runIntegrationTest('discovery'),
-	runIntegrationTest('discovery', 'expected.txt', '--parallel-discovery'),
-	runIntegrationTest('basics'),
-	runIntegrationTest('reporting'),
-	runIntegrationTest('browser-broken', 'expected.txt', '--target=chrome'), // slow
-	runIntegrationTest('modules', 'expected.txt', '--target=node,chrome,firefox', '--import-map'),
+	runIntegrationTest('discovery', 'expected.txt', '--parallel'),
+	runIntegrationTest('discovery', 'expected.txt', '--parallel', '--parallel-discovery'),
+	runIntegrationTest('discovery', 'expected-seed.txt', '--random-seed=41fa8d97c5f70e550ab5391db9d3b0ed'),
+	runIntegrationTest('basics', 'expected.txt', '--parallel'),
+	runIntegrationTest('reporting', 'expected.txt', '--parallel'),
+	runIntegrationTest('browser-broken', 'expected.txt', '--parallel', '--target=chrome'), // slow
+	runIntegrationTest('modules', 'expected.txt', '--parallel', '--target=node,chrome,firefox', '--import-map'),
 ]));
 // run separately to avoid needing multiple browser sessions for the same browser at a time on CI
 results.push(...await Promise.all([
-	runIntegrationTest('browser', 'expected.txt', '--target=chrome'),
-	runIntegrationTest('browser', 'expected-ff.txt', '--target=firefox'), // firefox stack traces do not handle async chains but are still OK
+	runIntegrationTest('browser', 'expected.txt', '--parallel', '--target=chrome'),
+	runIntegrationTest('browser', 'expected-ff.txt', '--parallel', '--target=firefox'), // firefox stack traces do not handle async chains but are still OK
 ]));
 results.push(...await Promise.all([
-	runIntegrationTest('multibrowser', 'expected.txt', '--target=chrome,firefox'),
+	runIntegrationTest('multibrowser', 'expected.txt', '--parallel', '--target=chrome,firefox'),
 ]));
 
 process.stdout.write('\nIntegration tests: ');
@@ -43,7 +44,7 @@ async function runIntegrationTest(dir, expectedFile = 'expected.txt', ...opts) {
 
 	const { exitCode, stdout, stderr } = await invoke(
 		resolve(baseDir, 'build', 'bin', 'run.mjs'),
-		['--parallel', '--colour=false', ...opts],
+		['--colour=false', ...opts],
 		{ cwd: resolve(baseDir, 'test', dir) },
 	);
 

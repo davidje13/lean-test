@@ -1,6 +1,6 @@
 import { env } from 'process';
 import { createWriteStream } from 'fs';
-import { ExternalRunner, standardRunner } from './lean-test.mjs';
+import { ExternalRunner, standardRunner, orderers } from './lean-test.mjs';
 
 const parentComm = createWriteStream(null, { fd: 3 });
 const compress = ExternalRunner.compressor();
@@ -16,6 +16,10 @@ async function run(config, suites) {
 		const builder = standardRunner()
 			.useParallelDiscovery(config.parallelDiscovery)
 			.useParallelSuites(config.parallelSuites);
+
+		if (config.orderingRandomSeed) {
+			builder.useExecutionOrderer(new orderers.SeededRandom(config.orderingRandomSeed));
+		}
 
 		suites.forEach(({ path, relative }) => {
 			builder.addSuite(relative, async (globals) => {

@@ -21,7 +21,7 @@ export default ({ order = -4 } = {}) => (builder) => {
 				{ isBoring: count > 10 },
 			);
 		}
-	}, { order });
+	}, { order, name: 'parameterised' });
 };
 
 const norm2 = (pSet) => {

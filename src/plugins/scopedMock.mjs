@@ -23,5 +23,5 @@ export default () => (builder) => {
 				mock.revert();
 			}
 		}
-	});
+	}, { name: 'scopedMock' });
 };

@@ -26,13 +26,14 @@ npx lean-test --target chrome --target firefox
 - Low overhead (fast tests);
 - No dependencies;
 - Highly extensible plugin and reporter architecture:
-	- `stdout` / `stderr` / `console` capturing
-	- lifecycle methods (`beforeAll` / `beforeEach` / `afterEach` / `afterAll`)
+	- `stdout` / `stderr` / `console` capturing;
+	- lifecycle methods (`beforeAll` / `beforeEach` / `afterEach` / `afterAll`);
 	- repeated tests, failure tolerance;
-	- auto retry failing tests
-	- parameterised tests
-	- sequential test execution with stop at first failure (for flow testing)
-	- configurable test timeout
+	- auto retry failing tests;
+	- parameterised tests;
+	- sequential test execution with stop at first failure (for flow testing);
+	- optional pseudo-random test execution ordering (with a seed to allow repetition);
+	- configurable test timeout.
 
 ## Usage
 
@@ -739,6 +740,14 @@ The `lean-test` executable can be configured in various ways:
 	Runs test suites in parallel. This is generally recommended unless the code being
 	tested may cause tests in different files to interfere with each other (e.g. uses
 	singletons or global state).
+
+- `--random-seed <seed>` / `-s <seed>` / environment `RANDOM_SEED=<seed>`:<br>
+	Randomise the order of the test in a deterministic (repeatable) way. The seed can
+	be a 32-character hexadecimal string, or the word `random` to pick a random seed
+	(the chosen seed will be printed at the end of the test run). If you want to
+	ensure that your tests do not depend on execution order, you can add
+	`--random-seed=random` to your standard test run command, then if an error appears,
+	you can use the seed it prints to re-run the tests in that order during debugging.
 
 - `--include <pattern>` / `-i <pattern>`:<br>
 	Configures the search pattern glob. Can be set multiple times. By default, this is

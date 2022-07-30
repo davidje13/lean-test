@@ -11,6 +11,7 @@ export { default as ParallelRunner } from './runners/ParallelRunner.mjs';
 export * as helpers from './helpers/index.mjs';
 export * as outputs from './outputs/index.mjs';
 export * as reporters from './reporters/index.mjs';
+export * as orderers from './orderers/index.mjs';
 
 export {
 	Runner,

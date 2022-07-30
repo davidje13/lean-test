@@ -4,6 +4,7 @@ export default () => (builder) => {
 	builder.addNodeOption('focus', { focus: true });
 
 	const scope = builder.addScope({
+		name: 'focus',
 		context: () => ({
 			withinFocus: false,
 			anyFocus: null,
@@ -21,5 +22,5 @@ export default () => (builder) => {
 		} else {
 			return next({ ...context, [scope]: { withinFocus, anyFocus }, active: false });
 		}
-	}, { order: Number.NEGATIVE_INFINITY });
+	}, { order: Number.NEGATIVE_INFINITY, name: 'focus' });
 };

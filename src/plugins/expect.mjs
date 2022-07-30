@@ -2,7 +2,7 @@ import { seq, resolveMessage } from '../utils.mjs';
 import TestAssertionError from '../core/TestAssertionError.mjs';
 import TestAssumptionError from '../core/TestAssumptionError.mjs';
 
-const FLUENT_MATCHERS = Symbol();
+const FLUENT_MATCHERS = Symbol('FLUENT_MATCHERS');
 
 const expect = () => (builder) => {
 	const invokeMatcher = (actual, matcher, ErrorType, skipFrames) =>

@@ -16,5 +16,5 @@ export default ({ order = -2 } = {}) => (builder) => {
 				break;
 			}
 		}
-	}, { order });
+	}, { order, name: 'retry' });
 };

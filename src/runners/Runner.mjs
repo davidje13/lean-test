@@ -23,13 +23,13 @@ export default class Runner extends AbstractRunner {
 	}
 }
 
-const GLOBALS = Symbol();
-const NODE_TYPES = Symbol();
-const NODE_OPTIONS = Symbol();
-const NODE_INIT = Symbol();
-const CONTEXT_INIT = Symbol();
-const BASENODE_FN = Symbol();
-const SUITE_FN = Symbol();
+const GLOBALS = Symbol('GLOBALS');
+const NODE_TYPES = Symbol('NODE_TYPES');
+const NODE_OPTIONS = Symbol('NODE_OPTIONS');
+const NODE_INIT = Symbol('NODE_INIT');
+const CONTEXT_INIT = Symbol('CONTEXT_INIT');
+const BASENODE_FN = Symbol('BASENODE_FN');
+const SUITE_FN = Symbol('SUITE_FN');
 
 Runner.Builder = class RunnerBuilder {
 	constructor() {
@@ -37,6 +37,7 @@ Runner.Builder = class RunnerBuilder {
 		this.config = {
 			parallelDiscovery: false,
 			parallelSuites: false,
+			executionOrderer: null,
 		};
 		this.runInterceptors = [];
 		this.suites = [];
@@ -55,6 +56,11 @@ Runner.Builder = class RunnerBuilder {
 		return this;
 	}
 
+	useExecutionOrderer(orderer) {
+		this.config.executionOrderer = orderer;
+		return this;
+	}
+
 	addPlugin(...plugins) {
 		plugins.forEach((plugin) => plugin(this));
 		return this;
@@ -65,19 +71,20 @@ Runner.Builder = class RunnerBuilder {
 		return this;
 	}
 
-	addRunInterceptor(fn, { order = 0, id = null } = {}) {
+	addRunInterceptor(fn, { order = 0, name = 'interceptor', id = null } = {}) {
 		if (id && this.runInterceptors.some((i) => (i.id === id))) {
 			return this;
 		}
+		Object.defineProperty(fn, 'name', { value: name });
 		this.runInterceptors.push({ order, fn, id });
 		return this;
 	}
 
-	addRunCondition(fn, { id = null } = {}) {
+	addRunCondition(fn, { name = 'condition', id = null } = {}) {
 		return this.addRunInterceptor(async (next, context, ...rest) => {
 			const result = await fn(context, ...rest);
 			return next(result ? context : { ...context, active: false });
-		}, { order: Number.NEGATIVE_INFINITY, id });
+		}, { order: Number.NEGATIVE_INFINITY, name, id });
 	}
 
 	addSuite(name, content, options = {}) {
@@ -90,8 +97,8 @@ Runner.Builder = class RunnerBuilder {
 		return this;
 	}
 
-	addScope({ node, context }) {
-		const scope = Symbol();
+	addScope({ name = 'unnamed', node, context }) {
+		const scope = Symbol(`${name}_scope`);
 		if (node) {
 			this.extend(NODE_INIT, { scope, value: node });
 		}
@@ -175,7 +182,7 @@ Runner.Builder = class RunnerBuilder {
 
 		exts.freeze(); // ensure config cannot change post-discovery
 
-		const baseContext = { active: true };
+		const baseContext = { active: true, executionOrderer: this.config.executionOrderer };
 		exts.get(CONTEXT_INIT).forEach(({ scope, value }) => { baseContext[scope] = Object.freeze(value()); });
 		baseContext[RUN_INTERCEPTORS] = Object.freeze(this.runInterceptors.sort((a, b) => (a.order - b.order)).map((i) => i.fn));
 

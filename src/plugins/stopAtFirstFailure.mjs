@@ -3,5 +3,5 @@ export default () => (builder) => {
 		node.parent &&
 		node.parent.options.stopAtFirstFailure &&
 		result.parent.hasFailed()
-	));
+	), { name: 'stopAtFirstFailure' });
 };

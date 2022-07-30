@@ -1,7 +1,7 @@
 const id = Symbol();
-const CONTENT_FN_NAME = Symbol();
-const TEST_FN_NAME = Symbol();
-const SUB_FN_NAME = Symbol();
+const CONTENT_FN_NAME = Symbol('CONTENT_FN');
+const TEST_FN_NAME = Symbol('TEST_FN');
+const SUB_FN_NAME = Symbol('SUB_FN');
 
 const OPTIONS_FACTORY = (name, content, opts) => {
 	if (typeof content === 'object' && typeof opts === 'function') {
@@ -54,10 +54,22 @@ export default (fnName = 'describe', {
 		}
 		if (node.options.parallel) {
 			return Promise.all(node.children.map((child) => child.run(context, result)));
+		} else if (context.executionOrderer) {
+			const subOrderers = new Map();
+			if (context.executionOrderer.sub) {
+				// compute all sub-orderers first and in-order so that they are as stable as possible
+				node.children.forEach((c) => subOrderers.set(c, context.executionOrderer.sub(c)));
+			}
+			for (const child of context.executionOrderer.order([...node.children])) {
+				await child.run({
+					...context,
+					executionOrderer: subOrderers.get(child) ?? context.executionOrderer,
+				}, result);
+			}
 		} else {
 			for (const child of node.children) {
 				await child.run(context, result);
 			}
 		}
-	}, { order: Number.POSITIVE_INFINITY, id });
+	}, { order: Number.POSITIVE_INFINITY, name: 'describe', id });
 };

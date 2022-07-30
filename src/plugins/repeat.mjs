@@ -39,5 +39,5 @@ export default ({ order = -3 } = {}) => (builder) => {
 				break;
 			}
 		}
-	}, { order });
+	}, { order, name: 'repeat' });
 };
