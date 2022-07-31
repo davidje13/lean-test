@@ -3,13 +3,13 @@ type AsyncChain<A, T> = (A extends Promise<any> ? Promise<T> : T);
 type LengthHaver = { length: number } | { size: number };
 
 interface WriteStream {
-	write: (value: string) => void;
-	isTTY: boolean;
+	write(value: string): void;
+	readonly isTTY: boolean;
 }
 
 export interface MatcherResult {
-	pass: boolean;
-	message: (() => string) | string;
+	readonly pass: boolean;
+	readonly message: (() => string) | string;
 }
 
 export type SyncMatcher<T> = (actual: T) => MatcherResult;
@@ -17,7 +17,7 @@ export type AsyncMatcher<T> = (actual: T) => Promise<MatcherResult>;
 export type Matcher<T> = (actual: T) => MaybeAsync<MatcherResult>;
 
 type FluentExpect<T> = {
-	[K in keyof matchers]: (
+	readonly [K in keyof matchers]: (
 		ReturnType<matchers[K]> extends Matcher<T>
 		? ((...args: Parameters<matchers[K]>) => AsyncChain<ReturnType<ReturnType<matchers[K]>>, void>)
 		: never
@@ -31,6 +31,18 @@ type Expect = (
 	}
 );
 
+export type TypedParameter<T> = symbol & { _type?: { t: T } };
+
+export type TypedParameters = {
+	// TODO: value should be typed according to key, i.e.:
+	// [k: K extends TypedParameter<infer T>]: T;
+	// (not supported TypeScript syntax)
+	// Once this is possible, we can remobve the getTyped helper function.
+	readonly [k: TypedParameter<any>]: unknown;
+
+	getTyped<T>(key: TypedParameter<T>): T;
+};
+
 export type Plugin = (builder: Runner.Builder) => void;
 
 type ColourFn = (value: string, fallback: string) => string;
@@ -39,8 +51,8 @@ export interface Output {
 	write(value: string, linePrefix?: string, continuationPrefix?: string): void;
 	writeRaw(value: string): void;
 
-	bold: ColourFn;
-	faint: ColourFn;
+	readonly bold: ColourFn;
+	readonly faint: ColourFn;
 }
 
 export interface Reporter {
@@ -48,81 +60,81 @@ export interface Reporter {
 }
 
 export interface LiveReporter {
-	eventListener: TestEventHandler;
+	readonly eventListener: TestEventHandler;
 }
 
 export interface ResultInfo {
-	id: string;
-	parent: string | null;
-	label: string | null;
+	readonly id: string;
+	readonly parent: string | null;
+	readonly label: string | null;
 }
 
 export interface ResultSummary {
-	count: number;
-	run: number;
-	error: number;
-	fail: number;
-	skip: number;
-	pass: number;
-	duration: number;
+	readonly count: number;
+	readonly run: number;
+	readonly error: number;
+	readonly fail: number;
+	readonly skip: number;
+	readonly pass: number;
+	readonly duration: number;
 }
 
 export interface StackItem {
-	name: string;
-	location: string;
+	readonly name: string;
+	readonly location: string;
 }
 
 export interface ResultError {
-	message: string;
-	stackList: StackItem[];
+	readonly message: string;
+	readonly stackList: StackItem[];
 }
 
 export interface Result extends ResultInfo {
-	summary: ResultSummary;
-	errors: ResultError[],
-	failures: ResultError[],
-	output: string,
-	children: Result[],
+	readonly summary: ResultSummary;
+	readonly errors: ResultError[],
+	readonly failures: ResultError[],
+	readonly output: string,
+	readonly children: Result[],
 }
 
 export interface TestBeginEvent extends ResultInfo {
-	type: 'begin';
-	time: number;
-	isBlock: boolean;
+	readonly type: 'begin';
+	readonly time: number;
+	readonly isBlock: boolean;
 }
 
 export interface TestCompleteEvent extends Result {
-	type: 'complete';
-	time: number;
-	isBlock: boolean;
+	readonly type: 'complete';
+	readonly time: number;
+	readonly isBlock: boolean;
 }
 
 type ParameterOptions<T extends unknown[]> = Set<T> | Set<T[0]> | T;
 
 interface NodeOptions {
-	focus?: boolean;
-	ignore?: boolean;
-	parameters?: ParameterOptions<unknown[]>[] | ParameterOptions<unknown[]>;
-	parameterFilter?: (...params: any[]) => boolean;
-	repeat?: number | {
-		total: number;
-		failFast?: boolean;
-		maxFailures?: number;
+	readonly focus?: boolean;
+	readonly ignore?: boolean;
+	readonly parameters?: ParameterOptions<unknown[]>[] | ParameterOptions<unknown[]>;
+	readonly parameterFilter?: (...params: any[]) => boolean;
+	readonly repeat?: number | {
+		readonly total: number;
+		readonly failFast?: boolean;
+		readonly maxFailures?: number;
 	};
-	retry?: number;
-	stopAtFirstFailure?: boolean;
-	timeout?: number;
-	[K: string]: unknown;
+	readonly retry?: number;
+	readonly stopAtFirstFailure?: boolean;
+	readonly timeout?: number;
+	readonly [K: string]: unknown;
 }
 
-type TestImplementation = (...args: any[]) => MaybeAsync<void>;
+type TestImplementation = (typedParameters: TypedParameters, ...args: any[]) => MaybeAsync<void>;
 interface DescribeObject {
-	[K: string]: DescribeObject | TestImplementation;
+	readonly [K: string]: DescribeObject | TestImplementation;
 }
 type DescribeImplementation = ((globals: DiscoveryGlobals) => MaybeAsync<DescribeImplementation | void>) | DescribeObject;
 type WithOptions<T> = T & {
-	ignore: T;
-	focus: T;
+	readonly ignore: T;
+	readonly focus: T;
 };
 type Describe = WithOptions<
 	((name: string, fn: DescribeImplementation, options?: NodeOptions) => void) &
@@ -133,29 +145,52 @@ type Test = WithOptions<
 	((name: string, options: NodeOptions, fn: TestImplementation) => void)
 >;
 
-interface LifecycleHookBeforeOps {
-	addTestParameter: (...parameters: unknown[]) => void;
-}
-type LifecycleHookAfter = () => MaybeAsync<void>;
-type LifecycleHookBefore = (operations: LifecycleHookBeforeOps) => MaybeAsync<void | LifecycleHookAfter>;
+type LifecycleHookBeforeOps<T> = TypedParameters & {
+	/**
+	 * @deprecated use setParameter instead:
+	 *
+	 * ```
+	 * const MY_PROPERTY = beforeEach(({ setParameter }) => {
+	 *   setParameter(1);
+	 * });
+	 *
+	 * it('my test', ({ [MY_PROPERTY]: myProperty }) => {
+	 *   console.log('got', myProperty);
+	 * });
+	 * ```
+	 */
+	readonly addTestParameter: (...parameters: unknown[]) => void;
+
+	readonly setParameter: (parameter: T) => void;
+};
+type LifecycleHookBefore<T> = (operations: LifecycleHookBeforeOps<T>) => MaybeAsync<void | (() => MaybeAsync<void>)>;
 type GetOutput = ((binary?: false) => string) & ((binary: true) => unknown); // unknown = Buffer
-type LifecycleFunc<Fn> = ((name: string, fn: Fn) => void) & ((fn: Fn) => void);
+
+type LifecycleHookAfter = (values: TypedParameters) => MaybeAsync<void>;
+type BeforeFunc = (
+	(<T>(name: string, fn: LifecycleHookBefore<T>) => TypedParameter<T>) &
+	(<T>(fn: LifecycleHookBefore<T>) => TypedParameter<T>)
+);
+type AfterFunc = (
+	((name: string, fn: LifecycleHookAfter) => void) &
+	((fn: LifecycleHookAfter) => void)
+);
 
 export interface DiscoveryGlobals extends matchers {
-	describe: Describe;
-	test: Test;
-	it: Test;
-	expect: Expect;
-	fail: (message?: string) => void;
-	skip: (message?: string) => void;
-	beforeAll: LifecycleFunc<LifecycleHookBefore>;
-	beforeEach: LifecycleFunc<LifecycleHookBefore>;
-	afterEach: LifecycleFunc<LifecycleHookAfter>;
-	afterAll: LifecycleFunc<LifecycleHookAfter>;
-	getStdout: GetOutput;
-	getStderr: GetOutput;
-	getOutput: GetOutput;
-	mock: typeof helpers.mock;
+	readonly describe: Describe;
+	readonly test: Test;
+	readonly it: Test;
+	readonly expect: Expect;
+	fail(message?: string): void;
+	skip(message?: string): void;
+	readonly beforeAll: BeforeFunc;
+	readonly beforeEach: BeforeFunc;
+	readonly afterEach: AfterFunc;
+	readonly afterAll: AfterFunc;
+	readonly getStdout: GetOutput;
+	readonly getStderr: GetOutput;
+	readonly getOutput: GetOutput;
+	readonly mock: typeof helpers.mock;
 }
 
 export type TestEvent = TestBeginEvent | TestCompleteEvent;
@@ -169,23 +204,23 @@ export interface ReadonlyNode {
 }
 
 export interface Node extends ReadonlyNode {
-	run: (context: RunContext, parentResult?: Result) => MaybeAsync<void>;
+	run(context: RunContext, parentResult?: Result): MaybeAsync<void>;
 }
 
 interface NodeConfig {
-	display: string | null;
-	isBlock?: boolean;
-	discovery?: (node: Node, methods: DiscoveryGlobals) => MaybeAsync<void>;
-	discoveryFrames?: number;
-	[K: string]: unknown;
+	readonly display: string | null;
+	readonly isBlock?: boolean;
+	readonly discovery?: (node: Node, methods: DiscoveryGlobals) => MaybeAsync<void>;
+	readonly discoveryFrames?: number;
+	readonly [K: string]: unknown;
 }
 
-type ExtensionKey = string | Symbol;
+type ExtensionKey = string | symbol;
 
 interface MethodThis {
-	getCurrentNodeScope: (scope: string | Symbol) => unknown;
-	extend: (key: ExtensionKey, ...values: unknown[]) => void;
-	get: (key: ExtensionKey) => unknown[];
+	getCurrentNodeScope(scope: string | symbol): unknown;
+	extend(key: ExtensionKey, ...values: unknown[]): void;
+	get(key: ExtensionKey): unknown[];
 }
 
 type RunInterceptor = (
@@ -237,8 +272,8 @@ declare namespace Runner {
 		addRunCondition(fn: RunCondition, options?: { id?: unknown }): Builder;
 		addSuite(name: string, fn: DescribeImplementation, options?: NodeOptions): Builder;
 		addSuites(suites: Record<string, DescribeImplementation>): Builder;
-		addScope(defaults: { node?: () => unknown, context?: () => unknown }): Symbol;
-		addNodeType(key: string | Symbol, optionsFactory: (...args: unknown[]) => NodeOptions, config: NodeConfig): Builder;
+		addScope(defaults: { node?: () => unknown, context?: () => unknown }): symbol;
+		addNodeType(key: string | symbol, optionsFactory: (...args: unknown[]) => NodeOptions, config: NodeConfig): Builder;
 		addNodeOption(name: string, options: NodeOptions): Builder;
 		addGlobals(globals: Record<string, unknown | ((this: MethodThis, ...args: unknown[]) => unknown)>): Builder;
 		build(): Promise<Runner>;
@@ -257,7 +292,7 @@ export class ParallelRunner implements AbstractRunner {
 }
 
 type Methods<T> = {
-	[k in keyof T]: T[k] extends (...args: any[]) => any ? T[k] : never;
+	readonly [k in keyof T]: T[k] extends (...args: any[]) => any ? T[k] : never;
 };
 
 interface MockAction<T extends (...args: any[]) => any> {
@@ -292,8 +327,8 @@ export namespace outputs {
 		constructor(writer: WriteStream, forceTTY?: boolean);
 		write(value: string, linePrefix?: string, continuationPrefix?: string): void;
 		writeRaw(value: string): void;
-		bold: ColourFn;
-		faint: ColourFn;
+		readonly bold: ColourFn;
+		readonly faint: ColourFn;
 	}
 }
 
@@ -337,99 +372,99 @@ export class ExitHook {
 
 type Precision =
 	(expected: number) => number |
-	{ tolerance: number } |
-	{ decimalPlaces: number };
+	{ readonly tolerance: number } |
+	{ readonly decimalPlaces: number };
 
 type SyncMatchersOrValues<T> = {
-	[k in keyof T]: SyncMatcher<T[k]> | T[k];
+	readonly [k in keyof T]: SyncMatcher<T[k]> | T[k];
 };
 
 interface matchers {
-	any: () => SyncMatcher<unknown>;
-	equals: <T>(expected: T) => SyncMatcher<T>;
-	same: <T>(expected: T) => SyncMatcher<T>;
-	matches: (expected: RegExp) => SyncMatcher<string>;
-	not: <M extends Matcher<any>>(matcher: M) => M;
-	withMessage: <M extends Matcher<any>>(message: string, matcher: M) => M;
-	isTrue: () => SyncMatcher<boolean>;
-	isFalse: () => SyncMatcher<boolean>;
-	isTruthy: () => SyncMatcher<unknown>;
-	isFalsy: () => SyncMatcher<unknown>;
-	isNull: () => SyncMatcher<unknown>;
-	isUndefined: () => SyncMatcher<unknown>;
-	isNullish: () => SyncMatcher<unknown>;
-	isGreaterThan: (value: number) => SyncMatcher<number>;
-	isLessThan: (value: number) => SyncMatcher<number>;
-	isGreaterThanOrEqual: (value: number) => SyncMatcher<number>;
-	isLessThanOrEqual: (value: number) => SyncMatcher<number>;
-	isNear: (value: number, precision?: Precision) => SyncMatcher<number>;
-	resolves: <T>(expectation?: SyncMatcher<T> | T) => (
+	readonly any: () => SyncMatcher<unknown>;
+	readonly equals: <T>(expected: T) => SyncMatcher<T>;
+	readonly same: <T>(expected: T) => SyncMatcher<T>;
+	readonly matches: (expected: RegExp) => SyncMatcher<string>;
+	readonly not: <M extends Matcher<any>>(matcher: M) => M;
+	readonly withMessage: <M extends Matcher<any>>(message: string, matcher: M) => M;
+	readonly isTrue: () => SyncMatcher<boolean>;
+	readonly isFalse: () => SyncMatcher<boolean>;
+	readonly isTruthy: () => SyncMatcher<unknown>;
+	readonly isFalsy: () => SyncMatcher<unknown>;
+	readonly isNull: () => SyncMatcher<unknown>;
+	readonly isUndefined: () => SyncMatcher<unknown>;
+	readonly isNullish: () => SyncMatcher<unknown>;
+	readonly isGreaterThan: (value: number) => SyncMatcher<number>;
+	readonly isLessThan: (value: number) => SyncMatcher<number>;
+	readonly isGreaterThanOrEqual: (value: number) => SyncMatcher<number>;
+	readonly isLessThanOrEqual: (value: number) => SyncMatcher<number>;
+	readonly isNear: (value: number, precision?: Precision) => SyncMatcher<number>;
+	readonly resolves: <T>(expectation?: SyncMatcher<T> | T) => (
 		SyncMatcher<() => T> &
 		AsyncMatcher<Promise<T> | (() => Promise<T>)>
 	);
-	throws: (expectation?: SyncMatcher<unknown> | RegExp | string) => (
+	readonly throws: (expectation?: SyncMatcher<unknown> | RegExp | string) => (
 		SyncMatcher<() => unknown> &
 		AsyncMatcher<Promise<unknown> | (() => Promise<unknown>)>
 	);
-	hasLength: (expectation?: SyncMatcher<number> | number) => SyncMatcher<LengthHaver>;
-	isEmpty: () => SyncMatcher<LengthHaver>;
-	contains: (expectation?: SyncMatcher<any> | string | unknown) => SyncMatcher<string | Array<unknown> | Set<unknown>>;
-	startsWith: (expected: string) => SyncMatcher<string>;
-	endsWith: (expected: string) => SyncMatcher<string>;
-	isListOf: (...expectation: (SyncMatcher<any> | unknown)[]) => SyncMatcher<Array<unknown>>;
-	hasProperty: (name: Symbol | string | number, expectation?: SyncMatcher<any> | unknown) => SyncMatcher<unknown>;
+	readonly hasLength: (expectation?: SyncMatcher<number> | number) => SyncMatcher<LengthHaver>;
+	readonly isEmpty: () => SyncMatcher<LengthHaver>;
+	readonly contains: (expectation?: SyncMatcher<any> | string | unknown) => SyncMatcher<string | Array<unknown> | Set<unknown>>;
+	readonly startsWith: (expected: string) => SyncMatcher<string>;
+	readonly endsWith: (expected: string) => SyncMatcher<string>;
+	readonly isListOf: (...expectation: (SyncMatcher<any> | unknown)[]) => SyncMatcher<Array<unknown>>;
+	readonly hasProperty: (name: symbol | string | number, expectation?: SyncMatcher<any> | unknown) => SyncMatcher<unknown>;
 
-	hasBeenCalled: (options?: { times?: number }) => SyncMatcher<(...args: unknown[]) => unknown>;
-	hasBeenCalledWith: <T extends (...args: any[]) => any>(...args: SyncMatchersOrValues<Parameters<T>>[]) => SyncMatcher<T>;
+	readonly hasBeenCalled: (options?: { times?: number }) => SyncMatcher<(...args: unknown[]) => unknown>;
+	readonly hasBeenCalledWith: <T extends (...args: any[]) => any>(...args: SyncMatchersOrValues<Parameters<T>>[]) => SyncMatcher<T>;
 
 	// compatibility aliases
-	toEqual: <T>(expected: T) => SyncMatcher<T>;
-	toBe: <T>(expected: T) => SyncMatcher<T>;
-	toMatch: (expected: RegExp) => SyncMatcher<string>;
-	toBeTruthy: () => SyncMatcher<unknown>;
-	toBeFalsy: () => SyncMatcher<unknown>;
-	toBeNull: () => SyncMatcher<unknown>;
-	toBeUndefined: () => SyncMatcher<unknown>;
-	toThrow: (expectation?: SyncMatcher<any> | RegExp | string) => (
+	readonly toEqual: <T>(expected: T) => SyncMatcher<T>;
+	readonly toBe: <T>(expected: T) => SyncMatcher<T>;
+	readonly toMatch: (expected: RegExp) => SyncMatcher<string>;
+	readonly toBeTruthy: () => SyncMatcher<unknown>;
+	readonly toBeFalsy: () => SyncMatcher<unknown>;
+	readonly toBeNull: () => SyncMatcher<unknown>;
+	readonly toBeUndefined: () => SyncMatcher<unknown>;
+	readonly toThrow: (expectation?: SyncMatcher<any> | RegExp | string) => (
 		SyncMatcher<() => unknown> &
 		AsyncMatcher<Promise<unknown> | (() => Promise<unknown>)>
 	);
-	toBeGreaterThan: (value: number) => SyncMatcher<number>;
-	toBeLessThan: (value: number) => SyncMatcher<number>;
-	toBeGreaterThanOrEqual: (value: number) => SyncMatcher<number>;
-	toBeLessThanOrEqual: (value: number) => SyncMatcher<number>;
-	toBeCloseTo: (value: number, precision?: Precision) => SyncMatcher<number>;
-	toHaveLength: (expectation?: SyncMatcher<number> | number) => SyncMatcher<LengthHaver>;
-	toContain: (expectation?: SyncMatcher<any> | string | unknown) => SyncMatcher<string | Array<unknown> | Set<unknown>>;
-	toHaveProperty: (name: Symbol | string | number, expectation?: SyncMatcher<any> | unknown) => SyncMatcher<unknown>;
+	readonly toBeGreaterThan: (value: number) => SyncMatcher<number>;
+	readonly toBeLessThan: (value: number) => SyncMatcher<number>;
+	readonly toBeGreaterThanOrEqual: (value: number) => SyncMatcher<number>;
+	readonly toBeLessThanOrEqual: (value: number) => SyncMatcher<number>;
+	readonly toBeCloseTo: (value: number, precision?: Precision) => SyncMatcher<number>;
+	readonly toHaveLength: (expectation?: SyncMatcher<number> | number) => SyncMatcher<LengthHaver>;
+	readonly toContain: (expectation?: SyncMatcher<any> | string | unknown) => SyncMatcher<string | Array<unknown> | Set<unknown>>;
+	readonly toHaveProperty: (name: symbol | string | number, expectation?: SyncMatcher<any> | unknown) => SyncMatcher<unknown>;
 
-	toHaveBeenCalled: (options?: { times?: number }) => SyncMatcher<(...args: unknown[]) => unknown>;
-	toHaveBeenCalledWith: <T extends (...args: any[]) => any>(...args: SyncMatchersOrValues<Parameters<T>>[]) => SyncMatcher<T>;
+	readonly toHaveBeenCalled: (options?: { times?: number }) => SyncMatcher<(...args: unknown[]) => unknown>;
+	readonly toHaveBeenCalledWith: <T extends (...args: any[]) => any>(...args: SyncMatchersOrValues<Parameters<T>>[]) => SyncMatcher<T>;
 }
 export const matchers: matchers;
 
 interface plugins {
-	describe: (fnName?: string | Symbol, options?: {
+	readonly describe: (fnName?: string | symbol, options?: {
 		display?: string;
-		testFn?: string | Symbol;
-		subFn?: string | Symbol;
+		testFn?: string | symbol;
+		subFn?: string | symbol;
 	}) => Plugin;
 
-	expect: (() => Plugin) & {
-		matchers: (matchers: Record<string, (...args: unknown[]) => Matcher<unknown>>) => Plugin;
+	readonly expect: (() => Plugin) & {
+		readonly matchers: (matchers: Record<string, (...args: unknown[]) => Matcher<unknown>>) => Plugin;
 	};
-	fail: () => Plugin;
-	focus: () => Plugin;
-	ignore: () => Plugin;
-	lifecycle: (options?: { order?: number }) => Plugin;
-	parameterised: (options?: { order?: number }) => Plugin;
-	scopedMock: () => Plugin;
-	outputCaptor: (options?: { order?: number }) => Plugin;
-	repeat: (options?: { order?: number }) => Plugin;
-	retry: (options?: { order?: number }) => Plugin;
-	stopAtFirstFailure: () => Plugin;
-	test: (fnName?: string | Symbol) => Plugin;
-	timeout: (options?: { order?: number }) => Plugin;
+	readonly fail: () => Plugin;
+	readonly focus: () => Plugin;
+	readonly ignore: () => Plugin;
+	readonly lifecycle: (options?: { order?: number }) => Plugin;
+	readonly parameterised: (options?: { order?: number }) => Plugin;
+	readonly scopedMock: () => Plugin;
+	readonly outputCaptor: (options?: { order?: number }) => Plugin;
+	readonly repeat: (options?: { order?: number }) => Plugin;
+	readonly retry: (options?: { order?: number }) => Plugin;
+	readonly stopAtFirstFailure: () => Plugin;
+	readonly test: (fnName?: string | symbol) => Plugin;
+	readonly timeout: (options?: { order?: number }) => Plugin;
 }
 export const plugins: plugins;
 
@@ -442,10 +477,10 @@ declare global { // same as DiscoveryGlobals + matchers
 	const expect: Expect;
 	const fail: (message?: string) => void;
 	const skip: (message?: string) => void;
-	const beforeAll: LifecycleFunc<LifecycleHookBefore>;
-	const beforeEach: LifecycleFunc<LifecycleHookBefore>;
-	const afterEach: LifecycleFunc<LifecycleHookAfter>;
-	const afterAll: LifecycleFunc<LifecycleHookAfter>;
+	const beforeAll: BeforeFunc;
+	const beforeEach: BeforeFunc;
+	const afterEach: AfterFunc;
+	const afterAll: AfterFunc;
 	const getStdout: GetOutput;
 	const getStderr: GetOutput;
 	const getOutput: GetOutput;
@@ -483,7 +518,7 @@ declare global { // same as DiscoveryGlobals + matchers
 	const startsWith: (expected: string) => SyncMatcher<string>;
 	const endsWith: (expected: string) => SyncMatcher<string>;
 	const isListOf: (...expectation: (SyncMatcher<any> | unknown)[]) => SyncMatcher<Array<unknown>>;
-	const hasProperty: (name: Symbol | string | number, expectation?: SyncMatcher<any> | unknown) => SyncMatcher<unknown>;
+	const hasProperty: (name: symbol | string | number, expectation?: SyncMatcher<any> | unknown) => SyncMatcher<unknown>;
 
 	const hasBeenCalled: (options?: { times?: number }) => SyncMatcher<(...args: unknown[]) => unknown>;
 	const hasBeenCalledWith: <T extends (...args: any[]) => any>(...args: SyncMatchersOrValues<Parameters<T>>[]) => SyncMatcher<T>;
@@ -507,7 +542,7 @@ declare global { // same as DiscoveryGlobals + matchers
 	const toBeCloseTo: (value: number, precision?: Precision) => SyncMatcher<number>;
 	const toHaveLength: (expectation?: SyncMatcher<number> | number) => SyncMatcher<LengthHaver>;
 	const toContain: (expectation?: SyncMatcher<any> | string | unknown) => SyncMatcher<string | Array<unknown> | Set<unknown>>;
-	const toHaveProperty: (name: Symbol | string | number, expectation?: SyncMatcher<any> | unknown) => SyncMatcher<unknown>;
+	const toHaveProperty: (name: symbol | string | number, expectation?: SyncMatcher<any> | unknown) => SyncMatcher<unknown>;
 
 	const toHaveBeenCalled: (options?: { times?: number }) => SyncMatcher<(...args: unknown[]) => unknown>;
 	const toHaveBeenCalledWith: <T extends (...args: any[]) => any>(...args: SyncMatchersOrValues<Parameters<T>>[]) => SyncMatcher<T>;

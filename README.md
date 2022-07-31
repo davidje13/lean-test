@@ -504,20 +504,20 @@ describe('lifecycle', () => {
 });
 ```
 
-You can also add test parameters from a `beforeAll` or `beforeEach` hook.
+You can also set test parameters from a `beforeAll` or `beforeEach` hook.
 These parameters will be available to all tests which are inside the hook's
 scope.
 
 ```javascript
 describe('lifecycle', () => {
-	beforeEach('launch server', async ({ addTestParameter }) => {
+	const SERVER = beforeEach('launch server', async ({ setParameter }) => {
 		const server = await runServer();
-		addTestParameter(server);
+		setParameter(server);
 
 		return () => server.close();
 	});
 
-	it('does a thing', (server) => {
+	it('does a thing', ({ [SERVER]: server }) => {
 		server.get('foobar');
 		// ...
 	});
@@ -526,6 +526,36 @@ describe('lifecycle', () => {
 
 This pattern can be useful for fully decoupling tests from global state, allowing
 them to run in parallel.
+
+These parameters are available in the first argument passed to the tests (see the
+destructuring example above). They are also available to other lifecycle hooks in
+the same way.
+
+To make parameters type-safe in TypeScript, you can use:
+
+```typescript
+describe('lifecycle', () => {
+	const SERVER = beforeEach<Server>('launch server', async ({ setParameter }) => {
+		const server = await runServer();
+		setParameter(server);
+
+		return () => server.close();
+	});
+
+	it('does a thing', ({ getTyped }) => {
+		// getTyped is always available and just retrieves the corresponding parameter,
+		// but typed according to the type of the key. Functionally this is the same as
+		// the destructuring in the example above.
+		const server = getTyped(SERVER);
+		server.get('foobar');
+		// ...
+	});
+});
+```
+
+The legacy method `addTestParameter` is also available, but should be avoided as
+it is not possible to make type-safe, is not made available to other lifecycle
+hooks, and will be removed in the future.
 
 ## Standard Matchers
 

@@ -1651,6 +1651,8 @@ var ignore = () => (builder) => {
 	builder.addRunCondition((_, _result, node) => (!node.options.ignore), { name: 'ignore' });
 };
 
+const NAMED_PARAMS_OBJECT = Symbol('NAMED_PARAMS_OBJECT');
+
 var lifecycle = ({ order = 0 } = {}) => (builder) => {
 	const scope = builder.addScope({
 		name: 'lifecycle',
@@ -1667,20 +1669,20 @@ var lifecycle = ({ order = 0 } = {}) => (builder) => {
 	});
 
 	builder.addRunInterceptor((next, context, result, node) => {
-		const baseParameters = context.testParameters || [];
+		const existingParams = context.testParameters || [];
 		if (!context.active) {
 			return next(context);
 		} else if (!node.config.isBlock) {
-			return withWrappers(result, context[scope].beforeEach, context[scope].afterEach, (skip, extraParams) => next({
+			return withWrappers(result, context[scope].beforeEach, context[scope].afterEach, existingParams, (skip, testParameters) => next({
 				...context,
-				testParameters: [...baseParameters, ...extraParams],
+				testParameters,
 				active: !skip,
 			}));
 		} else {
 			const nodeScope = node.getScope(scope);
-			return withWrappers(result, [nodeScope.beforeAll], [nodeScope.afterAll], (skip, extraParams) => next({
+			return withWrappers(result, [nodeScope.beforeAll], [nodeScope.afterAll], existingParams, (skip, testParameters) => next({
 				...context,
-				testParameters: [...baseParameters, ...extraParams],
+				testParameters,
 				[scope]: {
 					beforeEach: [...context[scope].beforeEach, nodeScope.beforeEach],
 					afterEach: [...context[scope].afterEach, nodeScope.afterEach],
@@ -1690,22 +1692,30 @@ var lifecycle = ({ order = 0 } = {}) => (builder) => {
 		}
 	}, { order, name: 'lifecycle' });
 
-	async function withWrappers(result, before, after, next) {
-		const extraParams = [];
-		const ops = {
-			addTestParameter: (...values) => extraParams.push(...values),
-		};
+	async function withWrappers(result, before, after, params, next) {
+		const hadNamedParams = (params[0] && typeof params[0] === 'object' && params[0][NAMED_PARAMS_OBJECT]);
+		const newParams = [...params];
+		const namedParams = hadNamedParams ? copySymbolObject(params[0]) : { [NAMED_PARAMS_OBJECT]: true };
+		let changedNamedParams = false;
+		const addTestParameter = (...values) => newParams.push(...values);
+
 		let skip = false;
 		const allTeardowns = [];
 		let i = 0;
 		for (; i < before.length && !skip; ++i) {
 			const teardowns = [];
-			for (const { name, fn } of before[i]) {
+			for (const { name, fn, id } of before[i]) {
 				const stage = await result.createStage(
 					{ fail: true },
 					`before ${name}`,
 					async () => {
-						const teardown = await fn(ops);
+						const teardown = await fn(Object.freeze(Object.assign(copySymbolObject(namedParams), {
+							addTestParameter,
+							setParameter: (value) => {
+								namedParams[id] = value;
+								changedNamedParams = true;
+							},
+						})));
 						if (typeof teardown === 'function') {
 							teardowns.unshift({ name, fn: teardown });
 						}
@@ -1720,12 +1730,29 @@ var lifecycle = ({ order = 0 } = {}) => (builder) => {
 			allTeardowns.push(teardowns);
 		}
 
+		if (changedNamedParams) {
+			if (hadNamedParams) {
+				newParams[0] = namedParams;
+			} else {
+				newParams.unshift(namedParams);
+			}
+			// this function exists to work around a limitation in TypeScript
+			// (see TypedParameters definition in index.d.ts)
+			namedParams.getTyped = (key) => namedParams[key];
+		}
+
 		try {
-			return await next(skip, extraParams);
+			return await next(skip, newParams);
 		} finally {
+			const ops = Object.freeze(copySymbolObject(namedParams));
 			while ((i--) > 0) {
 				for (const { name, fn } of after[i]) {
-					await result.createStage({ fail: true, noCancel: true }, `after ${name}`, fn);
+					await result.createStage(
+						{ fail: true, noCancel: true },
+						`after ${name}`,
+						() => fn(ops),
+						{ errorStackSkipFrames: 1 },
+					);
 				}
 				for (const { name, fn } of allTeardowns[i]) {
 					await result.createStage({ fail: true, noCancel: true }, `teardown ${name}`, fn);
@@ -1746,19 +1773,33 @@ var lifecycle = ({ order = 0 } = {}) => (builder) => {
 
 	builder.addGlobals({
 		beforeEach(name, fn) {
-			this.getCurrentNodeScope(scope).beforeEach.push(convert(name, fn, 'each'));
+			const converted = convert(name, fn, 'each');
+			const id = Symbol(converted.name);
+			this.getCurrentNodeScope(scope).beforeEach.push({ ...converted, id });
+			return id;
 		},
 		afterEach(name, fn) {
 			this.getCurrentNodeScope(scope).afterEach.push(convert(name, fn, 'each'));
 		},
 		beforeAll(name, fn) {
-			this.getCurrentNodeScope(scope).beforeAll.push(convert(name, fn, 'all'));
+			const converted = convert(name, fn, 'all');
+			const id = Symbol(converted.name);
+			this.getCurrentNodeScope(scope).beforeAll.push({ ...converted, id });
+			return id;
 		},
 		afterAll(name, fn) {
 			this.getCurrentNodeScope(scope).afterAll.push(convert(name, fn, 'all'));
 		},
 	});
 };
+
+function copySymbolObject(o) {
+	const r = {};
+	for (const key of Object.getOwnPropertySymbols(o)) {
+		r[key] = o[key];
+	}
+	return r;
+}
 
 const IS_BROWSER = (typeof process === 'undefined');
 const OUTPUT_CAPTOR_SCOPE = new StackScope('OUTPUT_CAPTOR');

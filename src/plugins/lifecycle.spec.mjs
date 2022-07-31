@@ -331,6 +331,68 @@ describe('lifecycle', {
 			]));
 		},
 	},
+
+	'setParameter': {
+		async 'assigns a named parameter to all wrapped tests'() {
+			let count = 0;
+			const invoked = await invoke({ pass: 3 }, (g, tag) => {
+				g.describe('inner', () => {
+					const PARAM = g.beforeEach(({ setParameter }) => {
+						setParameter(count);
+						++count;
+					});
+
+					g.test('test 1', ({ [PARAM]: p }) => tag(`test 1: [${p}]`));
+					g.test('test 2', ({ [PARAM]: p }) => tag(`test 2: [${p}]`));
+				});
+
+				g.test('test 3', (c) => tag(`test 3: [${c}]`));
+			});
+
+			expect(invoked, equals([
+				'test 1: [0]',
+				'test 2: [1]',
+				'test 3: [undefined]',
+			]));
+		},
+
+		async 'becomes available to subsequent lifecycle hooks'() {
+			const invoked = await invoke({ pass: 1 }, (g, tag) => {
+				g.describe('inner', () => {
+					const PARAM1 = g.beforeAll(({ setParameter }) => {
+						setParameter(5);
+					});
+					const PARAM2 = g.beforeEach(({ [PARAM1]: p1, setParameter }) => {
+						setParameter(p1 * 2);
+					});
+					const PARAM3 = g.beforeEach(({ [PARAM1]: p1, [PARAM2]: p2, setParameter }) => {
+						setParameter(p1 + p2);
+					});
+
+					g.test('test 1', ({ [PARAM3]: p3 }) => tag(`test 1: [${p3}]`));
+				});
+			});
+
+			expect(invoked, equals([
+				'test 1: [15]',
+			]));
+		},
+
+		async 'named parameters always appear first'() {
+			const invoked = await invoke({ pass: 1 }, (g, tag) => {
+				const PARAM = g.beforeEach(({ setParameter, addTestParameter }) => {
+					addTestParameter('second');
+					setParameter('first');
+				});
+
+				g.test('test 1', ({ [PARAM]: p1 }, p2) => tag(`test 1: [${p1},${p2}]`));
+			});
+
+			expect(invoked, equals([
+				'test 1: [first,second]',
+			]));
+		},
+	},
 });
 
 function tagWithArgs(g, tag, name) {
