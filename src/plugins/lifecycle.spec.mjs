@@ -343,7 +343,7 @@ describe('lifecycle', {
 					});
 
 					g.test('test 1', ({ [PARAM]: p }) => tag(`test 1: [${p}]`));
-					g.test('test 2', ({ [PARAM]: p }) => tag(`test 2: [${p}]`));
+					g.test('test 2', (params) => tag(`test 2: [${params.getTyped(PARAM)}]`));
 				});
 
 				g.test('test 3', (c) => tag(`test 3: [${c}]`));
@@ -362,8 +362,8 @@ describe('lifecycle', {
 					const PARAM1 = g.beforeAll(({ setParameter }) => {
 						setParameter(5);
 					});
-					const PARAM2 = g.beforeEach(({ [PARAM1]: p1, setParameter }) => {
-						setParameter(p1 * 2);
+					const PARAM2 = g.beforeEach(({ getTyped, setParameter }) => {
+						setParameter(getTyped(PARAM1) * 2);
 					});
 					const PARAM3 = g.beforeEach(({ [PARAM1]: p1, [PARAM2]: p2, setParameter }) => {
 						setParameter(p1 + p2);

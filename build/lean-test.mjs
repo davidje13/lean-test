@@ -1698,6 +1698,9 @@ var lifecycle = ({ order = 0 } = {}) => (builder) => {
 		const namedParams = hadNamedParams ? copySymbolObject(params[0]) : { [NAMED_PARAMS_OBJECT]: true };
 		let changedNamedParams = false;
 		const addTestParameter = (...values) => newParams.push(...values);
+		// this function exists to work around a limitation in TypeScript
+		// (see TypedParameters definition in index.d.ts)
+		const getTyped = (key) => namedParams[key];
 
 		let skip = false;
 		const allTeardowns = [];
@@ -1710,6 +1713,7 @@ var lifecycle = ({ order = 0 } = {}) => (builder) => {
 					`before ${name}`,
 					async () => {
 						const teardown = await fn(Object.freeze(Object.assign(copySymbolObject(namedParams), {
+							getTyped,
 							addTestParameter,
 							setParameter: (value) => {
 								namedParams[id] = value;
@@ -1736,9 +1740,7 @@ var lifecycle = ({ order = 0 } = {}) => (builder) => {
 			} else {
 				newParams.unshift(namedParams);
 			}
-			// this function exists to work around a limitation in TypeScript
-			// (see TypedParameters definition in index.d.ts)
-			namedParams.getTyped = (key) => namedParams[key];
+			namedParams.getTyped = getTyped;
 		}
 
 		try {
