@@ -8,18 +8,18 @@
 [PASS]     test: imports top-level modules [xx]
 [PASS]     test: uses nested modules if specified [xx]
 [PASS]     test: dynamic import uses module map [xx]
-[ERRO] Mozilla Firefox [xx]
-         Error: Browser does not support import map
+[PASS] Mozilla Firefox [xx]
+[PASS]   suite: modules.spec.mjs [xx]
+[PASS]     test: imports top-level modules [xx]
+[PASS]     test: uses nested modules if specified [xx]
+[PASS]     test: dynamic import uses module map [xx]
 
-Mozilla Firefox
-  Error: Browser does not support import map
-
-Total:    6
-Pass:     6
-Errors:   1
+Total:    9
+Pass:     9
+Errors:   0
 Failures: 0
 Skipped:  0
 Duration: xx
 
-ERROR
-EXIT: 1
+PASS
+EXIT: 0

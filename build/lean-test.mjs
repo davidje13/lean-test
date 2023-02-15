@@ -1518,51 +1518,51 @@ const hasBeenCalledWith = (...expectedArgs) => (fn) => {
 var matchers = /*#__PURE__*/Object.freeze({
 	__proto__: null,
 	any: any,
-	not: not,
-	withMessage: withMessage,
-	equals: equals,
-	same: same,
-	matches: matches,
-	isTrue: isTrue,
-	isTruthy: isTruthy,
-	isFalse: isFalse,
-	isFalsy: isFalsy,
-	isNull: isNull,
-	isUndefined: isUndefined,
-	isNullish: isNullish,
-	resolves: resolves,
-	throws: throws,
-	isGreaterThan: isGreaterThan,
-	isLessThan: isLessThan,
-	isGreaterThanOrEqual: isGreaterThanOrEqual,
-	isLessThanOrEqual: isLessThanOrEqual,
-	isNear: isNear,
-	hasLength: hasLength,
-	isEmpty: isEmpty,
 	contains: contains,
-	isListOf: isListOf,
-	startsWith: startsWith,
 	endsWith: endsWith,
-	hasProperty: hasProperty,
+	equals: equals,
 	hasBeenCalled: hasBeenCalled,
 	hasBeenCalledWith: hasBeenCalledWith,
-	toEqual: equals,
+	hasLength: hasLength,
+	hasProperty: hasProperty,
+	isEmpty: isEmpty,
+	isFalse: isFalse,
+	isFalsy: isFalsy,
+	isGreaterThan: isGreaterThan,
+	isGreaterThanOrEqual: isGreaterThanOrEqual,
+	isLessThan: isLessThan,
+	isLessThanOrEqual: isLessThanOrEqual,
+	isListOf: isListOf,
+	isNear: isNear,
+	isNull: isNull,
+	isNullish: isNullish,
+	isTrue: isTrue,
+	isTruthy: isTruthy,
+	isUndefined: isUndefined,
+	matches: matches,
+	not: not,
+	resolves: resolves,
+	same: same,
+	startsWith: startsWith,
+	throws: throws,
 	toBe: same,
-	toMatch: matches,
-	toBeTruthy: isTruthy,
 	toBeFalsy: isFalsy,
-	toBeNull: isNull,
-	toBeUndefined: isUndefined,
-	toThrow: throws,
 	toBeGreaterThan: isGreaterThan,
-	toBeLessThan: isLessThan,
 	toBeGreaterThanOrEqual: isGreaterThanOrEqual,
+	toBeLessThan: isLessThan,
 	toBeLessThanOrEqual: isLessThanOrEqual,
-	toHaveLength: hasLength,
+	toBeNull: isNull,
+	toBeTruthy: isTruthy,
+	toBeUndefined: isUndefined,
 	toContain: contains,
-	toHaveProperty: hasProperty,
+	toEqual: equals,
 	toHaveBeenCalled: hasBeenCalled,
-	toHaveBeenCalledWith: hasBeenCalledWith
+	toHaveBeenCalledWith: hasBeenCalledWith,
+	toHaveLength: hasLength,
+	toHaveProperty: hasProperty,
+	toMatch: matches,
+	toThrow: throws,
+	withMessage: withMessage
 });
 
 const FLUENT_MATCHERS = Symbol('FLUENT_MATCHERS');
@@ -2740,7 +2740,7 @@ function collect(result, parentPath) {
 	return found;
 }
 
-class Full$1 {
+let Full$1 = class Full {
 	constructor(output, { hideBoring = true } = {}) {
 		this.output = output;
 		this.hideBoring = hideBoring;
@@ -2830,7 +2830,7 @@ class Full$1 {
 
 		this.output.write('');
 	}
-}
+};
 
 class Full {
 	constructor(output) {
