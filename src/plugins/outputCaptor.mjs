@@ -41,6 +41,7 @@ function overrideMethod(object, method, replacement, ...bindArgs) {
 		object[method] = original;
 	});
 	object[method] = replacement.bind(object, original, ...bindArgs);
+	object[method].original = original.bind(object);
 }
 
 async function addIntercept() {

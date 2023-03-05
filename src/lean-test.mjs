@@ -13,6 +13,9 @@ export * as outputs from './outputs/index.mjs';
 export * as reporters from './reporters/index.mjs';
 export * as orderers from './orderers/index.mjs';
 
+// internal use only
+export { default as _internal_StackScope } from './core/StackScope.mjs';
+
 export {
 	Runner,
 	matchers,

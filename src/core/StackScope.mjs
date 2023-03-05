@@ -74,9 +74,28 @@ StackScope.isSupported = async () => {
 		await scope.run(o, async () => {
 			if (scope.get() !== o) {
 				supported = false;
+				return;
 			}
 			await Promise.resolve();
-			supported = (scope.get() === o);
+			if (scope.get() !== o) {
+				supported = false;
+				return;
+			}
+			try {
+				// Node 18.? broke stack traces across dynamic imports, so we must explicitly check for that:
+				const me = import.meta.url;
+				if (!me.startsWith('file:///')) {
+					supported = false; // unable to check
+					return;
+				}
+				const mod = await import(`data:text/javascript,
+					import { _internal_StackScope as StackScope } from ${JSON.stringify(me)};
+					export const inner = new StackScope('FEATURE_TEST').get();
+				`);
+				supported = (mod.inner === o);
+			} catch (ignore) {
+				supported = false;
+			}
 		});
 	}
 	return supported;

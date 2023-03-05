@@ -290,9 +290,28 @@ StackScope.isSupported = async () => {
 		await scope.run(o, async () => {
 			if (scope.get() !== o) {
 				supported = false;
+				return;
 			}
 			await Promise.resolve();
-			supported = (scope.get() === o);
+			if (scope.get() !== o) {
+				supported = false;
+				return;
+			}
+			try {
+				// Node 18.? broke stack traces across dynamic imports, so we must explicitly check for that:
+				const me = import.meta.url;
+				if (!me.startsWith('file:///')) {
+					supported = false; // unable to check
+					return;
+				}
+				const mod = await import(`data:text/javascript,
+					import { _internal_StackScope as StackScope } from ${JSON.stringify(me)};
+					export const inner = new StackScope('FEATURE_TEST').get();
+				`);
+				supported = (mod.inner === o);
+			} catch (ignore) {
+				supported = false;
+			}
 		});
 	}
 	return supported;
@@ -1843,6 +1862,7 @@ function overrideMethod(object, method, replacement, ...bindArgs) {
 		object[method] = original;
 	});
 	object[method] = replacement.bind(object, original, ...bindArgs);
+	object[method].original = original.bind(object);
 }
 
 async function addIntercept() {
@@ -2956,4 +2976,4 @@ function standardRunner() {
 		.addPlugin(timeout());
 }
 
-export { AbstractRunner, ExitHook, ExternalRunner, ParallelRunner, Runner, TestAssertionError, TestAssumptionError, index$3 as helpers, matchers, index as orderers, index$2 as outputs, index$4 as plugins, index$1 as reporters, standardRunner };
+export { AbstractRunner, ExitHook, ExternalRunner, ParallelRunner, Runner, TestAssertionError, TestAssumptionError, StackScope as _internal_StackScope, index$3 as helpers, matchers, index as orderers, index$2 as outputs, index$4 as plugins, index$1 as reporters, standardRunner };
