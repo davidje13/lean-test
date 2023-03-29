@@ -10,7 +10,6 @@
 		"noImplicitReturns": true,
 		"noPropertyAccessFromIndexSignature": true,
 		"noUnusedLocals": true,
-		"importsNotUsedAsValues": "error",
 		"noEmitOnError": true
 	},
 	"include": [

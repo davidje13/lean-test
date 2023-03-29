@@ -28,11 +28,18 @@ var babel = async () => {
 
 var rollup = async () => {
 	const { rollup } = await dynamicImport('rollup', 'rollup preprocessor');
-	const { default: loadConfigFile } = await dynamicImport('rollup/loadConfigFile', 'rollup preprocessor');
+	const {
+		default: loadConfigFile2x,
+		loadConfigFile: loadConfigFile3x,
+	} = await dynamicImport('rollup/loadConfigFile', 'rollup preprocessor');
 
-	const { options } = await loadConfigFile(resolve$1(cwd(), 'rollup.config.js'), { format: 'es', silent: true }).catch((e) => {
-		throw new Error(`Failed to read rollup.config.js: ${e}`);
-	});
+	const loadConfigFile = loadConfigFile3x ?? loadConfigFile2x; // export name changed in 3.0
+	const loadConfigOptions = { format: 'es', silent: true };
+	const { options } = await loadConfigFile(resolve$1(cwd(), 'rollup.config.js'), loadConfigOptions)
+		.catch(() => loadConfigFile(resolve$1(cwd(), 'rollup.config.mjs'), loadConfigOptions))
+		.catch((e) => {
+			throw new Error(`Failed to read rollup.config.js / rollup.config.mjs: ${e}`);
+		});
 	const config = options[0] ?? {};
 	const outputConfig = (Array.isArray(config.output) ? config.output[0] : config.output) ?? {};
 

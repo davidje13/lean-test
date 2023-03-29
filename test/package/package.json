@@ -10,11 +10,11 @@
     "test": "npm run test:plain && npm run test:babel && npm run test:rollup && npm run test:ts && npm run test:webpack"
   },
   "devDependencies": {
-    "@babel/core": "^7.18.0",
-    "@babel/plugin-transform-react-jsx": "^7.17.12",
+    "@babel/core": "7.x",
+    "@babel/plugin-transform-react-jsx": "7.x",
     "lean-test": "file:lean-test.tgz",
-    "rollup": "^2.74.1",
-    "typescript": "^4.6.4",
-    "webpack": "^5.72.1"
+    "rollup": "3.x",
+    "typescript": "5.0.x",
+    "webpack": "5.x"
   }
 }
