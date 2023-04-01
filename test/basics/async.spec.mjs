@@ -1,4 +1,4 @@
-const sleep = (delay, result) => new Promise((resolve) => setTimeout(() => resolve(result), delay));
+const sleep = (delay) => new Promise((resolve) => setTimeout(resolve, delay));
 
 describe('async', () => {
 	test('waits for async tests to complete', async () => {

@@ -193,6 +193,27 @@ expect(7).isSeven();
 
 Globally registers new fluent checks.
 
+### expect.poll
+
+```javascript
+await expect.poll(() => getThing(), equals(6));
+
+await expect.poll(() => getThing(), equals(6), {
+	timeout: 1000,
+	interval: 100,
+});
+```
+
+Polls a condition repeatedly until it passes, throwing a `TestAssertionError` if the
+timeout is reached before the condition passes (marking the test as failed).
+
+The first parameter should be a function with no side-effects (as it will be invoked
+several times). The second parameter can be any matcher, including custom matchers.
+Note that `expect.poll` does not support fluent matcher syntax.
+
+You can optionally provide configuration for the polling behaviour. By default, it
+will poll every 50 milliseconds for up to 5 seconds.
+
 ### mock
 
 ```javascript

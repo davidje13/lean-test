@@ -1,4 +1,5 @@
 import testRunner from '../test-helpers/testRunner.mjs';
+import sleep from '../test-helpers/sleep.mjs';
 import failPlugin from './fail.mjs';
 import timeout from './timeout.mjs';
 
@@ -48,10 +49,6 @@ describe('timeout', {
 		});
 	},
 }, { parallel: true });
-
-function sleep(ms) {
-	return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 function forever() {
 	return new Promise(() => {});

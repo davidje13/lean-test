@@ -35,6 +35,29 @@ const expect = () => (builder) => {
 
 	expect.extend = extend;
 
+	expect.poll = async (expr, matcher, { timeout = 5000, interval = 50 } = {}) => {
+		try {
+			// check if condition is already met, to avoid wasting time polling
+			return await expect(expr(), matcher);
+		} catch (ignore) {}
+
+		// wait 0 milliseconds before starting the timeout timer
+		// (lets us escape the overhead of other synchronous tests happening in parallel)
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		const limit = Date.now() + timeout;
+		while (true) {
+			try {
+				return await expect(expr(), matcher);
+			} catch (e) {
+				if (Date.now() + interval > limit) {
+					throw new TestAssertionError(`Timed out waiting for expectation\n${e}`);
+				}
+				await new Promise((resolve) => setTimeout(resolve, interval));
+			}
+		}
+	};
+
 	builder.addGlobals({ expect, assume });
 };
 

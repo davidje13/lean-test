@@ -89,6 +89,36 @@ describe('expect', {
 			});
 		});
 	},
+
+	async 'poll returns immediately if requirement is already met'() {
+		await testRunner([expect(), expect.matchers(core)], { pass: 1 }, (g) => {
+			g.test('test', async () => {
+				const tm0 = Date.now();
+				await g.expect.poll(() => 2, g.equals(2), { timeout: 500 });
+				const tm1 = Date.now();
+				console.log(`time taken: ${tm1 - tm0}`);
+				g.expect(tm1 - tm0 < 50).isTrue();
+			});
+		});
+	},
+
+	async 'poll waits for a matcher to pass'() {
+		await testRunner([expect(), expect.matchers(core)], { pass: 1 }, (g) => {
+			g.test('test', async () => {
+				let value = 1;
+				setTimeout(() => { value = 2; }, 200);
+				await g.expect.poll(() => value, g.equals(2), { timeout: 500 });
+			});
+		});
+	},
+
+	async 'poll fails if the matcher does not pass within the configured time'() {
+		await testRunner([expect(), expect.matchers(core)], { fail: 1 }, (g) => {
+			g.test('test', async () => {
+				await g.expect.poll(() => 1, g.equals(2), { timeout: 500 });
+			});
+		});
+	},
 }, { parallel: true });
 
 describe('assume', {

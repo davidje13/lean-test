@@ -24,10 +24,16 @@ type FluentExpect<T> = {
 	);
 };
 
+interface PollOptions {
+	timeout?: number;
+	interval?: number;
+}
+
 type Expect = (
 	(<T, M extends Matcher<T>>(actual: T, matcher: M) => AsyncChain<ReturnType<M>, void>) &
 	(<T>(actual: T) => FluentExpect<T>) & {
 		extend: (matchers: Record<string, (...args: unknown[]) => Matcher<unknown>>) => void;
+		poll: <T>(expr: () => T, matcher: Matcher<T>, options?: PollOptions) => Promise<void>;
 	}
 );
 
