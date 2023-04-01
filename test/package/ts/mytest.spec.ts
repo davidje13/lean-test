@@ -8,3 +8,8 @@ test('runs typescript tests and records success', () => {
 	expect(y(x), equals(6));
 	expect(bar, equals(3));
 });
+
+test('uses sourcemaps to show original error locations', () => {
+	assume(globalThis, hasProperty('process')); // currently only supported in Node runner
+	expect(new Error().stack, contains('mytest.spec.ts:14'));
+});

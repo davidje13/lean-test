@@ -29,13 +29,15 @@ interface PollOptions {
 	interval?: number;
 }
 
-type Expect = (
+type Assume = (
 	(<T, M extends Matcher<T>>(actual: T, matcher: M) => AsyncChain<ReturnType<M>, void>) &
-	(<T>(actual: T) => FluentExpect<T>) & {
-		extend: (matchers: Record<string, (...args: unknown[]) => Matcher<unknown>>) => void;
-		poll: <T>(expr: () => T, matcher: Matcher<T>, options?: PollOptions) => Promise<void>;
-	}
+	(<T>(actual: T) => FluentExpect<T>)
 );
+
+type Expect = Assume & {
+	extend: (matchers: Record<string, (...args: unknown[]) => Matcher<unknown>>) => void;
+	poll: <T>(expr: () => T, matcher: Matcher<T>, options?: PollOptions) => Promise<void>;
+};
 
 export type TypedParameter<T> = symbol & { _type?: { t: T } };
 
@@ -187,6 +189,7 @@ export interface DiscoveryGlobals extends matchers {
 	readonly test: Test;
 	readonly it: Test;
 	readonly expect: Expect;
+	readonly assume: Assume;
 	fail(message?: string): void;
 	skip(message?: string): void;
 	readonly beforeAll: BeforeFunc;
@@ -387,13 +390,13 @@ type SyncMatchersOrValues<T> = {
 
 interface matchers {
 	readonly any: () => SyncMatcher<unknown>;
-	readonly equals: <T>(expected: T) => SyncMatcher<T>;
-	readonly same: <T>(expected: T) => SyncMatcher<T>;
-	readonly matches: (expected: RegExp) => SyncMatcher<string>;
+	readonly equals: <T>(expected: T) => SyncMatcher<T | undefined | null>;
+	readonly same: <T>(expected: T) => SyncMatcher<T | undefined | null>;
+	readonly matches: (expected: RegExp) => SyncMatcher<string | undefined | null>;
 	readonly not: <M extends Matcher<any>>(matcher: M) => M;
 	readonly withMessage: <M extends Matcher<any>>(message: string, matcher: M) => M;
-	readonly isTrue: () => SyncMatcher<boolean>;
-	readonly isFalse: () => SyncMatcher<boolean>;
+	readonly isTrue: () => SyncMatcher<unknown>;
+	readonly isFalse: () => SyncMatcher<unknown>;
 	readonly isTruthy: () => SyncMatcher<unknown>;
 	readonly isFalsy: () => SyncMatcher<unknown>;
 	readonly isNull: () => SyncMatcher<unknown>;
@@ -412,21 +415,21 @@ interface matchers {
 		SyncMatcher<() => unknown> &
 		AsyncMatcher<Promise<unknown> | (() => Promise<unknown>)>
 	);
-	readonly hasLength: (expectation?: SyncMatcher<number> | number) => SyncMatcher<LengthHaver>;
-	readonly isEmpty: () => SyncMatcher<LengthHaver>;
-	readonly contains: (expectation?: SyncMatcher<any> | string | unknown) => SyncMatcher<string | Array<unknown> | Set<unknown>>;
+	readonly hasLength: (expectation?: SyncMatcher<number> | number) => SyncMatcher<LengthHaver | undefined | null>;
+	readonly isEmpty: () => SyncMatcher<LengthHaver | undefined | null>;
+	readonly contains: (expectation?: SyncMatcher<any> | string | unknown) => SyncMatcher<string | Array<unknown> | Set<unknown> | undefined | null>;
 	readonly startsWith: (expected: string) => SyncMatcher<string>;
 	readonly endsWith: (expected: string) => SyncMatcher<string>;
-	readonly isListOf: (...expectation: (SyncMatcher<any> | unknown)[]) => SyncMatcher<Array<unknown>>;
+	readonly isListOf: (...expectation: (SyncMatcher<any> | unknown)[]) => SyncMatcher<Array<unknown> | undefined | null>;
 	readonly hasProperty: (name: symbol | string | number, expectation?: SyncMatcher<any> | unknown) => SyncMatcher<unknown>;
 
 	readonly hasBeenCalled: (options?: { times?: number }) => SyncMatcher<(...args: unknown[]) => unknown>;
 	readonly hasBeenCalledWith: <T extends (...args: any[]) => any>(...args: SyncMatchersOrValues<Parameters<T>>[]) => SyncMatcher<T>;
 
 	// compatibility aliases
-	readonly toEqual: <T>(expected: T) => SyncMatcher<T>;
-	readonly toBe: <T>(expected: T) => SyncMatcher<T>;
-	readonly toMatch: (expected: RegExp) => SyncMatcher<string>;
+	readonly toEqual: <T>(expected: T) => SyncMatcher<T | undefined | null>;
+	readonly toBe: <T>(expected: T) => SyncMatcher<T | undefined | null>;
+	readonly toMatch: (expected: RegExp) => SyncMatcher<string | undefined | null>;
 	readonly toBeTruthy: () => SyncMatcher<unknown>;
 	readonly toBeFalsy: () => SyncMatcher<unknown>;
 	readonly toBeNull: () => SyncMatcher<unknown>;
@@ -440,8 +443,8 @@ interface matchers {
 	readonly toBeGreaterThanOrEqual: (value: number) => SyncMatcher<number>;
 	readonly toBeLessThanOrEqual: (value: number) => SyncMatcher<number>;
 	readonly toBeCloseTo: (value: number, precision?: Precision) => SyncMatcher<number>;
-	readonly toHaveLength: (expectation?: SyncMatcher<number> | number) => SyncMatcher<LengthHaver>;
-	readonly toContain: (expectation?: SyncMatcher<any> | string | unknown) => SyncMatcher<string | Array<unknown> | Set<unknown>>;
+	readonly toHaveLength: (expectation?: SyncMatcher<number> | number) => SyncMatcher<LengthHaver | undefined | null>;
+	readonly toContain: (expectation?: SyncMatcher<any> | string | unknown) => SyncMatcher<string | Array<unknown> | Set<unknown> | undefined | null>;
 	readonly toHaveProperty: (name: symbol | string | number, expectation?: SyncMatcher<any> | unknown) => SyncMatcher<unknown>;
 
 	readonly toHaveBeenCalled: (options?: { times?: number }) => SyncMatcher<(...args: unknown[]) => unknown>;
@@ -481,6 +484,7 @@ declare global { // same as DiscoveryGlobals + matchers
 	const test: Test;
 	const it: Test;
 	const expect: Expect;
+	const assume: Assume;
 	const fail: (message?: string) => void;
 	const skip: (message?: string) => void;
 	const beforeAll: BeforeFunc;
@@ -493,13 +497,13 @@ declare global { // same as DiscoveryGlobals + matchers
 	const mock: typeof helpers.mock;
 
 	const any: () => SyncMatcher<unknown>;
-	const equals: <T>(expected: T) => SyncMatcher<T>;
-	const same: <T>(expected: T) => SyncMatcher<T>;
-	const matches: (expected: RegExp) => SyncMatcher<string>;
+	const equals: <T>(expected: T) => SyncMatcher<T | undefined | null>;
+	const same: <T>(expected: T) => SyncMatcher<T | undefined | null>;
+	const matches: (expected: RegExp) => SyncMatcher<string | undefined | null>;
 	const not: <M extends Matcher<any>>(matcher: M) => M;
 	const withMessage: <M extends Matcher<any>>(message: string, matcher: M) => M;
-	const isTrue: () => SyncMatcher<boolean>;
-	const isFalse: () => SyncMatcher<boolean>;
+	const isTrue: () => SyncMatcher<unknown>;
+	const isFalse: () => SyncMatcher<unknown>;
 	const isTruthy: () => SyncMatcher<unknown>;
 	const isFalsy: () => SyncMatcher<unknown>;
 	const isNull: () => SyncMatcher<unknown>;
@@ -518,21 +522,21 @@ declare global { // same as DiscoveryGlobals + matchers
 		SyncMatcher<() => unknown> &
 		AsyncMatcher<Promise<unknown> | (() => Promise<unknown>)>
 	);
-	const hasLength: (expectation?: SyncMatcher<number> | number) => SyncMatcher<LengthHaver>;
-	const isEmpty: () => SyncMatcher<LengthHaver>;
-	const contains: (expectation?: SyncMatcher<any> | string | unknown) => SyncMatcher<string | Array<unknown> | Set<unknown>>;
+	const hasLength: (expectation?: SyncMatcher<number> | number) => SyncMatcher<LengthHaver | undefined | null>;
+	const isEmpty: () => SyncMatcher<LengthHaver | undefined | null>;
+	const contains: (expectation?: SyncMatcher<any> | string | unknown) => SyncMatcher<string | Array<unknown> | Set<unknown> | undefined | null>;
 	const startsWith: (expected: string) => SyncMatcher<string>;
 	const endsWith: (expected: string) => SyncMatcher<string>;
-	const isListOf: (...expectation: (SyncMatcher<any> | unknown)[]) => SyncMatcher<Array<unknown>>;
+	const isListOf: (...expectation: (SyncMatcher<any> | unknown)[]) => SyncMatcher<Array<unknown> | undefined | null>;
 	const hasProperty: (name: symbol | string | number, expectation?: SyncMatcher<any> | unknown) => SyncMatcher<unknown>;
 
 	const hasBeenCalled: (options?: { times?: number }) => SyncMatcher<(...args: unknown[]) => unknown>;
 	const hasBeenCalledWith: <T extends (...args: any[]) => any>(...args: SyncMatchersOrValues<Parameters<T>>[]) => SyncMatcher<T>;
 
 	// compatibility aliases
-	const toEqual: <T>(expected: T) => SyncMatcher<T>;
-	const toBe: <T>(expected: T) => SyncMatcher<T>;
-	const toMatch: (expected: RegExp) => SyncMatcher<string>;
+	const toEqual: <T>(expected: T) => SyncMatcher<T | undefined | null>;
+	const toBe: <T>(expected: T) => SyncMatcher<T | undefined | null>;
+	const toMatch: (expected: RegExp) => SyncMatcher<string | undefined | null>;
 	const toBeTruthy: () => SyncMatcher<unknown>;
 	const toBeFalsy: () => SyncMatcher<unknown>;
 	const toBeNull: () => SyncMatcher<unknown>;
@@ -546,8 +550,8 @@ declare global { // same as DiscoveryGlobals + matchers
 	const toBeGreaterThanOrEqual: (value: number) => SyncMatcher<number>;
 	const toBeLessThanOrEqual: (value: number) => SyncMatcher<number>;
 	const toBeCloseTo: (value: number, precision?: Precision) => SyncMatcher<number>;
-	const toHaveLength: (expectation?: SyncMatcher<number> | number) => SyncMatcher<LengthHaver>;
-	const toContain: (expectation?: SyncMatcher<any> | string | unknown) => SyncMatcher<string | Array<unknown> | Set<unknown>>;
+	const toHaveLength: (expectation?: SyncMatcher<number> | number) => SyncMatcher<LengthHaver | undefined | null>;
+	const toContain: (expectation?: SyncMatcher<any> | string | unknown) => SyncMatcher<string | Array<unknown> | Set<unknown> | undefined | null>;
 	const toHaveProperty: (name: symbol | string | number, expectation?: SyncMatcher<any> | unknown) => SyncMatcher<unknown>;
 
 	const toHaveBeenCalled: (options?: { times?: number }) => SyncMatcher<(...args: unknown[]) => unknown>;

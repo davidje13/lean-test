@@ -36,6 +36,7 @@ export default async () => {
 					...subCompilerOptions,
 					noEmit: false,
 					sourceMap: false,
+					inlineSourceMap: true,
 					module: 'es2015',
 				},
 			});

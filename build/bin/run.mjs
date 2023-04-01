@@ -1050,6 +1050,7 @@ class ProcessRunner extends ExternalRunner {
 		const node = await findExecutable([{ path: 'node' }, { path: 'nodejs' }]);
 		return [
 			node,
+			'--enable-source-maps',
 			'--experimental-loader',
 			resolve(selfPath, '../preprocessor.mjs'),
 			resolve(selfPath, '../node-runtime.mjs'),
