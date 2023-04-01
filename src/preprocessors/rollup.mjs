@@ -36,7 +36,8 @@ export default async () => {
 					format: 'es',
 					file: undefined,
 					dir: undefined,
-					sourcemap: false,
+					sourcemap: 'inline',
+					sourcemapExcludeSources: true,
 				});
 				if (!output.length) {
 					throw new Error('No output from rollup');

@@ -20,7 +20,7 @@ export default async () => {
 				...config,
 				mode: 'development',
 				entry: fullPath,
-				devtool: false,
+				devtool: 'inline-source-map',
 				output: {
 					...(config.output ?? {}),
 					path: undefined,

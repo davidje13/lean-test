@@ -17,7 +17,9 @@ var babel = async () => {
 		},
 
 		async load(fullPath) {
-			const { code } = await babel.transformFileAsync(fullPath);
+			const { code } = await babel.transformFileAsync(fullPath, {
+				sourceMaps: 'inline',
+			});
 			return {
 				path: fullPath.replace(/(.*)\.[cm]?jsx?/i, '\\1.js'),
 				content: code,
@@ -60,7 +62,8 @@ var rollup = async () => {
 					format: 'es',
 					file: undefined,
 					dir: undefined,
-					sourcemap: false,
+					sourcemap: 'inline',
+					sourcemapExcludeSources: true,
 				});
 				if (!output.length) {
 					throw new Error('No output from rollup');
@@ -113,6 +116,7 @@ var tsc = async () => {
 					noEmit: false,
 					sourceMap: false,
 					inlineSourceMap: true,
+					inlineSources: false,
 					module: 'es2015',
 				},
 			});
@@ -152,7 +156,7 @@ var webpack = async () => {
 				...config,
 				mode: 'development',
 				entry: fullPath,
-				devtool: false,
+				devtool: 'inline-source-map',
 				output: {
 					...(config.output ?? {}),
 					path: undefined,

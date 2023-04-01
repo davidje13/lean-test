@@ -10,7 +10,9 @@ export default async () => {
 		},
 
 		async load(fullPath) {
-			const { code } = await babel.transformFileAsync(fullPath);
+			const { code } = await babel.transformFileAsync(fullPath, {
+				sourceMaps: 'inline',
+			});
 			return {
 				path: fullPath.replace(/(.*)\.[cm]?jsx?/i, '\\1.js'),
 				content: code,

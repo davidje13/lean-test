@@ -8,8 +8,10 @@ export default [
 		plugins: [
 			{
 				name: 'example',
-				renderChunk: (code) => ({ code: code.replace(/replace-me/g, 'replaced') }),
-				transform: (code) => ({ code: code.replace(/replace-me/g, 'replaced') }),
+				transform: (code) => ({
+					code: code.replace(/replace-me/g, '!replaced!'),
+					map: null, // replacement is same length as input => no sourcemap changes
+				}),
 			}
 		],
 	},

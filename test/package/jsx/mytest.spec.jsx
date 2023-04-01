@@ -11,3 +11,8 @@ test('uses transpiled JSX', () => {
 	expect(o).equals(7);
 	expect(React.createElement).hasBeenCalledWith('div', null, 'hello');
 });
+
+test('uses sourcemaps to show original error locations', () => {
+	assume(globalThis, hasProperty('process')); // currently only supported in Node runner
+	expect(new Error().stack, contains('mytest.spec.jsx:17'));
+});
