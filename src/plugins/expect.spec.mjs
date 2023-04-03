@@ -119,6 +119,16 @@ describe('expect', {
 			});
 		});
 	},
+
+	async 'poll errors if the matcher does not stop throwing within the configured time'() {
+		await testRunner([expect(), expect.matchers(core)], { fail: 1 }, (g) => {
+			g.test('test', async () => {
+				await g.expect.poll(() => {
+					throw new Error('oops');
+				}, g.equals(2), { timeout: 500 });
+			});
+		});
+	},
 }, { parallel: true });
 
 describe('assume', {
