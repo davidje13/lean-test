@@ -399,7 +399,7 @@ type Precision =
 
 type SyncMatchersOrValues<T> = {
 	readonly [k in keyof T]: SyncMatcher<T[k]> | T[k];
-};
+}[number][]; // https://github.com/microsoft/TypeScript/issues/29919
 
 interface matchers {
 	readonly any: () => SyncMatcher<unknown>;
@@ -438,7 +438,7 @@ interface matchers {
 	readonly hasProperty: (name: symbol | string | number, expectation?: SyncMatcher<any> | unknown) => SyncMatcher<unknown>;
 
 	readonly hasBeenCalled: (options?: { times?: number }) => SyncMatcher<(...args: unknown[]) => unknown>;
-	readonly hasBeenCalledWith: <T extends (...args: any[]) => any>(...args: SyncMatchersOrValues<Parameters<T>>[]) => SyncMatcher<T>;
+	readonly hasBeenCalledWith: <A extends any[]>(...args: SyncMatchersOrValues<A>) => SyncMatcher<(...args: A) => any>;
 
 	// compatibility aliases
 	readonly toEqual: <T>(expected: T) => SyncMatcher<T | undefined | null>;
@@ -463,7 +463,7 @@ interface matchers {
 	readonly toHaveProperty: (name: symbol | string | number, expectation?: SyncMatcher<any> | unknown) => SyncMatcher<unknown>;
 
 	readonly toHaveBeenCalled: (options?: { times?: number }) => SyncMatcher<(...args: unknown[]) => unknown>;
-	readonly toHaveBeenCalledWith: <T extends (...args: any[]) => any>(...args: SyncMatchersOrValues<Parameters<T>>[]) => SyncMatcher<T>;
+	readonly toHaveBeenCalledWith: <A extends any[]>(...args: SyncMatchersOrValues<A>) => SyncMatcher<(...args: A) => any>;
 }
 export const matchers: matchers;
 
@@ -547,7 +547,7 @@ declare global { // same as DiscoveryGlobals + matchers
 	const hasProperty: (name: symbol | string | number, expectation?: SyncMatcher<any> | unknown) => SyncMatcher<unknown>;
 
 	const hasBeenCalled: (options?: { times?: number }) => SyncMatcher<(...args: unknown[]) => unknown>;
-	const hasBeenCalledWith: <T extends (...args: any[]) => any>(...args: SyncMatchersOrValues<Parameters<T>>[]) => SyncMatcher<T>;
+	const hasBeenCalledWith: <A extends any[]>(...args: SyncMatchersOrValues<A>) => SyncMatcher<(...args: A) => any>;
 
 	// compatibility aliases
 	const toEqual: <T>(expected: T) => SyncMatcher<T | undefined | null>;
@@ -572,5 +572,5 @@ declare global { // same as DiscoveryGlobals + matchers
 	const toHaveProperty: (name: symbol | string | number, expectation?: SyncMatcher<any> | unknown) => SyncMatcher<unknown>;
 
 	const toHaveBeenCalled: (options?: { times?: number }) => SyncMatcher<(...args: unknown[]) => unknown>;
-	const toHaveBeenCalledWith: <T extends (...args: any[]) => any>(...args: SyncMatchersOrValues<Parameters<T>>[]) => SyncMatcher<T>;
+	const toHaveBeenCalledWith: <A extends any[]>(...args: SyncMatchersOrValues<A>) => SyncMatcher<(...args: A) => any>;
 }
