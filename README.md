@@ -586,6 +586,9 @@ hooks, and will be removed in the future.
 - `same(value)`:<br>
 	Checks strict (`===`) identity.
 
+- `isInstanceOf(class)`:<br>
+	Checks `instanceof`.
+
 - `not(expectation)`:<br>
 	Negates another matcher.<br>
 	e.g. `expect(7, not(equals(4)))`

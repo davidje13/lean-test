@@ -1011,6 +1011,9 @@ const _print = (v, seen, path, noQuote) => {
 				}
 				return `[${r.join(', ')}]`;
 			}
+			if (v instanceof String) {
+				return noQuote ? v : JSON.stringify(v);
+			}
 			if (v instanceof Date) {
 				return v.toISOString();
 			}
@@ -1199,6 +1202,17 @@ const same = (expected) => (actual) => {
 		return { pass: false, message: `Expected exactly ${print(expected)}, but got a different (but matching) instance.` };
 	} else {
 		return equalResult;
+	}
+};
+
+const isInstanceOf = (expectedClass) => (actual) => {
+	if (typeof expectedClass !== 'function') {
+		throw new Error('expected class must be a class.');
+	}
+	if (actual instanceof expectedClass) {
+		return { pass: true, message: `Expected value not to be instance of ${print(expectedClass.name)}, but got matching instance: ${print(actual.constructor?.name)} ${print(actual)}.` };
+	} else {
+		return { pass: false, message: `Expected value to be instance of ${print(expectedClass.name)}, but got different instance: ${print(actual.constructor?.name)} ${print(actual)}.` };
 	}
 };
 
@@ -1549,6 +1563,7 @@ var matchers = /*#__PURE__*/Object.freeze({
 	isFalsy: isFalsy,
 	isGreaterThan: isGreaterThan,
 	isGreaterThanOrEqual: isGreaterThanOrEqual,
+	isInstanceOf: isInstanceOf,
 	isLessThan: isLessThan,
 	isLessThanOrEqual: isLessThanOrEqual,
 	isListOf: isListOf,
@@ -1568,6 +1583,7 @@ var matchers = /*#__PURE__*/Object.freeze({
 	toBeFalsy: isFalsy,
 	toBeGreaterThan: isGreaterThan,
 	toBeGreaterThanOrEqual: isGreaterThanOrEqual,
+	toBeInstanceOf: isInstanceOf,
 	toBeLessThan: isLessThan,
 	toBeLessThanOrEqual: isLessThanOrEqual,
 	toBeNull: isNull,

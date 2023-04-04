@@ -392,6 +392,7 @@ interface matchers {
 	readonly any: () => SyncMatcher<unknown>;
 	readonly equals: <T>(expected: T) => SyncMatcher<T | undefined | null>;
 	readonly same: <T>(expected: T) => SyncMatcher<T | undefined | null>;
+	readonly isInstanceOf: (expected: unknown) => SyncMatcher<unknown>;
 	readonly matches: (expected: RegExp) => SyncMatcher<string | undefined | null>;
 	readonly not: <M extends Matcher<any>>(matcher: M) => M;
 	readonly withMessage: <M extends Matcher<any>>(message: string, matcher: M) => M;
@@ -429,6 +430,7 @@ interface matchers {
 	// compatibility aliases
 	readonly toEqual: <T>(expected: T) => SyncMatcher<T | undefined | null>;
 	readonly toBe: <T>(expected: T) => SyncMatcher<T | undefined | null>;
+	readonly toBeInstanceOf: (expected: unknown) => SyncMatcher<unknown>;
 	readonly toMatch: (expected: RegExp) => SyncMatcher<string | undefined | null>;
 	readonly toBeTruthy: () => SyncMatcher<unknown>;
 	readonly toBeFalsy: () => SyncMatcher<unknown>;
@@ -499,6 +501,7 @@ declare global { // same as DiscoveryGlobals + matchers
 	const any: () => SyncMatcher<unknown>;
 	const equals: <T>(expected: T) => SyncMatcher<T | undefined | null>;
 	const same: <T>(expected: T) => SyncMatcher<T | undefined | null>;
+	const isInstanceOf: (expected: unknown) => SyncMatcher<unknown>;
 	const matches: (expected: RegExp) => SyncMatcher<string | undefined | null>;
 	const not: <M extends Matcher<any>>(matcher: M) => M;
 	const withMessage: <M extends Matcher<any>>(message: string, matcher: M) => M;
@@ -536,6 +539,7 @@ declare global { // same as DiscoveryGlobals + matchers
 	// compatibility aliases
 	const toEqual: <T>(expected: T) => SyncMatcher<T | undefined | null>;
 	const toBe: <T>(expected: T) => SyncMatcher<T | undefined | null>;
+	const toBeInstanceOf: (expected: unknown) => SyncMatcher<unknown>;
 	const toMatch: (expected: RegExp) => SyncMatcher<string | undefined | null>;
 	const toBeTruthy: () => SyncMatcher<unknown>;
 	const toBeFalsy: () => SyncMatcher<unknown>;

@@ -295,6 +295,27 @@ describe('matches', {
 	},
 });
 
+describe('isInstanceOf', {
+	'checks if an object is an instance of a class'() {
+		const resultPass = matchers.isInstanceOf(String)(new String('foo'));
+		expect(resultPass.pass, isTrue());
+		expect(resultPass.message, equals('Expected value not to be instance of "String", but got matching instance: "String" "foo".'));
+
+		const resultFail = matchers.isInstanceOf(Date)(new String('foo'));
+		expect(resultFail.pass, isFalse());
+		expect(resultFail.message, equals('Expected value to be instance of "Date", but got different instance: "String" "foo".'));
+	},
+
+	'errors if given a non-class'() {
+		expect(() => matchers.isInstanceOf('nope')('foo'), throws('must be a class'));
+	},
+
+	'rejects primitive values'() {
+		expect(matchers.isInstanceOf(Date)(7).pass, isFalse());
+		expect(matchers.isInstanceOf(Date)(Symbol()).pass, isFalse());
+	},
+});
+
 const ASYNC_PASS = () => Promise.resolve({ pass: true, message: 'msg' });
 const ASYNC_FAIL = () => Promise.resolve({ pass: false, message: 'msg' });
 

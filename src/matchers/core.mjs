@@ -26,6 +26,17 @@ export const same = (expected) => (actual) => {
 	}
 };
 
+export const isInstanceOf = (expectedClass) => (actual) => {
+	if (typeof expectedClass !== 'function') {
+		throw new Error('expected class must be a class.');
+	}
+	if (actual instanceof expectedClass) {
+		return { pass: true, message: `Expected value not to be instance of ${print(expectedClass.name)}, but got matching instance: ${print(actual.constructor?.name)} ${print(actual)}.` };
+	} else {
+		return { pass: false, message: `Expected value to be instance of ${print(expectedClass.name)}, but got different instance: ${print(actual.constructor?.name)} ${print(actual)}.` };
+	}
+};
+
 export const matches = (pattern) => (actual) => {
 	if (!(pattern instanceof RegExp)) {
 		throw new Error('matches pattern must be a RegExp.');

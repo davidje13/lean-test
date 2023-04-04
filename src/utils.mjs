@@ -53,6 +53,9 @@ export const _print = (v, seen, path, noQuote) => {
 				}
 				return `[${r.join(', ')}]`;
 			}
+			if (v instanceof String) {
+				return noQuote ? v : JSON.stringify(v);
+			}
 			if (v instanceof Date) {
 				return v.toISOString();
 			}
