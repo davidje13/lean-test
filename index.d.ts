@@ -155,8 +155,11 @@ type Test = WithOptions<
 
 type LifecycleHookBeforeOps<T> = TypedParameters & {
 	/**
-	 * @deprecated use setParameter instead:
-	 *
+	 * @deprecated use setParameter instead
+	 */
+	readonly addTestParameter: (...parameters: unknown[]) => void;
+
+	/**
 	 * ```
 	 * const MY_PROPERTY = beforeEach(({ setParameter }) => {
 	 *   setParameter(1);
@@ -165,16 +168,26 @@ type LifecycleHookBeforeOps<T> = TypedParameters & {
 	 * it('my test', ({ [MY_PROPERTY]: myProperty }) => {
 	 *   console.log('got', myProperty);
 	 * });
+	 *
+	 * // or typesafe:
+	 * it('my test', ({ getTyped }) => {
+	 *   console.log('got', getTyped(MY_PROPERTY));
+	 * });
 	 * ```
 	 */
-	readonly addTestParameter: (...parameters: unknown[]) => void;
-
 	readonly setParameter: (parameter: T) => void;
+
+	readonly testPath: string[];
 };
+
+type LifecycleHookAfterOps = TypedParameters & {
+	readonly testPath: string[];
+};
+
 type LifecycleHookBefore<T> = (operations: LifecycleHookBeforeOps<T>) => MaybeAsync<void | (() => MaybeAsync<void>)>;
 type GetOutput = ((binary?: false) => string) & ((binary: true) => unknown); // unknown = Buffer
 
-type LifecycleHookAfter = (values: TypedParameters) => MaybeAsync<void>;
+type LifecycleHookAfter = (operations: LifecycleHookAfterOps) => MaybeAsync<void>;
 type BeforeFunc = (
 	(<T>(name: string, fn: LifecycleHookBefore<T>) => TypedParameter<T>) &
 	(<T>(fn: LifecycleHookBefore<T>) => TypedParameter<T>)

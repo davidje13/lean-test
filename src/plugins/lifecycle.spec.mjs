@@ -270,6 +270,39 @@ describe('lifecycle', {
 		]));
 	},
 
+	'testPath': {
+		async 'returns the path as an array of text labels'() {
+			const invoked = await invoke({ pass: 3 }, (g, tag) => {
+				g.beforeAll('ba1', ({ testPath }) => tag(`ba1 ${testPath.join(':')}`));
+				g.beforeEach('be1', ({ testPath }) => tag(`be1 ${testPath.join(':')}`));
+				g.afterEach('ae1', ({ testPath }) => tag(`ae1 ${testPath.join(':')}`));
+				g.afterAll('aa1', ({ testPath }) => tag(`aa1 ${testPath.join(':')}`));
+
+				g.describe('inner', () => {
+					g.beforeAll('ba2', ({ testPath }) => tag(`ba2 ${testPath.join(':')}`));
+					g.beforeEach('be2', ({ testPath }) => tag(`be2 ${testPath.join(':')}`));
+					g.afterEach('ae2', ({ testPath }) => tag(`ae2 ${testPath.join(':')}`));
+					g.afterAll('aa2', ({ testPath }) => tag(`aa2 ${testPath.join(':')}`));
+
+					g.test('test-1', () => tag('test 1'));
+					g.test('test-2', () => tag('test 2'));
+				});
+
+				g.test('test-3', () => tag('test 3'));
+			});
+
+			expect(invoked, equals([
+				'ba1 test',
+				'ba2 test:inner',
+				'be1 test:inner:test-1', 'be2 test:inner:test-1', 'test 1', 'ae2 test:inner:test-1', 'ae1 test:inner:test-1',
+				'be1 test:inner:test-2', 'be2 test:inner:test-2', 'test 2', 'ae2 test:inner:test-2', 'ae1 test:inner:test-2',
+				'aa2 test:inner',
+				'be1 test:test-3', 'test 3', 'ae1 test:test-3',
+				'aa1 test',
+			]));
+		},
+	},
+
 	'addTestParameter': {
 		async 'adds a parameter available to all wrapped tests'() {
 			let count = 0;

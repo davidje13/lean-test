@@ -1759,6 +1759,16 @@ var lifecycle = ({ order = 0 } = {}) => (builder) => {
 		// this function exists to work around a limitation in TypeScript
 		// (see TypedParameters definition in index.d.ts)
 		const getTyped = (key) => namedParams[key];
+		const testPath = [];
+		for (let n = result; n; n = n.parent) {
+			if (n.label !== null) {
+				// remove node type from combined name (TODO: store this better)
+				const friendlyName = n.label.substring(n.label.indexOf(': ') + 2);
+				testPath.push(friendlyName);
+			}
+		}
+		testPath.reverse();
+		Object.freeze(testPath);
 
 		let skip = false;
 		const allTeardowns = [];
@@ -1772,6 +1782,7 @@ var lifecycle = ({ order = 0 } = {}) => (builder) => {
 					async () => {
 						const teardown = await fn(Object.freeze(Object.assign(copySymbolObject(namedParams), {
 							getTyped,
+							testPath,
 							addTestParameter,
 							setParameter: (value) => {
 								namedParams[id] = value;
@@ -1793,18 +1804,24 @@ var lifecycle = ({ order = 0 } = {}) => (builder) => {
 		}
 
 		if (changedNamedParams) {
+			namedParams.getTyped = getTyped;
+			// would be nice to do this, but is weird to only make it available if parameters have been set
+			// consider enabling if/when there is a consistent first argument to all tests
+			//namedParams.testPath = testPath;
 			if (hadNamedParams) {
 				newParams[0] = namedParams;
 			} else {
 				newParams.unshift(namedParams);
 			}
-			namedParams.getTyped = getTyped;
 		}
 
 		try {
 			return await next(skip, newParams);
 		} finally {
-			const ops = Object.freeze(copySymbolObject(namedParams));
+			const ops = Object.freeze(Object.assign(copySymbolObject(namedParams), {
+				getTyped,
+				testPath,
+			}));
 			while ((i--) > 0) {
 				for (const { name, fn } of after[i]) {
 					await result.createStage(

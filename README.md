@@ -578,6 +578,20 @@ The legacy method `addTestParameter` is also available, but should be avoided as
 it is not possible to make type-safe, is not made available to other lifecycle
 hooks, and will be removed in the future.
 
+Finally, it is possible to get the current test path in `beforeEach` and
+`afterEach`, and as much of the path as is known in `beforeAll` and `afterAll`:
+
+```javascript
+describe('lifecycle', () => {
+	beforeEach('record info', ({ testPath }) => {
+		// records: "path/mytest.spec.mjs > lifecycle > my test"
+		myLog.append(testPath.join(' > '));
+	});
+
+	it('my test', () => { /* ... */ });
+});
+```
+
 ## Standard Matchers
 
 - `equals(value)`:<br>
