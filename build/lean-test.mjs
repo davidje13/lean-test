@@ -2430,6 +2430,10 @@ class ExternalRunner extends AbstractRunner {
 		throw new Error('registerEventListener not overridden');
 	}
 
+	async getDisconnectDebugInfo() {
+		return this.debug();
+	}
+
 	debug() {
 		return 'unknown';
 	}
@@ -2448,7 +2452,10 @@ class ExternalRunner extends AbstractRunner {
 						if (!connected) {
 							reject(new RunnerError('launch timed out'));
 						} else {
-							reject(new DisconnectError('unknown runner disconnect'));
+							Promise.resolve()
+								.then(() => this.getDisconnectDebugInfo())
+								.catch((e) => `failed to get debug info: ${e}`)
+								.then((info) => reject(new DisconnectError(`no messages from runner in ${this.pingTimeout}ms\n${info}`)));
 						}
 					}
 				}, 250);

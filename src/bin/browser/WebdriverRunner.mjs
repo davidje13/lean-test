@@ -42,6 +42,20 @@ export default class WebdriverRunner extends HttpServerRunner {
 		return super.invoke(listener, sharedState);
 	}
 
+	async getDisconnectDebugInfo() {
+		if (!this.session) {
+			return this.debug();
+		}
+		try {
+			const url = await session.getUrl();
+			const title = await session.getTitle();
+			return `URL='${url}' Title='${title}'`;
+		} catch (e) {
+			const cause = typeof e === 'object' ? (e.json?.value?.message ?? e.message ?? e) : e;
+			return `Failed to communicate with browser session: ${cause}`;
+		}
+	}
+
 	debug() {
 		if (this.finalURL === null) {
 			return 'failed to create session';

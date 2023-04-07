@@ -916,7 +916,11 @@ function sendJSON(method, path, data) {
 				clearTimeout(timeout);
 				const dataString = resultData().toString('utf-8');
 				if (res.statusCode >= 300) {
-					reject(new Error(`${errorInfo}${res.statusCode}\n\n${dataString}`));
+					const error = new Error(`${errorInfo}${res.statusCode}\n\n${dataString}`);
+					try {
+						error.json = JSON.parse(dataString);
+					} catch (ignore) {}
+					reject(error);
 				} else {
 					resolve(JSON.parse(dataString));
 				}
@@ -970,6 +974,20 @@ class WebdriverRunner extends HttpServerRunner {
 		const browserID = await makeConnection(this.session, server, postListener);
 		this.setBrowserID(browserID);
 		return super.invoke(listener, sharedState);
+	}
+
+	async getDisconnectDebugInfo() {
+		if (!this.session) {
+			return this.debug();
+		}
+		try {
+			const url = await session.getUrl();
+			const title = await session.getTitle();
+			return `URL='${url}' Title='${title}'`;
+		} catch (e) {
+			const cause = typeof e === 'object' ? (e.json?.value?.message ?? e.message ?? e) : e;
+			return `Failed to communicate with browser session: ${cause}`;
+		}
 	}
 
 	debug() {

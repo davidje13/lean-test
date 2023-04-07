@@ -84,7 +84,11 @@ function sendJSON(method, path, data) {
 				clearTimeout(timeout);
 				const dataString = resultData().toString('utf-8');
 				if (res.statusCode >= 300) {
-					reject(new Error(`${errorInfo}${res.statusCode}\n\n${dataString}`));
+					const error = new Error(`${errorInfo}${res.statusCode}\n\n${dataString}`);
+					try {
+						error.json = JSON.parse(dataString);
+					} catch (ignore) {}
+					reject(error);
 				} else {
 					resolve(JSON.parse(dataString));
 				}
