@@ -882,7 +882,7 @@ build_and_test:
   - name: selenium/standalone-chrome
     alias: chrome
   variables:
-    WEBDRIVER_DISABLE_SHM: true
+    WEBDRIVER_DISABLE_SHM: 'true'
     WEBDRIVER_HOST_CHROME: chrome:4444
     WEBDRIVER_HOST_FIREFOX: firefox:4444
     TESTRUNNER_HOST: '0.0.0.0'
