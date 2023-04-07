@@ -294,11 +294,16 @@ function removeTempDir(path) {
 const IS_ROOT = (platform === 'linux' && getuid() === 0);
 
 const CHROME_ARGS = [
-	// flag list from chrome-launcher: https://github.com/GoogleChrome/chrome-launcher/blob/master/src/flags.ts
+	// See https://github.com/GoogleChrome/chrome-launcher/blob/main/docs/chrome-flags-for-tools.md
 	'--disable-features=Translate',
+	'--disable-features=InterestFeedContentSuggestions',
+	'--disable-features=CalculateNativeWinOcclusion',
+	'--disable-features=OptimizationHints',
+	'--disable-features=MediaRouter',
 	'--disable-extensions',
 	'--disable-component-extensions-with-background-pages',
 	'--disable-background-networking',
+	'--disable-domain-reliability',
 	'--disable-component-update',
 	'--disable-client-side-phishing-detection',
 	'--disable-sync',
@@ -307,6 +312,7 @@ const CHROME_ARGS = [
 	'--mute-audio',
 	'--no-default-browser-check',
 	'--no-first-run',
+	'--no-pings',
 	'--disable-backgrounding-occluded-windows',
 	'--disable-renderer-backgrounding',
 	'--disable-background-timer-throttling',
@@ -346,7 +352,7 @@ async function launchChrome(url, opts) {
 	const proc = spawn(executable, [
 		...CHROME_ARGS,
 		...extraArgs,
-		'--headless',
+		'--headless', // headless=new causes "failed to create [...]/SingletonLock: File exists"
 		'--remote-debugging-port=0', // required to avoid immediate termination, but not actually used
 		url,
 	], opts);
@@ -858,10 +864,11 @@ class WebdriverSession {
 	}
 }
 
-WebdriverSession.create = function(host, browser) {
+WebdriverSession.create = function(host, browser, desiredCapabilities = {}) {
 	const promise = withRetry(() => sendJSON('POST', `${host}/session`, {
 		capabilities: {
-			firstMatch: [{ browserName: browser }]
+			alwaysMatch: { browserName: browser },
+			firstMatch: [desiredCapabilities, {}],
 		},
 	}), 20000);
 	const fin = new ExitHook(async () => {
@@ -938,10 +945,11 @@ function sendJSON(method, path, data) {
 }
 
 class WebdriverRunner extends HttpServerRunner {
-	constructor(config, paths, browser, webdriverHost) {
+	constructor(config, paths, browser, webdriverHost, desiredCapabilities) {
 		super(config, paths);
 		this.browser = browser;
 		this.webdriverHost = webdriverHost;
+		this.desiredCapabilities = desiredCapabilities;
 		this.session = null;
 		this.finalURL = null;
 		this.finalTitle = null;
@@ -950,7 +958,11 @@ class WebdriverRunner extends HttpServerRunner {
 	async prepare(sharedState) {
 		await super.prepare(sharedState);
 
-		this.session = await WebdriverSession.create(this.webdriverHost, this.browser);
+		this.session = await WebdriverSession.create(
+			this.webdriverHost,
+			this.browser,
+			this.desiredCapabilities,
+		);
 	}
 
 	async teardown(sharedState) {
@@ -1043,7 +1055,13 @@ const autoBrowserRunner = (browser, launcher) => (config, paths) => {
 	const webdriverEnv = browser.toUpperCase().replace(/[^A-Z]+/g, '_');
 	const webdriverHost = env[`WEBDRIVER_HOST_${webdriverEnv}`] || env.WEBDRIVER_HOST || null;
 	if (webdriverHost) {
-		return new WebdriverRunner(config, paths, browser, webdriverHost);
+		const desiredCapabilities = {};
+		if (env.WEBDRIVER_DISABLE_SHM === 'true') {
+			desiredCapabilities['goog:chromeOptions'] = {
+				args: ['--disable-dev-shm-usage'],
+			};
+		}
+		return new WebdriverRunner(config, paths, browser, webdriverHost, desiredCapabilities);
 	} else {
 		return new BrowserProcessRunner(config, paths, launcher);
 	}

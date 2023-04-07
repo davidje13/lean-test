@@ -26,10 +26,11 @@ export default class WebdriverSession {
 	}
 }
 
-WebdriverSession.create = function(host, browser) {
+WebdriverSession.create = function(host, browser, desiredCapabilities = {}) {
 	const promise = withRetry(() => sendJSON('POST', `${host}/session`, {
 		capabilities: {
-			firstMatch: [{ browserName: browser }]
+			alwaysMatch: { browserName: browser },
+			firstMatch: [desiredCapabilities, {}],
 		},
 	}), 20000);
 	const fin = new ExitHook(async () => {

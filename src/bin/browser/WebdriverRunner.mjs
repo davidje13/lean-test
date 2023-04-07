@@ -4,10 +4,11 @@ import HttpServerRunner from './HttpServerRunner.mjs';
 import WebdriverSession from './WebdriverSession.mjs';
 
 export default class WebdriverRunner extends HttpServerRunner {
-	constructor(config, paths, browser, webdriverHost) {
+	constructor(config, paths, browser, webdriverHost, desiredCapabilities) {
 		super(config, paths);
 		this.browser = browser;
 		this.webdriverHost = webdriverHost;
+		this.desiredCapabilities = desiredCapabilities;
 		this.session = null;
 		this.finalURL = null;
 		this.finalTitle = null;
@@ -16,7 +17,11 @@ export default class WebdriverRunner extends HttpServerRunner {
 	async prepare(sharedState) {
 		await super.prepare(sharedState);
 
-		this.session = await WebdriverSession.create(this.webdriverHost, this.browser);
+		this.session = await WebdriverSession.create(
+			this.webdriverHost,
+			this.browser,
+			this.desiredCapabilities,
+		);
 	}
 
 	async teardown(sharedState) {

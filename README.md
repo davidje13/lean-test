@@ -844,6 +844,21 @@ Example:
 lean-test --parallel --target chrome -i '**/*.{js|mjs}' tests
 ```
 
+## Troubleshooting
+
+### Chrome crashes with "session deleted because of page crash"
+
+This typically means that Chrome is running in a docker instance which has limited
+shared memory ("shm") available. If possible, configure the container with more space:
+
+```sh
+docker run -d -p 4444:4444 --shm-size="2g" selenium/standalone-chrome
+```
+
+If this is not possible (e.g. when using GitLab CI), you can set the
+`WEBDRIVER_DISABLE_SHM` environment variable, which will add `--disable-dev-shm-usage`
+to the requested Chrome capabilities.
+
 ## CI Examples for Browser testing
 
 These examples assume that `package.json` contains something like:
@@ -867,6 +882,7 @@ build_and_test:
   - name: selenium/standalone-chrome
     alias: chrome
   variables:
+    WEBDRIVER_DISABLE_SHM: true
     WEBDRIVER_HOST_CHROME: chrome:4444
     WEBDRIVER_HOST_FIREFOX: firefox:4444
     TESTRUNNER_HOST: '0.0.0.0'
