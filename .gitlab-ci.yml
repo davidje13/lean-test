@@ -9,11 +9,7 @@
     WEBDRIVER_HOST_FIREFOX: firefox:4444
     TESTRUNNER_HOST: '0.0.0.0'
   script:
-  - npm install && npm test --ignore-scripts=false
-
-node:14:
-  <<: *common
-  image: node:14
+  - npm install-test
 
 node:16:
   <<: *common
@@ -22,3 +18,7 @@ node:16:
 node:18:
   <<: *common
   image: node:18
+
+node:19:
+  <<: *common
+  image: node:19

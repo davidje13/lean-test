@@ -399,7 +399,7 @@ type Precision =
 
 type SyncMatchersOrValues<T> = {
 	readonly [k in keyof T]: SyncMatcher<T[k]> | T[k];
-}[number][]; // https://github.com/microsoft/TypeScript/issues/29919
+}[any][]; // https://github.com/microsoft/TypeScript/issues/29919
 
 interface matchers {
 	readonly any: () => SyncMatcher<unknown>;
