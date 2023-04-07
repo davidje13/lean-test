@@ -5,8 +5,19 @@ import { ExitHook } from '../../lean-test.mjs';
 // https://w3c.github.io/webdriver/
 
 export default class WebdriverSession {
-	constructor(sessionBase) {
+	constructor(sessionBase, initRequest, initResponse) {
 		this.sessionBase = sessionBase;
+		this.initRequest = initRequest;
+		this.initResponse = initResponse;
+	}
+
+	debug() {
+		return [
+			`Session ${this.sessionBase} initialised with:`,
+			`${JSON.stringify(this.initRequest, null, 2)}`,
+			'response:',
+			`${JSON.stringify(this.initResponse, null, 2)}`
+		].join('\n');
 	}
 
 	setUrl(url) {
@@ -26,21 +37,24 @@ export default class WebdriverSession {
 	}
 }
 
-WebdriverSession.create = function(host, browser, desiredCapabilities = {}) {
-	const promise = withRetry(() => sendJSON('POST', `${host}/session`, {
+WebdriverSession.create = function(host, browser, requiredCapabilities = {}) {
+	const request = {
 		capabilities: {
-			alwaysMatch: { browserName: browser },
-			firstMatch: [desiredCapabilities, {}],
+			alwaysMatch: {
+				...requiredCapabilities,
+				browserName: browser,
+			},
 		},
-	}), 20000);
+	};
+	const promise = withRetry(() => sendJSON('POST', `${host}/session`, request), 20000);
 	const fin = new ExitHook(async () => {
-		const { value: { sessionId } } = await promise;
-		const session = new WebdriverSession(`${host}/session/${encodeURIComponent(sessionId)}`);
+		const response = await promise;
+		const session = new WebdriverSession(`${host}/session/${encodeURIComponent(response.value.sessionId)}`, request, response);
 		return session.close();
 	});
 	return fin.ifExitDuring(async () => {
-		const { value: { sessionId } } = await promise;
-		return new WebdriverSession(`${host}/session/${encodeURIComponent(sessionId)}`);
+		const response = await promise;
+		return new WebdriverSession(`${host}/session/${encodeURIComponent(response.value.sessionId)}`, request, response);
 	});
 }
 

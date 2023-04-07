@@ -843,8 +843,19 @@ class BrowserProcessRunner extends HttpServerRunner {
 // https://w3c.github.io/webdriver/
 
 class WebdriverSession {
-	constructor(sessionBase) {
+	constructor(sessionBase, initRequest, initResponse) {
 		this.sessionBase = sessionBase;
+		this.initRequest = initRequest;
+		this.initResponse = initResponse;
+	}
+
+	debug() {
+		return [
+			`Session ${this.sessionBase} initialised with:`,
+			`${JSON.stringify(this.initRequest, null, 2)}`,
+			'response:',
+			`${JSON.stringify(this.initResponse, null, 2)}`
+		].join('\n');
 	}
 
 	setUrl(url) {
@@ -864,21 +875,24 @@ class WebdriverSession {
 	}
 }
 
-WebdriverSession.create = function(host, browser, desiredCapabilities = {}) {
-	const promise = withRetry(() => sendJSON('POST', `${host}/session`, {
+WebdriverSession.create = function(host, browser, requiredCapabilities = {}) {
+	const request = {
 		capabilities: {
-			alwaysMatch: { browserName: browser },
-			firstMatch: [desiredCapabilities, {}],
+			alwaysMatch: {
+				...requiredCapabilities,
+				browserName: browser,
+			},
 		},
-	}), 20000);
+	};
+	const promise = withRetry(() => sendJSON('POST', `${host}/session`, request), 20000);
 	const fin = new ExitHook(async () => {
-		const { value: { sessionId } } = await promise;
-		const session = new WebdriverSession(`${host}/session/${encodeURIComponent(sessionId)}`);
+		const response = await promise;
+		const session = new WebdriverSession(`${host}/session/${encodeURIComponent(response.value.sessionId)}`, request, response);
 		return session.close();
 	});
 	return fin.ifExitDuring(async () => {
-		const { value: { sessionId } } = await promise;
-		return new WebdriverSession(`${host}/session/${encodeURIComponent(sessionId)}`);
+		const response = await promise;
+		return new WebdriverSession(`${host}/session/${encodeURIComponent(response.value.sessionId)}`, request, response);
 	});
 };
 
@@ -945,11 +959,11 @@ function sendJSON(method, path, data) {
 }
 
 class WebdriverRunner extends HttpServerRunner {
-	constructor(config, paths, browser, webdriverHost, desiredCapabilities) {
+	constructor(config, paths, browser, webdriverHost, capabilities) {
 		super(config, paths);
 		this.browser = browser;
 		this.webdriverHost = webdriverHost;
-		this.desiredCapabilities = desiredCapabilities;
+		this.capabilities = capabilities;
 		this.session = null;
 		this.finalURL = null;
 		this.finalTitle = null;
@@ -961,7 +975,7 @@ class WebdriverRunner extends HttpServerRunner {
 		this.session = await WebdriverSession.create(
 			this.webdriverHost,
 			this.browser,
-			this.desiredCapabilities,
+			this.capabilities,
 		);
 	}
 
@@ -993,12 +1007,12 @@ class WebdriverRunner extends HttpServerRunner {
 			return this.debug();
 		}
 		try {
-			const url = await session.getUrl();
-			const title = await session.getTitle();
-			return `URL='${url}' Title='${title}'`;
+			const url = await this.session.getUrl();
+			const title = await this.session.getTitle();
+			return `URL='${url}' Title='${title}'\n${this.session.debug()}`;
 		} catch (e) {
 			const cause = typeof e === 'object' ? (e.json?.value?.message ?? e.message ?? e) : e;
-			return `Failed to communicate with browser session: ${cause}`;
+			return `Failed to communicate with browser session: ${cause}\n${this.session.debug()}`;
 		}
 	}
 
@@ -1055,13 +1069,13 @@ const autoBrowserRunner = (browser, launcher) => (config, paths) => {
 	const webdriverEnv = browser.toUpperCase().replace(/[^A-Z]+/g, '_');
 	const webdriverHost = env[`WEBDRIVER_HOST_${webdriverEnv}`] || env.WEBDRIVER_HOST || null;
 	if (webdriverHost) {
-		const desiredCapabilities = {};
+		const capabilities = {};
 		if (env.WEBDRIVER_DISABLE_SHM === 'true') {
-			desiredCapabilities['goog:chromeOptions'] = {
+			capabilities['goog:chromeOptions'] = {
 				args: ['--disable-dev-shm-usage'],
 			};
 		}
-		return new WebdriverRunner(config, paths, browser, webdriverHost, desiredCapabilities);
+		return new WebdriverRunner(config, paths, browser, webdriverHost, capabilities);
 	} else {
 		return new BrowserProcessRunner(config, paths, launcher);
 	}

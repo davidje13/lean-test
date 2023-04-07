@@ -4,11 +4,11 @@ import HttpServerRunner from './HttpServerRunner.mjs';
 import WebdriverSession from './WebdriverSession.mjs';
 
 export default class WebdriverRunner extends HttpServerRunner {
-	constructor(config, paths, browser, webdriverHost, desiredCapabilities) {
+	constructor(config, paths, browser, webdriverHost, capabilities) {
 		super(config, paths);
 		this.browser = browser;
 		this.webdriverHost = webdriverHost;
-		this.desiredCapabilities = desiredCapabilities;
+		this.capabilities = capabilities;
 		this.session = null;
 		this.finalURL = null;
 		this.finalTitle = null;
@@ -20,7 +20,7 @@ export default class WebdriverRunner extends HttpServerRunner {
 		this.session = await WebdriverSession.create(
 			this.webdriverHost,
 			this.browser,
-			this.desiredCapabilities,
+			this.capabilities,
 		);
 	}
 
@@ -52,12 +52,12 @@ export default class WebdriverRunner extends HttpServerRunner {
 			return this.debug();
 		}
 		try {
-			const url = await session.getUrl();
-			const title = await session.getTitle();
-			return `URL='${url}' Title='${title}'`;
+			const url = await this.session.getUrl();
+			const title = await this.session.getTitle();
+			return `URL='${url}' Title='${title}'\n${this.session.debug()}`;
 		} catch (e) {
 			const cause = typeof e === 'object' ? (e.json?.value?.message ?? e.message ?? e) : e;
-			return `Failed to communicate with browser session: ${cause}`;
+			return `Failed to communicate with browser session: ${cause}\n${this.session.debug()}`;
 		}
 	}
 
