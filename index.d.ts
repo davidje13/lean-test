@@ -392,8 +392,8 @@ export class ExitHook {
 	ifExitDuringOrFinally<T>(fn: () => Promise<T> | T): Promise<T>;
 }
 
-type Precision =
-	(expected: number) => number |
+export type Precision =
+	((expected: number) => number) |
 	{ readonly tolerance: number } |
 	{ readonly decimalPlaces: number };
 
