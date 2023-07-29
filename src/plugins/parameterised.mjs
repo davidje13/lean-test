@@ -16,13 +16,20 @@ export default ({ order = -4 } = {}) => (builder) => {
 				continue;
 			}
 			await result.createChild(
-				'(' + paramList.map(print).join(', ') + ')',
+				'(' + paramList.map(printNamedParam).join(', ') + ')',
 				(subResult) => next({ ...context, testParameters: paramList }, subResult),
 				{ isBoring: count > 10 },
 			);
 		}
 	}, { order, name: 'parameterised' });
 };
+
+function printNamedParam(param) {
+	if (typeof param === 'object' && typeof param?.name === 'string') {
+		return param.name;
+	}
+	return print(param);
+}
 
 const norm2 = (pSet) => {
 	let allArrays = true;

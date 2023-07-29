@@ -444,6 +444,17 @@ parameters:
 }
 ```
 
+By default, the tests will be named using a stringified version of all the
+parameters, but if you provide an object with a `name` property, that name
+will be used instead:
+
+```javascript
+{ parameters: [
+	{ name: 'my first test', v1: 1, v2: 2 },
+	{ name: 'my second test', v1: 1, v2: 2 },
+] }
+```
+
 ### timeout
 
 ```javascript

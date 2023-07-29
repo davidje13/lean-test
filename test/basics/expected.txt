@@ -19,6 +19,9 @@
 [PASS]   test: multiple parameters [xx]
 [PASS]     ("a", 1) [xx]
 [PASS]     ("b", 2) [xx]
+[PASS]   test: named parameters [xx]
+[PASS]     (first) [xx]
+[PASS]     (second) [xx]
 [PASS]   test: matrix parameters [xx]
 [PASS]     ("a", 1) [xx]
 [PASS]     ("a", 2) [xx]
@@ -76,8 +79,8 @@ suite: retry.spec.mjs - test: reports individual runs - attempt 3 of 3
   Failure: expected failure
    at test/basics/retry.spec.mjs:2:2
 
-Total:    21
-Pass:     18
+Total:    23
+Pass:     20
 Errors:   0
 Failures: 3
 Skipped:  0
