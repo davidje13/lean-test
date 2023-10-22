@@ -12,14 +12,14 @@
   script:
   - npm install-test
 
-node:16:
-  <<: *common
-  image: node:16
-
 node:18:
   <<: *common
   image: node:18
 
-node:19:
+node:20:
   <<: *common
-  image: node:19
+  image: node:20
+
+node:21:
+  <<: *common
+  image: node:21

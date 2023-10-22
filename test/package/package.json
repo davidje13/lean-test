@@ -13,8 +13,8 @@
     "@babel/core": "7.x",
     "@babel/plugin-transform-react-jsx": "7.x",
     "lean-test": "file:lean-test.tgz",
-    "rollup": "3.x",
-    "typescript": "5.0.x",
+    "rollup": "4.x",
+    "typescript": "5.2.x",
     "webpack": "5.x"
   }
 }

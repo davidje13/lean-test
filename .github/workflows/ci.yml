@@ -13,9 +13,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { node: '16' }
           - { node: '18' }
-          - { node: '19' }
+          - { node: '20' }
+          - { node: '21' }
     steps:
       - name: Checkout
         uses: actions/checkout@v2
