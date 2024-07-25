@@ -20,14 +20,19 @@ async function runExitHooks() {
 		process.stderr.write('\u001B[0m');
 	}
 
-	var info = setTimeout(() => process.stderr.write(`\nTeardown in progress; please wait (warning: forcing exit could result in left-over processes)\n`), 200);
+	const info = setTimeout(() => process.stderr.write(`\nTeardown in progress; please wait (warning: forcing exit could result in left-over processes)\n`), 200);
 
 	// run hooks
 	for (const hook of hooks) {
 		await hook();
 	}
 	clearTimeout(info);
-	process.exit(1);
+
+	// wait for streams to flush to avoid losing output unnecessarily
+	Promise.all([
+		new Promise((resolve) => process.stdout.write('', resolve)),
+		new Promise((resolve) => process.stderr.write('', resolve)),
+	]).then(() => process.exit(1));
 }
 
 function checkExit() {

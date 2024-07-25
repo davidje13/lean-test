@@ -1268,14 +1268,23 @@ try {
 	}
 
 	if (result.summary.error || result.summary.fail || !result.summary.pass) {
-		process$1.exit(1);
+		await exit(1);
 	} else {
-		process$1.exit(0); // explicitly exit to avoid hanging on dangling promises
+		await exit(0); // explicitly exit to avoid hanging on dangling promises
 	}
 } catch (e) {
 	if (!(e instanceof Error)) {
 		throw e;
 	}
 	process$1.stdout.write(`\n${e.message}\n`);
-	process$1.exit(1);
+	await exit(1);
+}
+
+async function exit(code) {
+	// process.exit may lose stream data which has been buffered in NodeJS - wait for it all to be flushed before exiting
+	await Promise.all([
+		new Promise((resolve) => process$1.stdout.write('', resolve)),
+		new Promise((resolve) => process$1.stderr.write('', resolve)),
+	]);
+	process$1.exit(code);
 }

@@ -5,6 +5,7 @@ import { dirname, resolve } from 'path';
 import { spawn } from 'child_process';
 import { readFile } from 'fs/promises';
 
+const baseDir = resolve(dirname(process.argv[1]), '..');
 const [red, green] = makeColours(process.stdout, [31], [32]);
 
 process.stdout.write('Running integration tests...\n\n');
@@ -18,6 +19,7 @@ results.push(...await Promise.all([
 	runIntegrationTest('reporting', 'expected.txt', '--parallel'),
 	runIntegrationTest('browser-broken', 'expected.txt', '--parallel', '--target=chrome'), // slow
 	runIntegrationTest('modules', 'expected.txt', '--parallel', '--target=node,chrome,firefox', '--import-map'),
+	runSlowOutputIntegrationTest(),
 ]));
 // run separately to avoid needing multiple browser sessions for the same browser at a time on CI
 results.push(...await Promise.all([
@@ -30,15 +32,12 @@ results.push(...await Promise.all([
 
 process.stdout.write('\nIntegration tests: ');
 if (results.some((result) => !result)) {
-	process.stdout.write(red('FAIL\n'));
-	process.exit(1);
+	process.stdout.write(red('FAIL\n'), () => process.exit(1));
 } else {
-	process.stdout.write(green('PASS\n'));
-	process.exit(0);
+	process.stdout.write(green('PASS\n'), () => process.exit(0));
 }
 
 async function runIntegrationTest(dir, expectedFile = 'expected.txt', ...opts) {
-	const baseDir = resolve(dirname(process.argv[1]), '..');
 	const expected = await readFile(resolve(baseDir, 'test', dir, expectedFile));
 	const expectedStr = expected.toString('utf-8');
 
@@ -65,6 +64,39 @@ async function runIntegrationTest(dir, expectedFile = 'expected.txt', ...opts) {
 		process.stdout.write(`Output did not match expectation in ${dir}/${expectedFile}.\n`);
 	}
 	return match;
+}
+
+async function runSlowOutputIntegrationTest() {
+	const proc = spawn(
+		resolve(baseDir, 'build', 'bin', 'run.mjs'),
+		['--colour=false'],
+		{ cwd: resolve(baseDir, 'test', 'slowoutput'), stdio: ['ignore', 'pipe', 'ignore'] },
+	);
+	const stdoutQtyP = slowConsume(proc.stdout);
+	await new Promise((resolve, reject) => {
+		proc.addListener('error', reject);
+		proc.addListener('exit', resolve);
+	});
+	const stdoutQty = await stdoutQtyP;
+
+	// The "noisy" test produces 40kB of output (doubled to 80kB because the failing tests are repeated)
+	// If the process exits before flushing the output streams, we won't see the full output here
+	const pass = stdoutQty > 80000;
+	const marker = pass ? green('[PASS]') : red('[FAIL]');
+	process.stdout.write(`${marker} slow output (got ${stdoutQty} bytes)\n`);
+	return pass;
+}
+
+function slowConsume(pipe) {
+	return new Promise((resolve) => {
+		let total = 0;
+		pipe.addListener('data', (d) => {
+			total += d.length;
+			pipe.pause();
+			setTimeout(() => pipe.resume(), 10);
+		});
+		pipe.addListener('close', () => resolve(total));
+	});
 }
 
 function invoke(exec, args, opts = {}) {
