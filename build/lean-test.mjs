@@ -2255,6 +2255,21 @@ function mockFunction(name, original) {
 	fn.whenCalledWith = (...args) => fn.whenCalled().with(...args);
 	fn.returning = (value) => fn.whenCalled().thenReturn(value);
 	fn.throwing = (error) => fn.whenCalled().thenThrow(error);
+	fn.getInvocation = (i = 0) => {
+		if (i < 0 || typeof i !== 'number' || Math.round(i) !== i) {
+			throw new TypeError('invalid invocation index');
+		}
+		if (i >= invocations.length) {
+			throw new TestAssertionError(`Expected mock to have been called at least ${i + 1} time(s), but was called ${invocations.length} time(s)`, 1);
+		}
+		return invocations[i];
+	};
+	fn.getLatestInvocation = () => {
+		if (!invocations.length) {
+			throw new TestAssertionError('Expected mock to have been called at least once', 1);
+		}
+		return invocations[invocations.length - 1];
+	};
 	fn.reset = () => {
 		invocations.length = 0;
 		actions.length = 0;

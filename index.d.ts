@@ -328,6 +328,11 @@ interface MockAction<T extends (...args: any[]) => any> {
 	thenThrow(error: unknown): Mocking<T>;
 }
 
+interface MockInvocation<T extends (...args: any) => any> {
+	readonly arguments: Parameters<T>;
+	readonly stack: string | undefined;
+}
+
 type Mocking<T extends (...args: any) => any> = T & {
 	whenCalled(): MockAction<T>;
 	whenCalledNext(): MockAction<T>;
@@ -335,6 +340,8 @@ type Mocking<T extends (...args: any) => any> = T & {
 	returning(value: ReturnType<T>): Mocking<T>;
 	throwing(error: unknown): Mocking<T>;
 	reset(): Mocking<T>;
+	getInvocation(index?: number): MockInvocation<T>;
+	getLatestInvocation(): MockInvocation<T>;
 };
 
 export namespace helpers {
@@ -437,7 +444,7 @@ interface matchers {
 	readonly isListOf: (...expectation: (SyncMatcher<any> | unknown)[]) => SyncMatcher<Array<unknown> | undefined | null>;
 	readonly hasProperty: (name: symbol | string | number, expectation?: SyncMatcher<any> | unknown) => SyncMatcher<unknown>;
 
-	readonly hasBeenCalled: (options?: { times?: number }) => SyncMatcher<(...args: unknown[]) => unknown>;
+	readonly hasBeenCalled: (options?: { times?: number }) => SyncMatcher<(...args: any[]) => any>;
 	readonly hasBeenCalledWith: <A extends any[]>(...args: SyncMatchersOrValues<A>) => SyncMatcher<(...args: A) => any>;
 
 	// compatibility aliases
@@ -462,7 +469,7 @@ interface matchers {
 	readonly toContain: (expectation?: SyncMatcher<any> | string | unknown) => SyncMatcher<string | Array<unknown> | Set<unknown> | undefined | null>;
 	readonly toHaveProperty: (name: symbol | string | number, expectation?: SyncMatcher<any> | unknown) => SyncMatcher<unknown>;
 
-	readonly toHaveBeenCalled: (options?: { times?: number }) => SyncMatcher<(...args: unknown[]) => unknown>;
+	readonly toHaveBeenCalled: (options?: { times?: number }) => SyncMatcher<(...args: any[]) => any>;
 	readonly toHaveBeenCalledWith: <A extends any[]>(...args: SyncMatchersOrValues<A>) => SyncMatcher<(...args: A) => any>;
 }
 export const matchers: matchers;
@@ -546,7 +553,7 @@ declare global { // same as DiscoveryGlobals + matchers
 	const isListOf: (...expectation: (SyncMatcher<any> | unknown)[]) => SyncMatcher<Array<unknown> | undefined | null>;
 	const hasProperty: (name: symbol | string | number, expectation?: SyncMatcher<any> | unknown) => SyncMatcher<unknown>;
 
-	const hasBeenCalled: (options?: { times?: number }) => SyncMatcher<(...args: unknown[]) => unknown>;
+	const hasBeenCalled: (options?: { times?: number }) => SyncMatcher<(...args: any[]) => any>;
 	const hasBeenCalledWith: <A extends any[]>(...args: SyncMatchersOrValues<A>) => SyncMatcher<(...args: A) => any>;
 
 	// compatibility aliases
@@ -571,6 +578,6 @@ declare global { // same as DiscoveryGlobals + matchers
 	const toContain: (expectation?: SyncMatcher<any> | string | unknown) => SyncMatcher<string | Array<unknown> | Set<unknown> | undefined | null>;
 	const toHaveProperty: (name: symbol | string | number, expectation?: SyncMatcher<any> | unknown) => SyncMatcher<unknown>;
 
-	const toHaveBeenCalled: (options?: { times?: number }) => SyncMatcher<(...args: unknown[]) => unknown>;
+	const toHaveBeenCalled: (options?: { times?: number }) => SyncMatcher<(...args: any[]) => any>;
 	const toHaveBeenCalledWith: <A extends any[]>(...args: SyncMatchersOrValues<A>) => SyncMatcher<(...args: A) => any>;
 }

@@ -168,6 +168,31 @@ describe('mock function', {
 		fn.reset();
 		expect(fn()).isUndefined();
 	},
+
+	'getInvocation and getLatestInvocation return the requested invocation'() {
+		const fn = mock();
+		fn('foo', 'bar');
+		fn('baz');
+
+		expect(fn.getInvocation(0).arguments).equals(['foo', 'bar']);
+		expect(fn.getInvocation(1).arguments).equals(['baz']);
+
+		expect(fn.getInvocation().arguments).equals(['foo', 'bar']);
+		expect(fn.getLatestInvocation().arguments).equals(['baz']);
+	},
+
+	'getInvocation throws an assertion error if the mock has not been called enough times'() {
+		const fn = mock();
+		fn('foo', 'bar');
+
+		expect(() => fn.getInvocation(1)).throws('Expected mock to have been called at least 2 time(s), but was called 1 time(s)');
+	},
+
+	'getLatestInvocation throws an assertion error if the mock has not been called'() {
+		const fn = mock();
+
+		expect(() => fn.getLatestInvocation()).throws('Expected mock to have been called at least once');
+	},
 });
 
 describe('mock method', {
