@@ -1441,6 +1441,9 @@ const contains = (sub) => (actual) => {
 		} else {
 			return { pass: false, message: `Expected to contain element matching ${print(sub)}, but got non-collection type ${print(actual)}.` };
 		}
+		if (results.some((r) => !r || typeof r !== 'object' || typeof r.pass !== 'boolean')) {
+			throw new Error('contains cannot take a function directly; use contains(equals(myFunction)) to check if a list contains a function.');
+		}
 		const passes = results.filter((r) => r.pass);
 		if (passes.length > 0) {
 			return { pass: true, message: `Expected not to contain any element matching ${print(sub)}, but got ${print(actual)}.` };

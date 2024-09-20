@@ -128,6 +128,10 @@ describe('contains', {
 		expect(resultFail.pass, isFalse());
 	},
 
+	'errors if asked to find a function'() {
+		expect(() => matchers.contains(() => null)(['abc']), throws('contains cannot take a function directly'));
+	},
+
 	'checks sets'() {
 		const resultPass = matchers.contains('foo')(new Set(['abc', 'foo', 'def']));
 		expect(resultPass.pass, isTrue());
