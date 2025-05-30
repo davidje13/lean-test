@@ -1,6 +1,6 @@
 import { cwd, versions, env } from 'process';
 import path, { resolve as resolve$1, dirname } from 'path';
-import { access, stat, readFile } from 'fs/promises';
+import { readFile, access, stat } from 'fs/promises';
 import { constants } from 'fs';
 import { promisify } from 'util';
 

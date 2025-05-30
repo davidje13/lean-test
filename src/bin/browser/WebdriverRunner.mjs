@@ -1,5 +1,5 @@
 import process from 'process';
-import { networkInterfaces } from 'os';
+import { networkInterfaces, hostname } from 'os';
 import HttpServerRunner from './HttpServerRunner.mjs';
 import WebdriverSession from './WebdriverSession.mjs';
 
@@ -10,6 +10,7 @@ export default class WebdriverRunner extends HttpServerRunner {
 		this.webdriverHost = webdriverHost;
 		this.capabilities = capabilities;
 		this.session = null;
+		this.hostURL = null;
 		this.finalURL = null;
 		this.finalTitle = null;
 	}
@@ -42,7 +43,8 @@ export default class WebdriverRunner extends HttpServerRunner {
 		const server = sharedState[HttpServerRunner.SERVER];
 		const postListener = sharedState[HttpServerRunner.POST_LISTENER];
 
-		const browserID = await makeConnection(this.session, server, postListener);
+		const { url, browserID } = await makeConnection(this.session, server, postListener);
+		this.hostURL = url;
 		this.setBrowserID(browserID);
 		return super.invoke(listener, sharedState);
 	}
@@ -63,9 +65,13 @@ export default class WebdriverRunner extends HttpServerRunner {
 
 	debug() {
 		if (this.finalURL === null) {
-			return 'failed to create session';
+			if (this.hostURL === null) {
+				return 'failed to create session';
+			} else {
+				return `Host='${this.hostURL}' failed to create session`;
+			}
 		}
-		return `URL='${this.finalURL}' Title='${this.finalTitle}'`;
+		return `Host='${this.hostURL}' URL='${this.finalURL}' Title='${this.finalTitle}'`;
 	}
 }
 
@@ -75,6 +81,7 @@ async function makeConnection(session, server, postListener) {
 		server.baseurl(process.env.WEBDRIVER_TESTRUNNER_HOST),
 		server.baseurl(),
 		server.baseurl('host.docker.internal'), // See https://stackoverflow.com/a/43541732/1180785
+		server.baseurl(hostname()),
 		...Object.values(networkInterfaces())
 			.flatMap((i) => i)
 			.filter((i) => !i.internal)
@@ -94,7 +101,7 @@ async function makeConnection(session, server, postListener) {
 			const tm0 = Date.now();
 			do {
 				if (postListener.hasQueuedEvents(browserID)) {
-					return browserID;
+					return { url, browserID };
 				}
 				await new Promise((resolve) => setTimeout(resolve, 50));
 			} while (Date.now() < tm0 + 1000);
