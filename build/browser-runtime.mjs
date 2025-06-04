@@ -39,12 +39,20 @@ class Aggregator {
 		this.sending = true;
 		try {
 			while (this.queue.length) {
-				const current = this.queue.splice(0, unbatched ? this.queue.length : 200);
+				const current = this.queue.splice(
+					0,
+					unbatched ? this.queue.length : 200,
+				);
 				await this.next(current);
 			}
 		} catch (e) {
 			console.error('error during throttled call', e);
-			await this.next([{ type: 'runner-error', message: `communication error in throttled call: ${e}` }]);
+			await this.next([
+				{
+					type: 'runner-error',
+					message: `communication error in throttled call: ${e}`,
+				},
+			]);
 		} finally {
 			this.sending = false;
 		}
@@ -64,14 +72,20 @@ class Aggregator {
 async function run(id, config, suites) {
 	window.title = `Lean Test Runner (${id}) - running`;
 	const compress = ExternalRunner.compressor();
-	const eventDispatcher = new Aggregator((events) => fetch('/', {
-		method: 'POST',
-		body: JSON.stringify({ id, events: events.map(compress) }),
-		// cannot use keepalive on all requests as it imposes a low limit on size of POSTed data
-	}));
+	const eventDispatcher = new Aggregator((events) =>
+		fetch('/', {
+			method: 'POST',
+			body: JSON.stringify({ id, events: events.map(compress) }),
+			// cannot use keepalive on all requests as it imposes a low limit on size of POSTed data
+		}),
+	);
 	eventDispatcher.invoke({ type: 'runner-connect' });
 
-	if (config.importMap && HTMLScriptElement.supports && !HTMLScriptElement.supports('importmap')) {
+	if (
+		config.importMap &&
+		HTMLScriptElement.supports &&
+		!HTMLScriptElement.supports('importmap')
+	) {
 		eventDispatcher.invoke({
 			type: 'runner-unsupported',
 			message: 'Browser does not support import map',
@@ -80,7 +94,10 @@ async function run(id, config, suites) {
 		return;
 	}
 
-	const ping = setInterval(() => eventDispatcher.invoke({ type: 'runner-ping' }), 500);
+	const ping = setInterval(
+		() => eventDispatcher.invoke({ type: 'runner-ping' }),
+		500,
+	);
 
 	const unload = () => {
 		eventDispatcher.sendNow(true);
@@ -89,7 +106,10 @@ async function run(id, config, suites) {
 			body: JSON.stringify({
 				id,
 				events: [
-					{ type: 'runner-disconnect', message: 'page closed (did a test change window.location?)' },
+					{
+						type: 'runner-disconnect',
+						message: 'page closed (did a test change window.location?)',
+					},
 				],
 			}),
 			keepalive: true, // allow sending in background even after page unloads
@@ -104,7 +124,9 @@ async function run(id, config, suites) {
 			.useParallelSuites(config.parallelSuites);
 
 		if (config.orderingRandomSeed) {
-			builder.useExecutionOrderer(new orderers.SeededRandom(config.orderingRandomSeed));
+			builder.useExecutionOrderer(
+				new orderers.SeededRandom(config.orderingRandomSeed),
+			);
 		}
 
 		suites.forEach(({ path, relative }) => {

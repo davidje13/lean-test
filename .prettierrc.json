@@ -1,0 +1,10 @@
+{
+	"singleQuote": true,
+	"trailingComma": "all",
+	"useTabs": true,
+	"plugins": ["./tooling/prettier-organise-imports.mjs"],
+	"overrides": [
+		{ "files": "*.md", "options": { "proseWrap": "always" } },
+		{ "files": "*.json", "options": { "trailingComma": "none" } }
+	]
+}

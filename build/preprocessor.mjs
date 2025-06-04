@@ -4,12 +4,18 @@ import { readFile, access, stat } from 'fs/promises';
 import { constants } from 'fs';
 import { promisify } from 'util';
 
-const dynamicImport = (dependency, name) => import(dependency).catch(() => {
-	throw new Error(`Must install ${dependency} to use ${name} (npm install --save-dev ${dependency})`);
-});
+const dynamicImport = (dependency, name) =>
+	import(dependency).catch(() => {
+		throw new Error(
+			`Must install ${dependency} to use ${name} (npm install --save-dev ${dependency})`,
+		);
+	});
 
 var babel = async () => {
-	const { default: babel } = await dynamicImport('@babel/core', 'babel preprocessor');
+	const { default: babel } = await dynamicImport(
+		'@babel/core',
+		'babel preprocessor',
+	);
 
 	return {
 		resolve(path, from) {
@@ -30,20 +36,26 @@ var babel = async () => {
 
 var rollup = async () => {
 	const { rollup } = await dynamicImport('rollup', 'rollup preprocessor');
-	const {
-		default: loadConfigFile2x,
-		loadConfigFile: loadConfigFile3x,
-	} = await dynamicImport('rollup/loadConfigFile', 'rollup preprocessor');
+	const { default: loadConfigFile2x, loadConfigFile: loadConfigFile3x } =
+		await dynamicImport('rollup/loadConfigFile', 'rollup preprocessor');
 
 	const loadConfigFile = loadConfigFile3x ?? loadConfigFile2x; // export name changed in 3.0
 	const loadConfigOptions = { format: 'es', silent: true };
-	const { options } = await loadConfigFile(resolve$1(cwd(), 'rollup.config.js'), loadConfigOptions)
-		.catch(() => loadConfigFile(resolve$1(cwd(), 'rollup.config.mjs'), loadConfigOptions))
+	const { options } = await loadConfigFile(
+		resolve$1(cwd(), 'rollup.config.js'),
+		loadConfigOptions,
+	)
+		.catch(() =>
+			loadConfigFile(resolve$1(cwd(), 'rollup.config.mjs'), loadConfigOptions),
+		)
 		.catch((e) => {
-			throw new Error(`Failed to read rollup.config.js / rollup.config.mjs: ${e}`);
+			throw new Error(
+				`Failed to read rollup.config.js / rollup.config.mjs: ${e}`,
+			);
 		});
 	const config = options[0] ?? {};
-	const outputConfig = (Array.isArray(config.output) ? config.output[0] : config.output) ?? {};
+	const outputConfig =
+		(Array.isArray(config.output) ? config.output[0] : config.output) ?? {};
 
 	return {
 		resolve(path, from) {
@@ -69,7 +81,10 @@ var rollup = async () => {
 					throw new Error('No output from rollup');
 				}
 				if (output.length > 1) {
-					throw new Error('Too much output from rollup: ' + output.map((o) => o.fileName).join(', '));
+					throw new Error(
+						'Too much output from rollup: ' +
+							output.map((o) => o.fileName).join(', '),
+					);
 				}
 				const result = output[0];
 				return {
@@ -89,9 +104,15 @@ var tsc = async () => {
 
 	const compilerOptions = readCompilerOptions(ts, baseDir);
 	const host = ts.createCompilerHost(compilerOptions);
-	const cache = ts.createModuleResolutionCache(baseDir, host.getCanonicalFileName, compilerOptions);
+	const cache = ts.createModuleResolutionCache(
+		baseDir,
+		host.getCanonicalFileName,
+		compilerOptions,
+	);
 
-	const resolver = (path, from) => ts.resolveModuleName(path, from, compilerOptions, host, cache).resolvedModule?.resolvedFileName;
+	const resolver = (path, from) =>
+		ts.resolveModuleName(path, from, compilerOptions, host, cache)
+			.resolvedModule?.resolvedFileName;
 
 	return {
 		async resolve(path, from) {
@@ -102,8 +123,7 @@ var tsc = async () => {
 				if (stats.isFile()) {
 					return fullPath;
 				}
-			} catch (_) {
-			}
+			} catch (_) {}
 			return resolver(path, from);
 		},
 		async load(fullPath) {
@@ -132,17 +152,27 @@ var tsc = async () => {
 };
 
 function readCompilerOptions(ts, path) {
-	const configPath = ts.findConfigFile(path, ts.sys.fileExists, 'tsconfig.json');
+	const configPath = ts.findConfigFile(
+		path,
+		ts.sys.fileExists,
+		'tsconfig.json',
+	);
 	if (!configPath) {
 		return {};
 	}
 	// return ts.getParsedCommandLineOfConfigFile(configPath, undefined, { ...ts.sys, onUnRecoverableConfigFileDiagnostic: () => null })?.options ?? {};
 	const config = ts.readConfigFile(configPath, ts.sys.readFile);
-	return ts.parseJsonConfigFileContent(config.config, ts.sys, dirname(configPath))?.options ?? {};
+	return (
+		ts.parseJsonConfigFileContent(config.config, ts.sys, dirname(configPath))
+			?.options ?? {}
+	);
 }
 
 var webpack = async () => {
-	const { default: webpack } = await dynamicImport('webpack', 'webpack preprocessor');
+	const { default: webpack } = await dynamicImport(
+		'webpack',
+		'webpack preprocessor',
+	);
 	const config = await loadWebpackConfig(cwd());
 
 	return {
@@ -177,7 +207,10 @@ var webpack = async () => {
 				throw new Error('No output from webpack');
 			}
 			if (output.allFiles.size > 1) {
-				throw new Error('Too much output from webpack: ' + [...output.allFiles.entries()].map(([name]) => name).join(', '));
+				throw new Error(
+					'Too much output from webpack: ' +
+						[...output.allFiles.entries()].map(([name]) => name).join(', '),
+				);
 			}
 			const [path, content] = output.allFiles.entries().next().value;
 			return { path, content };
@@ -270,12 +303,12 @@ class MemoryFileSystem {
 	}
 }
 
-var preprocessors = /*#__PURE__*/Object.freeze({
+var preprocessors = /*#__PURE__*/ Object.freeze({
 	__proto__: null,
 	babel: babel,
 	rollup: rollup,
 	tsc: tsc,
-	webpack: webpack
+	webpack: webpack,
 });
 
 const NODE_MAJOR = Number(versions.node.split('.')[0]);
@@ -291,7 +324,8 @@ async function resolve(specifier, context, nextResolve) {
 	const from = new URL(context.parentURL).pathname;
 	const fromParts = from.split(path.sep);
 	if (
-		(fromParts.includes('node_modules') && fromParts.includes('preprocessor.mjs')) ||
+		(fromParts.includes('node_modules') &&
+			fromParts.includes('preprocessor.mjs')) ||
 		path.resolve(from, specifier).split(path.sep).includes('node_modules')
 	) {
 		// naïve node_modules check to avoid deadlocks when loading preprocessor files
@@ -318,21 +352,25 @@ async function load(url, context, defaultLoad) {
 
 // legacy API (Node < 16)
 
-const getFormat = NODE_MAJOR < 16 && function(url, context, defaultGetFormat, ...rest) {
-	const parsedURL = new URL(url);
-	if (parsedURL.hash === HASH_MARKER) {
-		return { format: 'module' };
-	}
-	return defaultGetFormat(url, context, defaultGetFormat, ...rest);
-};
+const getFormat =
+	NODE_MAJOR < 16 &&
+	function (url, context, defaultGetFormat, ...rest) {
+		const parsedURL = new URL(url);
+		if (parsedURL.hash === HASH_MARKER) {
+			return { format: 'module' };
+		}
+		return defaultGetFormat(url, context, defaultGetFormat, ...rest);
+	};
 
-const getSource = NODE_MAJOR < 16 && async function(url, context, defaultGetSource, ...rest) {
-	const parsedURL = new URL(url);
-	if (parsedURL.hash === HASH_MARKER) {
-		const parsed = await preprocessor.load(parsedURL.pathname);
-		return { source: parsed.content };
-	}
-	return defaultGetSource(url, context, defaultGetSource, ...rest);
-};
+const getSource =
+	NODE_MAJOR < 16 &&
+	async function (url, context, defaultGetSource, ...rest) {
+		const parsedURL = new URL(url);
+		if (parsedURL.hash === HASH_MARKER) {
+			const parsed = await preprocessor.load(parsedURL.pathname);
+			return { source: parsed.content };
+		}
+		return defaultGetSource(url, context, defaultGetSource, ...rest);
+	};
 
 export { getFormat, getSource, load, preprocessors, resolve };

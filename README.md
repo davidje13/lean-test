@@ -1,6 +1,7 @@
 # Lean-Test
 
-A testing framework for when you want to test without adding hundreds of dependencies.
+A testing framework for when you want to test without adding hundreds of
+dependencies.
 
 Runs tests in NodeJS and/or in browsers.
 
@@ -26,14 +27,15 @@ npx lean-test --target chrome --target firefox
 - Low overhead (fast tests);
 - No dependencies;
 - Highly extensible plugin and reporter architecture:
-	- `stdout` / `stderr` / `console` capturing;
-	- lifecycle methods (`beforeAll` / `beforeEach` / `afterEach` / `afterAll`);
-	- repeated tests, failure tolerance;
-	- auto retry failing tests;
-	- parameterised tests;
-	- sequential test execution with stop at first failure (for flow testing);
-	- optional pseudo-random test execution ordering (with a seed to allow repetition);
-	- configurable test timeout.
+  - `stdout` / `stderr` / `console` capturing;
+  - lifecycle methods (`beforeAll` / `beforeEach` / `afterEach` / `afterAll`);
+  - repeated tests, failure tolerance;
+  - auto retry failing tests;
+  - parameterised tests;
+  - sequential test execution with stop at first failure (for flow testing);
+  - optional pseudo-random test execution ordering (with a seed to allow
+    repetition);
+  - configurable test timeout.
 
 ## Usage
 
@@ -49,7 +51,8 @@ Or run without installing:
 npx lean-test
 ```
 
-Automatically discovers all `.test.js` / `.spec.js` (and `.mjs`) files by default.
+Automatically discovers all `.test.js` / `.spec.js` (and `.mjs`) files by
+default.
 
 Tests can be writen in a variety of ways; the classic "globals" approach:
 
@@ -114,18 +117,19 @@ Or with shorthand `describe` syntax:
 ```javascript
 // myThing.spec.mjs
 
-export default ({ describe, expect }) => describe('my thing', {
-	'does a thing'() {
-		expect(3 * 3).equals(9);
-	},
-});
+export default ({ describe, expect }) =>
+	describe('my thing', {
+		'does a thing'() {
+			expect(3 * 3).equals(9);
+		},
+	});
 ```
 
 ## Features
 
-Most features are provided by plugins. The standard plugins are enabled by default, and
-offer the following features. You can also create your own plugins if you have bespoke
-needs.
+Most features are provided by plugins. The standard plugins are enabled by
+default, and offer the following features. You can also create your own plugins
+if you have bespoke needs.
 
 ### fail
 
@@ -152,8 +156,8 @@ expect(2, equals(2));
 expect(2).equals(2);
 ```
 
-Checks a condition, throwing a `TestAssertionError` if it fails (marking the test as
-failed).
+Checks a condition, throwing a `TestAssertionError` if it fails (marking the
+test as failed).
 
 ### assume
 
@@ -162,8 +166,8 @@ assume(2, equals(2));
 assume(2).equals(2);
 ```
 
-Checks a condition, throwing a `TestAssumptionError` if it fails (marking the test as
-skipped). Can use all the same matchers as `expect`.
+Checks a condition, throwing a `TestAssumptionError` if it fails (marking the
+test as skipped). Can use all the same matchers as `expect`.
 
 ### expect.extend
 
@@ -204,15 +208,15 @@ await expect.poll(() => getThing(), equals(6), {
 });
 ```
 
-Polls a condition repeatedly until it passes, throwing a `TestAssertionError` if the
-timeout is reached before the condition passes (marking the test as failed).
+Polls a condition repeatedly until it passes, throwing a `TestAssertionError` if
+the timeout is reached before the condition passes (marking the test as failed).
 
-The first parameter should be a function with no side-effects (as it will be invoked
-several times). The second parameter can be any matcher, including custom matchers.
-Note that `expect.poll` does not support fluent matcher syntax.
+The first parameter should be a function with no side-effects (as it will be
+invoked several times). The second parameter can be any matcher, including
+custom matchers. Note that `expect.poll` does not support fluent matcher syntax.
 
-You can optionally provide configuration for the polling behaviour. By default, it
-will poll every 50 milliseconds for up to 5 seconds.
+You can optionally provide configuration for the polling behaviour. By default,
+it will poll every 50 milliseconds for up to 5 seconds.
 
 ### mock
 
@@ -226,97 +230,88 @@ const spyLog = mock(console, 'log');
 
 // configure behaviour
 const myMock = mock()
-	.whenCalledWith(1, 'foo').thenReturn(10)
-	.whenCalledWith(greaterThan(5)).thenThrow(new Error('too much!'));
+	.whenCalledWith(1, 'foo')
+	.thenReturn(10)
+	.whenCalledWith(greaterThan(5))
+	.thenThrow(new Error('too much!'));
 ```
 
 Creates a mock function, or spies on an existing method.
 
-Mocked functions can be configured to return specific values when invoked,
-and can be checked to see if they were called with particular arguments (see
+Mocked functions can be configured to return specific values when invoked, and
+can be checked to see if they were called with particular arguments (see
 `hasBeenCalled` / `hasBeenCalledWith` below).
 
 The extra methods available on mocks and spies are:
 
-- `whenCalled()`:<br>
-	Begins a context for configuring behaviour when the function is called.
-	The returned object has several fluent-API methods:
+- `whenCalled()`:<br> Begins a context for configuring behaviour when the
+  function is called. The returned object has several fluent-API methods:
 
-	- `with(...arguments)`:<br>
-		Filters for invocations with matching arguments (can be literal values,
-		matchers, or a combination). By default, the arguments are not checked.
+  - `with(...arguments)`:<br> Filters for invocations with matching arguments
+    (can be literal values, matchers, or a combination). By default, the
+    arguments are not checked.
 
-	- `times(n)`:<br>
-		Limits the current configuration to a fixed number of invocations, after
-		which it is removed. This can be useful for configuring return values which
-		change in subsequent invocations. By default, there is no limit.
+  - `times(n)`:<br> Limits the current configuration to a fixed number of
+    invocations, after which it is removed. This can be useful for configuring
+    return values which change in subsequent invocations. By default, there is
+    no limit.
 
-	- `once()`:<br>
-		Shorthand for `.times(1)`.
+  - `once()`:<br> Shorthand for `.times(1)`.
 
-	- `then(func)`:<br>
-		Configures the mock to invoke the given function when an invocation matches
-		the current configuration. The function will be called with all provided
-		arguments, and its return value will be returned, so this acts as a
-		pass-through.
-		As a convenience, this returns the original mock function, so multiple
-		configurations can be chained easily.
+  - `then(func)`:<br> Configures the mock to invoke the given function when an
+    invocation matches the current configuration. The function will be called
+    with all provided arguments, and its return value will be returned, so this
+    acts as a pass-through. As a convenience, this returns the original mock
+    function, so multiple configurations can be chained easily.
 
-	- `thenReturn(value)`:<br>
-		Shorthand for `.then(() => value)`
+  - `thenReturn(value)`:<br> Shorthand for `.then(() => value)`
 
-	- `thenThrow(error)`:<br>
-		Shorthand for `.then(() => { throw error; })`
+  - `thenThrow(error)`:<br> Shorthand for `.then(() => { throw error; })`
 
-	- `thenResolve(value)`:<br>
-		Shorthand for `.thenReturn(Promise.resolve(value))`
+  - `thenResolve(value)`:<br> Shorthand for
+    `.thenReturn(Promise.resolve(value))`
 
-	- `thenReject(error)`:<br>
-		Shorthand for `.thenReturn(Promise.reject(error))`
+  - `thenReject(error)`:<br> Shorthand for `.thenReturn(Promise.reject(error))`
 
-	- `thenCallThrough()`:<br>
-		Configures the spy to invoke the original method when an invocation matches
-		the current configuration. This is the default for spies.
-		As a convenience, this returns the original mock function, so multiple
-		configurations can be chained easily.
+  - `thenCallThrough()`:<br> Configures the spy to invoke the original method
+    when an invocation matches the current configuration. This is the default
+    for spies. As a convenience, this returns the original mock function, so
+    multiple configurations can be chained easily.
 
-- `whenCalledWith(...arguments)`:<br>
-	Shorthand for `.whenCalled().with(...arguments)`.
+- `whenCalledWith(...arguments)`:<br> Shorthand for
+  `.whenCalled().with(...arguments)`.
 
-- `whenCalledNext()`:<br>
-	Shorthand for `.whenCalled().times(1)`.
+- `whenCalledNext()`:<br> Shorthand for `.whenCalled().times(1)`.
 
-- `returning(value)`:<br>
-	Shorthand for `.whenCalled().thenReturn(value)`.
+- `returning(value)`:<br> Shorthand for `.whenCalled().thenReturn(value)`.
 
-- `throwing(error)`:<br>
-	Shorthand for `.whenCalled().thenThrow(error)`.
+- `throwing(error)`:<br> Shorthand for `.whenCalled().thenThrow(error)`.
 
-- `reset()`:<br>
-	Resets the mock configuration and recorded invocations.
+- `reset()`:<br> Resets the mock configuration and recorded invocations.
 
-- `revert()`:<br>
-	Removes the spy, returning the original function (note that this only exists
-	for spies; it does not exist for mock functions).
+- `revert()`:<br> Removes the spy, returning the original function (note that
+  this only exists for spies; it does not exist for mock functions).
 
-- `getInvocation(index?)` and `getLatestInvocation()`:<br>
-  Returns an object containing the parameters the mock has been called with.
-	The object contains:
-	- `arguments`: a list of arguments passed when the function was called
-	- `stack`: a stacktrace for the invocation which can be used for debugging
-	   (currently generated by `new Error().stack`, but this could change in
-		 future versions, and the exact format can change between Node / browser
-		 versions) - can be `undefined` if the platform does not support stack
-		 traces.
+- `getInvocation(index?)` and `getLatestInvocation()`:<br> Returns an object
+  containing the parameters the mock has been called with. The object contains:
+  - `arguments`: a list of arguments passed when the function was called
+  - `stack`: a stacktrace for the invocation which can be used for debugging
+    (currently generated by `new Error().stack`, but this could change in future
+    versions, and the exact format can change between Node / browser versions) -
+    can be `undefined` if the platform does not support stack traces.
 
 If multiple `whenCalled*` configurations match an invocation, the first one is
 chosen. For example:
 
 ```javascript
 const fn = mock('my mocked function')
-	.whenCalledWith(greaterThan(2)).once().thenReturn('a')
-	.whenCalledWith(lessThan(6)).thenReturn('b')
-	.whenCalled().thenReturn('c');
+	.whenCalledWith(greaterThan(2))
+	.once()
+	.thenReturn('a')
+	.whenCalledWith(lessThan(6))
+	.thenReturn('b')
+	.whenCalled()
+	.thenReturn('c');
 
 fn(1); // b ('b' and 'c' match, so first is chosen)
 fn(4); // a (all match, so first is chosen)
@@ -334,34 +329,55 @@ const binaryValue = getStdout(true);
 const allOutput = getOutput();
 ```
 
-Returns the content of `stdout` / `stderr` captured from the current test so far.
-`getOutput` returns all content to both `stdout` and `stderr` in the order it was
-written.
+Returns the content of `stdout` / `stderr` captured from the current test so
+far. `getOutput` returns all content to both `stdout` and `stderr` in the order
+it was written.
 
-In the browser, only `getOutput()` is available, which returns all content printed
-to the console as a string. Note that the exact format of logged content is not
-guaranteed (in particular, the format of printed objects may vary and the output
-may include ANSI escape sequences for setting colours).
+In the browser, only `getOutput()` is available, which returns all content
+printed to the console as a string. Note that the exact format of logged content
+is not guaranteed (in particular, the format of printed objects may vary and the
+output may include ANSI escape sequences for setting colours).
 
-Also note that these may not capture all content; the capturing relies on inspecting
-stack traces, which will not work inside event callbacks such as `setTimeout` etc.
+Also note that these may not capture all content; the capturing relies on
+inspecting stack traces, which will not work inside event callbacks such as
+`setTimeout` etc.
 
 In NodeJS, `console.*` will produce content in `stdout`.
 
 ### ignore
 
 ```javascript
-it.ignore('will not run', () => { /* ... */ });
+it.ignore('will not run', () => {
+	/* ... */
+});
 
-describe.ignore('will not run', () => { /* ... */ });
+describe.ignore('will not run', () => {
+	/* ... */
+});
 
-it('will not run', { ignore: true }, () => { /* ... */ });
+it('will not run', { ignore: true }, () => {
+	/* ... */
+});
 
-describe('will not run', { ignore: true }, () => { /* ... */ });
+describe('will not run', { ignore: true }, () => {
+	/* ... */
+});
 
-it('will not run', () => { /* ... */ }, { ignore: true });
+it(
+	'will not run',
+	() => {
+		/* ... */
+	},
+	{ ignore: true },
+);
 
-describe('will not run', () => { /* ... */ }, { ignore: true });
+describe(
+	'will not run',
+	() => {
+		/* ... */
+	},
+	{ ignore: true },
+);
 ```
 
 Ignores a test or block. This will be reported as a skipped test.
@@ -369,32 +385,60 @@ Ignores a test or block. This will be reported as a skipped test.
 ### focus
 
 ```javascript
-it.focus('only this will run', () => { /* ... */ });
+it.focus('only this will run', () => {
+	/* ... */
+});
 
-describe.focus('only this will run', () => { /* ... */ });
+describe.focus('only this will run', () => {
+	/* ... */
+});
 
-it('only this will run', { focus: true }, () => { /* ... */ });
+it('only this will run', { focus: true }, () => {
+	/* ... */
+});
 
-describe('only this will run', { focus: true }, () => { /* ... */ });
+describe('only this will run', { focus: true }, () => {
+	/* ... */
+});
 
-it('only this will run', () => { /* ... */ }, { focus: true });
+it(
+	'only this will run',
+	() => {
+		/* ... */
+	},
+	{ focus: true },
+);
 
-describe('only this will run', () => { /* ... */ }, { focus: true });
+describe(
+	'only this will run',
+	() => {
+		/* ... */
+	},
+	{ focus: true },
+);
 ```
 
-Focuses a test or block. If any tests or blocks are focused, only the marked tests
-will run, and the rest will be reported as skipped.
+Focuses a test or block. If any tests or blocks are focused, only the marked
+tests will run, and the rest will be reported as skipped.
 
 ### repeat
 
 ```javascript
-it('will run multiple times', { repeat: 3 }, () => { /* ... */ });
+it('will run multiple times', { repeat: 3 }, () => {
+	/* ... */
+});
 
-it('will run multiple times', () => { /* ... */ }, { repeat: 3 });
+it(
+	'will run multiple times',
+	() => {
+		/* ... */
+	},
+	{ repeat: 3 },
+);
 ```
 
-Runs a test multiple times, expecting every run to succeed. Can also be configured with
-a failure tolerance:
+Runs a test multiple times, expecting every run to succeed. Can also be
+configured with a failure tolerance:
 
 ```javascript
 it('will run multiple times', { repeat: { total: 3, maxFailures: 1 } }, () => {
@@ -405,40 +449,73 @@ it('will run multiple times', { repeat: { total: 3, maxFailures: 1 } }, () => {
 ### retry
 
 ```javascript
-it('will retry on failure', { retry: 3 }, () => { /* ... */ });
+it('will retry on failure', { retry: 3 }, () => {
+	/* ... */
+});
 
-it('will retry on failure', () => { /* ... */ }, { retry: 3 });
+it(
+	'will retry on failure',
+	() => {
+		/* ... */
+	},
+	{ retry: 3 },
+);
 ```
 
-Runs a test multiple times until it succeeds. If any attempt succeeds, the test is
-considered a success.
+Runs a test multiple times until it succeeds. If any attempt succeeds, the test
+is considered a success.
 
 ### parameters
 
 ```javascript
-it('will run with multiple parameters', { parameters: [1, 2] }, (v) => { /* ... */ });
+it('will run with multiple parameters', { parameters: [1, 2] }, (v) => {
+	/* ... */
+});
 
-it('will run with multiple parameters', (v) => { /* ... */ }, { parameters: [1, 2] });
+it(
+	'will run with multiple parameters',
+	(v) => {
+		/* ... */
+	},
+	{ parameters: [1, 2] },
+);
 ```
 
-Runs a test multiple times with different parameters. There are a variety of ways
-to set parameters:
+Runs a test multiple times with different parameters. There are a variety of
+ways to set parameters:
 
 ```javascript
 // call with (1), (2):
-{ parameters: [1, 2] }
+{
+	parameters: [1, 2];
+}
 
 // multiple parameters:
 // call with (1, 2), (3, 4):
-{ parameters: [[1, 2], [3, 4]] }
+{
+	parameters: [
+		[1, 2],
+		[3, 4],
+	];
+}
 
 // parameter matrix:
 // call with (1, 3), (1, 4), (2, 3), (2, 4):
-{ parameters: [new Set([1, 2]), new Set([3, 4])] }
+{
+	parameters: [new Set([1, 2]), new Set([3, 4])];
+}
 
 // parameter matrix with multiple parameters:
 // call with (1, 'a', 3), (1, 'a', 4), (2, 'b', 3), (2, 'b', 4):
-{ parameters: [new Set([[1, 'a'], [2, 'b']]), new Set([3, 4])] }
+{
+	parameters: [
+		new Set([
+			[1, 'a'],
+			[2, 'b'],
+		]),
+		new Set([3, 4]),
+	];
+}
 ```
 
 You can also set a `parameterFilter` to exclude specific combinations of
@@ -455,30 +532,41 @@ parameters:
 ```
 
 By default, the tests will be named using a stringified version of all the
-parameters, but if you provide an object with a `name` property, that name
-will be used instead:
+parameters, but if you provide an object with a `name` property, that name will
+be used instead:
 
 ```javascript
-{ parameters: [
-	{ name: 'my first test', v1: 1, v2: 2 },
-	{ name: 'my second test', v1: 1, v2: 2 },
-] }
+{
+	parameters: [
+		{ name: 'my first test', v1: 1, v2: 2 },
+		{ name: 'my second test', v1: 1, v2: 2 },
+	];
+}
 ```
 
 ### timeout
 
 ```javascript
-it('will time out', { timeout: 1000 }, () => { /* ... */ });
+it('will time out', { timeout: 1000 }, () => {
+	/* ... */
+});
 
-it('will time out', () => { /* ... */ }, { timeout: 1000 });
+it(
+	'will time out',
+	() => {
+		/* ... */
+	},
+	{ timeout: 1000 },
+);
 ```
 
-Fails the test if it takes longer than the configured time (in milliseconds) to run.
+Fails the test if it takes longer than the configured time (in milliseconds) to
+run.
 
-Note that this will not be able to prevent "busy loops" such as `while (true) {}`,
-and will not terminate tasks which are running (so the test code may continue to
-execute even though the timeout has triggered), but any further exceptions will be
-ignored.
+Note that this will not be able to prevent "busy loops" such as
+`while (true) {}`, and will not terminate tasks which are running (so the test
+code may continue to execute even though the timeout has triggered), but any
+further exceptions will be ignored.
 
 ### stopAtFirstFailure
 
@@ -487,13 +575,17 @@ describe('my flow test', { stopAtFirstFailure: true }, () => {
 	// tests here
 });
 
-describe('my flow test', () => {
-	// tests here
-}, { stopAtFirstFailure: true });
+describe(
+	'my flow test',
+	() => {
+		// tests here
+	},
+	{ stopAtFirstFailure: true },
+);
 ```
 
-Stops executing tests within the current block if one fails (subsequent tests will be
-marked as skipped).
+Stops executing tests within the current block if one fails (subsequent tests
+will be marked as skipped).
 
 ### Lifecycle Hooks
 
@@ -519,15 +611,15 @@ describe('lifecycle', () => {
 });
 ```
 
-Registers execution listeners which will run before and after the whole block, or before
-and after each test within the block. Multiple hooks will be executed in the order they
-are defined. Nested blocks will be executed from outermost to innermost for `before`, and
-innermost to outermost for `after`.
+Registers execution listeners which will run before and after the whole block,
+or before and after each test within the block. Multiple hooks will be executed
+in the order they are defined. Nested blocks will be executed from outermost to
+innermost for `before`, and innermost to outermost for `after`.
 
 All methods can be asynchronous.
 
-`before` hooks can also return a function which will act like a corresponding `after`
-hook:
+`before` hooks can also return a function which will act like a corresponding
+`after` hook:
 
 ```javascript
 describe('lifecycle', () => {
@@ -546,9 +638,8 @@ describe('lifecycle', () => {
 });
 ```
 
-You can also set test parameters from a `beforeAll` or `beforeEach` hook.
-These parameters will be available to all tests which are inside the hook's
-scope.
+You can also set test parameters from a `beforeAll` or `beforeEach` hook. These
+parameters will be available to all tests which are inside the hook's scope.
 
 ```javascript
 describe('lifecycle', () => {
@@ -566,23 +657,26 @@ describe('lifecycle', () => {
 });
 ```
 
-This pattern can be useful for fully decoupling tests from global state, allowing
-them to run in parallel.
+This pattern can be useful for fully decoupling tests from global state,
+allowing them to run in parallel.
 
-These parameters are available in the first argument passed to the tests (see the
-destructuring example above). They are also available to other lifecycle hooks in
-the same way.
+These parameters are available in the first argument passed to the tests (see
+the destructuring example above). They are also available to other lifecycle
+hooks in the same way.
 
 To make parameters type-safe in TypeScript, you can use:
 
 ```typescript
 describe('lifecycle', () => {
-	const SERVER = beforeEach<Server>('launch server', async ({ setParameter }) => {
-		const server = await runServer();
-		setParameter(server);
+	const SERVER = beforeEach<Server>(
+		'launch server',
+		async ({ setParameter }) => {
+			const server = await runServer();
+			setParameter(server);
 
-		return () => server.close();
-	});
+			return () => server.close();
+		},
+	);
 
 	it('does a thing', ({ getTyped }) => {
 		// getTyped is always available and just retrieves the corresponding parameter,
@@ -609,254 +703,232 @@ describe('lifecycle', () => {
 		myLog.append(testPath.join(' > '));
 	});
 
-	it('my test', () => { /* ... */ });
+	it('my test', () => {
+		/* ... */
+	});
 });
 ```
 
 ## Standard Matchers
 
-- `equals(value)`:<br>
-	Recursively checks for equality.
+- `equals(value)`:<br> Recursively checks for equality.
 
-- `same(value)`:<br>
-	Checks strict (`===`) identity.
+- `same(value)`:<br> Checks strict (`===`) identity.
 
-- `isInstanceOf(class)`:<br>
-	Checks `instanceof`.
+- `isInstanceOf(class)`:<br> Checks `instanceof`.
 
-- `not(expectation)`:<br>
-	Negates another matcher.<br>
-	e.g. `expect(7, not(equals(4)))`
+- `not(expectation)`:<br> Negates another matcher.<br> e.g.
+  `expect(7, not(equals(4)))`
 
-- `any()`:<br>
-	Always matches. The negation `not(any())` always fails. Useful as a sub-matcher.
+- `any()`:<br> Always matches. The negation `not(any())` always fails. Useful as
+  a sub-matcher.
 
-- `matches(regexp)`:<br>
-	Checks if a string matches the given regular expression.
+- `matches(regexp)`:<br> Checks if a string matches the given regular
+  expression.
 
-- `withMessage(message, expectation)`:<br>
-	Customises the error message of another matcher.<br>
-	e.g. `expect(7, withMessage('hmm, not 7', equals(7)))`
+- `withMessage(message, expectation)`:<br> Customises the error message of
+  another matcher.<br> e.g. `expect(7, withMessage('hmm, not 7', equals(7)))`
 
-- `isTrue()`:<br>
-	Checks if `=== true`.
+- `isTrue()`:<br> Checks if `=== true`.
 
-- `isFalse()`:<br>
-	Checks if `=== false`.
+- `isFalse()`:<br> Checks if `=== false`.
 
-- `isTruthy()`:<br>
-	Checks if the value is truthy (`Boolean(value) === true`).
+- `isTruthy()`:<br> Checks if the value is truthy (`Boolean(value) === true`).
 
-- `isFalsy()`:<br>
-	Checks if the value is falsy (`Boolean(value) === false`).
+- `isFalsy()`:<br> Checks if the value is falsy (`Boolean(value) === false`).
 
-- `isNull()`:<br>
-	Checks if `=== null`.
+- `isNull()`:<br> Checks if `=== null`.
 
-- `isUndefined()`:<br>
-	Checks if `=== undefined`.
+- `isUndefined()`:<br> Checks if `=== undefined`.
 
-- `isNullish()`:<br>
-	Checks if the value is nullish `value === null || value === undefined`.
+- `isNullish()`:<br> Checks if the value is nullish
+  `value === null || value === undefined`.
 
-- `isGreaterThan(value)`:<br>
-	Checks if `> value`.
+- `isGreaterThan(value)`:<br> Checks if `> value`.
 
-- `isLessThan(value)`:<br>
-	Checks if `< value`.
+- `isLessThan(value)`:<br> Checks if `< value`.
 
-- `isGreaterThanOrEqual(value)`:<br>
-	Checks if `>= value`.
+- `isGreaterThanOrEqual(value)`:<br> Checks if `>= value`.
 
-- `isLessThanOrEqual(value)`:<br>
-	Checks if `<= value`.
+- `isLessThanOrEqual(value)`:<br> Checks if `<= value`.
 
-- `isNear(value[, precision])`:<br>
-	Checks if near `value`. By default, the comparison checks to 2 decimal places, but
-	you can configure this by providing an explicit precision. The types of precision
-	supported are:
-	- `{ tolerance: n }` sets an explicit permitted range (+/- `n`)
-	- `{ decimalPlaces: n }` sets an explicit number of decimal places to check
-		(+/- `0.5 * 10^-n`)
+- `isNear(value[, precision])`:<br> Checks if near `value`. By default, the
+  comparison checks to 2 decimal places, but you can configure this by providing
+  an explicit precision. The types of precision supported are:
 
-- `resolves(expectation)`:<br>
-	Checks if the given function or promise returns a value which matches the given
-	expectation (sub-matcher). `expectation` can also be a literal value, in which case
-	it behaves as if `equals(expectation)` were used. If no `expectation` is given, this
-	just checks that the funtion returns (does not throw).
+  - `{ tolerance: n }` sets an explicit permitted range (+/- `n`)
+  - `{ decimalPlaces: n }` sets an explicit number of decimal places to check
+    (+/- `0.5 * 10^-n`)
 
-	Note that if promises are involved, the `expect` call should be awaited:
+- `resolves(expectation)`:<br> Checks if the given function or promise returns a
+  value which matches the given expectation (sub-matcher). `expectation` can
+  also be a literal value, in which case it behaves as if `equals(expectation)`
+  were used. If no `expectation` is given, this just checks that the funtion
+  returns (does not throw).
 
-	```javascript
-	await expect(myPromise, resolves(equals(7)));
-	```
+  Note that if promises are involved, the `expect` call should be awaited:
 
-- `throws(expectation)`:<br>
-	Checks if the given function or promise throws a value which matches the given
-	expectation (sub-matcher). `expectation` can also be a literal string, in which case
-	it checks if the thrown `Error` message contains the given string. If no `expectation`
-	is given, this just checks that the funtion throws.
+  ```javascript
+  await expect(myPromise, resolves(equals(7)));
+  ```
 
-	Note that if promises are involved, the `expect` call should be awaited:
+- `throws(expectation)`:<br> Checks if the given function or promise throws a
+  value which matches the given expectation (sub-matcher). `expectation` can
+  also be a literal string, in which case it checks if the thrown `Error`
+  message contains the given string. If no `expectation` is given, this just
+  checks that the funtion throws.
 
-	```javascript
-	await expect(myPromise, throws('oops'));
-	```
+  Note that if promises are involved, the `expect` call should be awaited:
 
-- `hasLength(expectation)`:<br>
-	Checks if the value (an array, `Set`, `Map`, etc.) has a length matching the given
-	expectation (sub-matcher). `expectation` can also be a literal number, in which case
-	it behaves as if `equals(expectation)` were used. If no `expectation` is given, this
-	just checks that the value has a `length` or `size` property.
+  ```javascript
+  await expect(myPromise, throws('oops'));
+  ```
 
-- `isEmpty()`:<br>
-	Checks if the value (an array, `Set`, `Map`, etc.) has no items.
+- `hasLength(expectation)`:<br> Checks if the value (an array, `Set`, `Map`,
+  etc.) has a length matching the given expectation (sub-matcher). `expectation`
+  can also be a literal number, in which case it behaves as if
+  `equals(expectation)` were used. If no `expectation` is given, this just
+  checks that the value has a `length` or `size` property.
 
-- `contains(sub)`:<br>
-	Checks if the value (a string, array, or `Set`) contains the given substring or
-	sub-element.
+- `isEmpty()`:<br> Checks if the value (an array, `Set`, `Map`, etc.) has no
+  items.
 
-- `startsWith(sub)`:<br>
-	Checks if a string starts with the given substring.
+- `contains(sub)`:<br> Checks if the value (a string, array, or `Set`) contains
+  the given substring or sub-element.
 
-- `endsWith(sub)`:<br>
-	Checks if a string ends with the given substring.
+- `startsWith(sub)`:<br> Checks if a string starts with the given substring.
 
-- `isListOf(...elements)`:<br>
-	Checks if the value contains the given elements in the listed order. Elements can be
-	literal or matchers (these can be mixed).
+- `endsWith(sub)`:<br> Checks if a string ends with the given substring.
 
-- `hasProperty(name[, expectation])`:<br>
-	Checks if the value (any type) contains a property of the given name, optionally
-	matching the given expectation. If no `expectation` is given, this just checks that
-	the property exists on the object (using `hasOwnProperty`).
+- `isListOf(...elements)`:<br> Checks if the value contains the given elements
+  in the listed order. Elements can be literal or matchers (these can be mixed).
 
-- `hasBeenCalled()`:<br>
-	Checks that a mocked function has been invoked since being mocked.
+- `hasProperty(name[, expectation])`:<br> Checks if the value (any type)
+  contains a property of the given name, optionally matching the given
+  expectation. If no `expectation` is given, this just checks that the property
+  exists on the object (using `hasOwnProperty`).
 
-- `hasBeenCalledWith(...arguments)`:<br>
-	Checks that a mocked function has been invoked since being mocked, with the given
-	arguments (which can be literal, matchers, or a mix).
+- `hasBeenCalled()`:<br> Checks that a mocked function has been invoked since
+  being mocked.
+
+- `hasBeenCalledWith(...arguments)`:<br> Checks that a mocked function has been
+  invoked since being mocked, with the given arguments (which can be literal,
+  matchers, or a mix).
 
 ## CLI flags
 
 The `lean-test` executable can be configured in various ways:
 
-- `--preprocess <tool>` / `-c <tool>`:<br>
-	Applies the specified tool as a preprocessor for all source files (excluding
-	`node_modules` sources).
+- `--preprocess <tool>` / `-c <tool>`:<br> Applies the specified tool as a
+  preprocessor for all source files (excluding `node_modules` sources).
 
-	Current supported tooling:
-	- `babel`:<br>
-		The Babel transpiler. Looks for a `babel.config.*` or `.babelrc.*` file, or the
-		`babel` section of a `package.json` for configuration.
-		Requires `babel` (`npm install --save-dev @babel/core`).
+  Current supported tooling:
 
-	- `rollup`:<br>
-		The Rollup bundler. Looks for a `rollup.config.js` file for configuration (uses
-		the first entry if multiple configurations are defined).
-		Requires `rollup` (`npm install --save-dev rollup`).
+  - `babel`:<br> The Babel transpiler. Looks for a `babel.config.*` or
+    `.babelrc.*` file, or the `babel` section of a `package.json` for
+    configuration. Requires `babel` (`npm install --save-dev @babel/core`).
 
-	- `tsc`:<br>
-		The Typescript transpiler. Looks for a `tsconfig.json` file for configuration.
-		Requires `typescript` (`npm install --save-dev typescript`).
+  - `rollup`:<br> The Rollup bundler. Looks for a `rollup.config.js` file for
+    configuration (uses the first entry if multiple configurations are defined).
+    Requires `rollup` (`npm install --save-dev rollup`).
 
-	- `webpack`:<br>
-		The webpack bundler. Looks for a `.webpack/webpackfile`,
-		`.webpack/webpack.config.*`, or `webpack.config.*` file for configuration (uses
-		the first entry if multiple configurations are defined).
-		Requires `webpack` (`npm install --save-dev webpack`).
+  - `tsc`:<br> The Typescript transpiler. Looks for a `tsconfig.json` file for
+    configuration. Requires `typescript` (`npm install --save-dev typescript`).
 
-- `--target <name>` / `-t <name>` / environment `TARGET=<name>`:<br>
-	Runs the tests in the chosen target. Currently `node`, `chrome` and `firefox` are
-	supported, or use `url` then open the printed URL in any browser to start the tests.
+  - `webpack`:<br> The webpack bundler. Looks for a `.webpack/webpackfile`,
+    `.webpack/webpack.config.*`, or `webpack.config.*` file for configuration
+    (uses the first entry if multiple configurations are defined). Requires
+    `webpack` (`npm install --save-dev webpack`).
 
-	You can also use a WebDriver-compatible server (e.g. Selenium) by setting the
-	`WEBDRIVER_HOST` environment variable, or `WEBDRIVER_HOST_<BROWSER>` to set it for
-	a specific browser. For example:
+- `--target <name>` / `-t <name>` / environment `TARGET=<name>`:<br> Runs the
+  tests in the chosen target. Currently `node`, `chrome` and `firefox` are
+  supported, or use `url` then open the printed URL in any browser to start the
+  tests.
 
-	```sh
-	# alternatively this could be a grid, for example
-	docker run -d -p 4444:4444 --shm-size="2g" selenium/standalone-chrome
-	export WEBDRIVER_HOST=localhost:4444
-	lean-test --target=chrome
-	```
+  You can also use a WebDriver-compatible server (e.g. Selenium) by setting the
+  `WEBDRIVER_HOST` environment variable, or `WEBDRIVER_HOST_<BROWSER>` to set it
+  for a specific browser. For example:
 
-	```sh
-	docker run -d -p 4444:4444 --shm-size="2g" selenium/standalone-chrome
-	docker run -d -p 4445:4444 --shm-size="2g" selenium/standalone-firefox
-	export WEBDRIVER_HOST_CHROME=localhost:4444
-	export WEBDRIVER_HOST_FIREFOX=localhost:4445
-	lean-test --target=chrome --target=firefox
-	```
+  ```sh
+  # alternatively this could be a grid, for example
+  docker run -d -p 4444:4444 --shm-size="2g" selenium/standalone-chrome
+  export WEBDRIVER_HOST=localhost:4444
+  lean-test --target=chrome
+  ```
 
-	If you are using a remote browser, you will also need to set
-	`--host 0.0.0.0` (or equivalently `TESTRUNNER_HOST=0.0.0.0`) so that the test server
-	is accessible to the browser.
+  ```sh
+  docker run -d -p 4444:4444 --shm-size="2g" selenium/standalone-chrome
+  docker run -d -p 4445:4444 --shm-size="2g" selenium/standalone-firefox
+  export WEBDRIVER_HOST_CHROME=localhost:4444
+  export WEBDRIVER_HOST_FIREFOX=localhost:4445
+  lean-test --target=chrome --target=firefox
+  ```
 
-	If you specify more than one target, the tests will be run in all targets in
-	parallel, with the results containing one section per target:
+  If you are using a remote browser, you will also need to set `--host 0.0.0.0`
+  (or equivalently `TESTRUNNER_HOST=0.0.0.0`) so that the test server is
+  accessible to the browser.
 
-	```sh
-	lean-test --target=node,chrome,firefox
-	# or
-	lean-test --target node --target chrome --target firefox
-	```
+  If you specify more than one target, the tests will be run in all targets in
+  parallel, with the results containing one section per target:
 
-- `--port <number>` / environment `TESTRUNNER_PORT=<number>`:<br>
-	Sets an explicit port number for the browser-based tests to use. By default this is
-	`0` (pick random available port). This only takes effect if the tests are running in a
-	browser.
+  ```sh
+  lean-test --target=node,chrome,firefox
+  # or
+  lean-test --target node --target chrome --target firefox
+  ```
 
-- `--host <name>` / environment `TESTRUNNER_HOST=<name>`:<br>
-	Sets an explicit host name for the browser-based tests to use. By default this is
-	`127.0.0.1` (local loopback). This only takes effect if the tests are running in a
-	browser.
-	You may want to change this setting if you need to run tests in a browser running on a
-	different computer on the same network (e.g. by specifying `0.0.0.0` to make it
-	available over the network).
+- `--port <number>` / environment `TESTRUNNER_PORT=<number>`:<br> Sets an
+  explicit port number for the browser-based tests to use. By default this is
+  `0` (pick random available port). This only takes effect if the tests are
+  running in a browser.
 
-- `--import-map` / environment `IMPORT_MAP=true`:<br>
-	Generates an [import map](https://github.com/WICG/import-maps) for `node_modules`
-	imports. This only takes effect if the tests are running in a browser.
-	This allows non-relative imports like `import foo from 'foo';`, which will be
-	resolved by looking in `node_modules`, which means some projects can be tested
-	without needing a compilation / transpilation stage.
-	Note that import maps are currently supported by Chrome, Firefox, and Edge.
+- `--host <name>` / environment `TESTRUNNER_HOST=<name>`:<br> Sets an explicit
+  host name for the browser-based tests to use. By default this is `127.0.0.1`
+  (local loopback). This only takes effect if the tests are running in a
+  browser. You may want to change this setting if you need to run tests in a
+  browser running on a different computer on the same network (e.g. by
+  specifying `0.0.0.0` to make it available over the network).
 
-- `--parallel-suites` / `--parallel` / `-p` / environment `PARALLEL_SUITES=true`:<br>
-	Runs test suites in parallel. This is generally recommended unless the code being
-	tested may cause tests in different files to interfere with each other (e.g. uses
-	singletons or global state).
+- `--import-map` / environment `IMPORT_MAP=true`:<br> Generates an
+  [import map](https://github.com/WICG/import-maps) for `node_modules` imports.
+  This only takes effect if the tests are running in a browser. This allows
+  non-relative imports like `import foo from 'foo';`, which will be resolved by
+  looking in `node_modules`, which means some projects can be tested without
+  needing a compilation / transpilation stage. Note that import maps are
+  currently supported by Chrome, Firefox, and Edge.
+
+- `--parallel-suites` / `--parallel` / `-p` / environment
+  `PARALLEL_SUITES=true`:<br> Runs test suites in parallel. This is generally
+  recommended unless the code being tested may cause tests in different files to
+  interfere with each other (e.g. uses singletons or global state).
 
 - `--random-seed <seed>` / `-s <seed>` / environment `RANDOM_SEED=<seed>`:<br>
-	Randomise the order of the test in a deterministic (repeatable) way. The seed can
-	be a 32-character hexadecimal string, or the word `random` to pick a random seed
-	(the chosen seed will be printed at the end of the test run). If you want to
-	ensure that your tests do not depend on execution order, you can add
-	`--random-seed=random` to your standard test run command, then if an error appears,
-	you can use the seed it prints to re-run the tests in that order during debugging.
+  Randomise the order of the test in a deterministic (repeatable) way. The seed
+  can be a 32-character hexadecimal string, or the word `random` to pick a
+  random seed (the chosen seed will be printed at the end of the test run). If
+  you want to ensure that your tests do not depend on execution order, you can
+  add `--random-seed=random` to your standard test run command, then if an error
+  appears, you can use the seed it prints to re-run the tests in that order
+  during debugging.
 
-- `--include <pattern>` / `-i <pattern>`:<br>
-	Configures the search pattern glob. Can be set multiple times. By default, this is
-	`**/*.{spec|test}.*`.
+- `--include <pattern>` / `-i <pattern>`:<br> Configures the search pattern
+  glob. Can be set multiple times. By default, this is `**/*.{spec|test}.*`.
 
-- `--exclude <pattern>` / `-x <pattern>`:<br>
-	Configures the exclusion pattern glob. Can be set multiple times.
-	Note that `**/node_modules` and `**/.*` will always be excluded unless
-	`--no-default-exclude` is specified.
+- `--exclude <pattern>` / `-x <pattern>`:<br> Configures the exclusion pattern
+  glob. Can be set multiple times. Note that `**/node_modules` and `**/.*` will
+  always be excluded unless `--no-default-exclude` is specified.
 
-- `--no-default-exclude`:<br>
-	By default, `**/node_modules` and `**/.*` are always excluded. Setting this flag
-	allows them.
+- `--no-default-exclude`:<br> By default, `**/node_modules` and `**/.*` are
+  always excluded. Setting this flag allows them.
 
 - `--parallel-discovery` / `-P` / environment `PARALLEL_DISCOVERY=true`:<br>
-	Runs test discovery in parallel. This may be slightly faster than the default
-	(synchronous) discovery, but may fail with an error depending on the environment
-	and the test complexity.
+  Runs test discovery in parallel. This may be slightly faster than the default
+  (synchronous) discovery, but may fail with an error depending on the
+  environment and the test complexity.
 
-After the flags, you can provide one or more directories which will be used as starting
-points for scanning for tests (by default the current working directory is used).
+After the flags, you can provide one or more directories which will be used as
+starting points for scanning for tests (by default the current working directory
+is used).
 
 Example:
 
@@ -869,16 +941,17 @@ lean-test --parallel --target chrome -i '**/*.{js|mjs}' tests
 
 ### Chrome crashes with "session deleted because of page crash"
 
-This typically means that Chrome is running in a docker instance which has limited
-shared memory ("shm") available. If possible, configure the container with more space:
+This typically means that Chrome is running in a docker instance which has
+limited shared memory ("shm") available. If possible, configure the container
+with more space:
 
 ```sh
 docker run -d -p 4444:4444 --shm-size="2g" selenium/standalone-chrome
 ```
 
 If this is not possible (e.g. when using GitLab CI), you can set the
-`WEBDRIVER_DISABLE_SHM` environment variable, which will add `--disable-dev-shm-usage`
-to the requested Chrome capabilities.
+`WEBDRIVER_DISABLE_SHM` environment variable, which will add
+`--disable-dev-shm-usage` to the requested Chrome capabilities.
 
 ## CI Examples for Browser testing
 
@@ -886,9 +959,9 @@ These examples assume that `package.json` contains something like:
 
 ```json
 {
-  "scripts": {
-    "test": "lean-test --target=chrome,firefox"
-  }
+	"scripts": {
+		"test": "lean-test --target=chrome,firefox"
+	}
 }
 ```
 
@@ -898,17 +971,17 @@ These examples assume that `package.json` contains something like:
 build_and_test:
   image: node:16
   services:
-  - name: selenium/standalone-firefox
-    alias: firefox
-  - name: selenium/standalone-chrome
-    alias: chrome
+    - name: selenium/standalone-firefox
+      alias: firefox
+    - name: selenium/standalone-chrome
+      alias: chrome
   variables:
     WEBDRIVER_DISABLE_SHM: 'true'
     WEBDRIVER_HOST_CHROME: chrome:4444
     WEBDRIVER_HOST_FIREFOX: firefox:4444
     TESTRUNNER_HOST: '0.0.0.0'
   script:
-  - npm install-test
+    - npm install-test
 ```
 
 ### GitHub Actions
@@ -921,12 +994,12 @@ jobs:
   build_and_test:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout
-      uses: actions/checkout@v2
-    - name: Install Node
-      uses: actions/setup-node@v2
-      with:
-        node-version: '16'
-    - name: Test
-      run: npm install-test
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Install Node
+        uses: actions/setup-node@v2
+        with:
+          node-version: '16'
+      - name: Test
+        run: npm install-test
 ```

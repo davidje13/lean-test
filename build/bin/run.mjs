@@ -1,8 +1,24 @@
 #!/usr/bin/env node
 import process$1, { platform, getuid, env } from 'process';
 import { join, resolve, dirname, relative } from 'path';
-import { ExternalRunner, ExitHook, standardRunner, orderers, outputs, reporters, ParallelRunner } from '../lean-test.mjs';
-import { readdir, access, mkdtemp, rm, writeFile, readFile, realpath } from 'fs/promises';
+import {
+	ExternalRunner,
+	ExitHook,
+	standardRunner,
+	orderers,
+	outputs,
+	reporters,
+	ParallelRunner,
+} from '../lean-test.mjs';
+import {
+	readdir,
+	access,
+	mkdtemp,
+	rm,
+	writeFile,
+	readFile,
+	realpath,
+} from 'fs/promises';
 import { constants } from 'fs';
 import { spawn } from 'child_process';
 import { tmpdir, hostname, networkInterfaces } from 'os';
@@ -12,27 +28,36 @@ import { preprocessors } from '../preprocessor.mjs';
 const SPECIAL = /[^-a-zA-Z0-9 _]/g;
 const SPECIAL_REPLACE = (v) => {
 	switch (v) {
-		case '*': return '[^/]*';
-		case '{': return '(?:';
-		case '}': return ')';
-		case '|': return '|';
-		default: return '\\u' + v.charCodeAt(0).toString(16).padStart(4, '0');
+		case '*':
+			return '[^/]*';
+		case '{':
+			return '(?:';
+		case '}':
+			return ')';
+		case '|':
+			return '|';
+		default:
+			return '\\u' + v.charCodeAt(0).toString(16).padStart(4, '0');
 	}
 };
 
 class PathMatcher {
 	constructor(pattern) {
-		const options = (Array.isArray(pattern) ? pattern : [pattern]).map((p) => p.split('/').map((seg) => {
-			if (seg === '**') {
-				return '(?:.+/)?';
-			} else {
-				const regexp = seg.replace(SPECIAL, SPECIAL_REPLACE) + '/';
-				return regexp;
-			}
-		}));
+		const options = (Array.isArray(pattern) ? pattern : [pattern]).map((p) =>
+			p.split('/').map((seg) => {
+				if (seg === '**') {
+					return '(?:.+/)?';
+				} else {
+					const regexp = seg.replace(SPECIAL, SPECIAL_REPLACE) + '/';
+					return regexp;
+				}
+			}),
+		);
 
 		const full = options.map((choice) => choice.join('')).join('|');
-		const part = options.map((choice) => ('(?:' + choice.join('(?:') + ')?'.repeat(choice.length))).join('|');
+		const part = options
+			.map((choice) => '(?:' + choice.join('(?:') + ')?'.repeat(choice.length))
+			.join('|');
 
 		this.full = new RegExp(`^(?:${full})$`, 'i');
 		this.part = new RegExp(`^(?:${part})$`, 'i');
@@ -54,7 +79,10 @@ async function* scan(dir, relative, test) {
 		if (entry.isDirectory() && test(subRelative, false)) {
 			yield* scan(sub, subRelative, test);
 		} else if (entry.isFile() && test(subRelative, true)) {
-			yield { path: sub, relative: subRelative.substr(0, subRelative.length - 1) };
+			yield {
+				path: sub,
+				relative: subRelative.substr(0, subRelative.length - 1),
+			};
 		}
 	}
 }
@@ -127,7 +155,7 @@ class ArgumentParser {
 			case 'set':
 				const list = target[id] || [];
 				list.push(...(value ?? getValue()).split(','));
-				target[id] = (type === 'set') ? [...new Set(list)] : list;
+				target[id] = type === 'set' ? [...new Set(list)] : list;
 				break;
 			default:
 				throw new Error(`Unknown argument type for ${name}: ${type}`);
@@ -188,10 +216,15 @@ class ArgumentParser {
 				i += this.loadOpt(result, name, value, argv.slice(i + 1));
 			} else if (arg.startsWith('-')) {
 				const [names, value] = split2(arg.substr(1), '=');
-				for (let j = 0; j < names.length - 1; ++ j) {
+				for (let j = 0; j < names.length - 1; ++j) {
 					this.loadOpt(result, names[j], null, []);
 				}
-				i += this.loadOpt(result, names[names.length - 1], value, argv.slice(i + 1));
+				i += this.loadOpt(
+					result,
+					names[names.length - 1],
+					value,
+					argv.slice(i + 1),
+				);
 			} else {
 				this.loadOpt(result, null, arg, []);
 			}
@@ -239,19 +272,29 @@ async function asyncListToSync(items) {
 	return result;
 }
 
-const invoke = (exec, args, opts = {}) => new Promise((resolve, reject) => {
-	const proc = spawn(exec, args, { ...opts, stdio: ['ignore', 'pipe', 'pipe'] });
-	const stdout = addDataListener(proc.stdout);
-	const stderr = addDataListener(proc.stderr);
-	proc.addListener('error', reject);
-	proc.addListener('close', (exitCode) => resolve({
-		exitCode,
-		stdout: stdout().toString('utf-8'),
-		stderr: stderr().toString('utf-8'),
-	}));
-});
+const invoke = (exec, args, opts = {}) =>
+	new Promise((resolve, reject) => {
+		const proc = spawn(exec, args, {
+			...opts,
+			stdio: ['ignore', 'pipe', 'pipe'],
+		});
+		const stdout = addDataListener(proc.stdout);
+		const stderr = addDataListener(proc.stderr);
+		proc.addListener('error', reject);
+		proc.addListener('close', (exitCode) =>
+			resolve({
+				exitCode,
+				stdout: stdout().toString('utf-8'),
+				stderr: stderr().toString('utf-8'),
+			}),
+		);
+	});
 
-const canExec = (path) => access(path, constants.X_OK).then(() => true, () => false);
+const canExec = (path) =>
+	access(path, constants.X_OK).then(
+		() => true,
+		() => false,
+	);
 
 async function which(exec) {
 	const { exitCode, stdout } = await invoke('which', [exec]);
@@ -270,7 +313,7 @@ async function findExecutable(options) {
 		if (!path.includes('/') && !path.includes('\\')) {
 			path = await which(path);
 		}
-		if (path && await canExec(path)) {
+		if (path && (await canExec(path))) {
 			return path;
 		}
 	}
@@ -291,7 +334,7 @@ function removeTempDir(path) {
 	return rm(path, { maxRetries: 2, recursive: true });
 }
 
-const IS_ROOT = (platform === 'linux' && getuid() === 0);
+const IS_ROOT = platform === 'linux' && getuid() === 0;
 
 const CHROME_ARGS = [
 	// See https://github.com/GoogleChrome/chrome-launcher/blob/main/docs/chrome-flags-for-tools.md
@@ -336,7 +379,10 @@ const FIREFOX_PREFS = [
 async function launchChrome(url, opts) {
 	const executable = await findExecutable([
 		{ path: env.CHROME_PATH },
-		{ ifPlatform: 'darwin', path: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' },
+		{
+			ifPlatform: 'darwin',
+			path: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+		},
 		{ path: 'google-chrome-stable' },
 		{ path: 'google-chrome' },
 		{ path: 'chromium-browser' },
@@ -346,23 +392,31 @@ async function launchChrome(url, opts) {
 		throw new Error('Chrome / Chromium executable not found');
 	}
 	const extraArgs = [];
-	if (IS_ROOT) { // required to prevent "Running as root without --no-sandbox is not supported"
+	if (IS_ROOT) {
+		// required to prevent "Running as root without --no-sandbox is not supported"
 		extraArgs.push('--no-sandbox', '--disable-setuid-sandbox');
 	}
-	const proc = spawn(executable, [
-		...CHROME_ARGS,
-		...extraArgs,
-		'--headless', // headless=new causes "failed to create [...]/SingletonLock: File exists"
-		'--remote-debugging-port=0', // required to avoid immediate termination, but not actually used
-		url,
-	], opts);
+	const proc = spawn(
+		executable,
+		[
+			...CHROME_ARGS,
+			...extraArgs,
+			'--headless', // headless=new causes "failed to create [...]/SingletonLock: File exists"
+			'--remote-debugging-port=0', // required to avoid immediate termination, but not actually used
+			url,
+		],
+		opts,
+	);
 	return { proc };
 }
 
 async function launchFirefox(url, opts) {
 	const executable = await findExecutable([
 		{ path: env.FIREFOX_PATH },
-		{ ifPlatform: 'darwin', path: '/Applications/Firefox.app/Contents/MacOS/firefox' },
+		{
+			ifPlatform: 'darwin',
+			path: '/Applications/Firefox.app/Contents/MacOS/firefox',
+		},
 		{ path: 'firefox' },
 		{ path: 'iceweasel' },
 	]);
@@ -373,14 +427,18 @@ async function launchFirefox(url, opts) {
 	const profileDir = await makeTempDir();
 	await writeFile(join(profileDir, 'prefs.js'), FIREFOX_PREFS);
 
-	const proc = spawn(executable, [
-		'--profile',
-		profileDir,
-		'--headless',
-		'--no-remote',
-		'--new-instance',
-		url,
-	], { ...opts, env: { ...env, MOZ_DISABLE_AUTO_SAFE_MODE: 'true' } });
+	const proc = spawn(
+		executable,
+		[
+			'--profile',
+			profileDir,
+			'--headless',
+			'--no-remote',
+			'--new-instance',
+			url,
+		],
+		{ ...opts, env: { ...env, MOZ_DISABLE_AUTO_SAFE_MODE: 'true' } },
+	);
 	return {
 		proc,
 		teardown: () => removeTempDir(profileDir),
@@ -397,12 +455,12 @@ class EventListener {
 	}
 
 	getUniqueID() {
-		return (this.nextID++);
+		return this.nextID++;
 	}
 
 	hasQueuedEvents(id) {
 		const normID = String(id);
-		return this.eventQueue.some((e) => (e.id === normID));
+		return this.eventQueue.some((e) => e.id === normID);
 	}
 
 	addListener(id, fn) {
@@ -433,7 +491,9 @@ class EventListener {
 		if (!this.eventQueue.length) {
 			return 'none';
 		}
-		return this.eventQueue.map(({ id, events }) => `'${id}' (${events.length})`).join(', ');
+		return this.eventQueue
+			.map(({ id, events }) => `'${id}' (${events.length})`)
+			.join(', ');
 	}
 }
 
@@ -476,7 +536,7 @@ class Server {
 					}
 					this.postListener(JSON.parse(Buffer.concat(all).toString('utf-8')));
 					res.setHeader('Content-Type', this.getContentType('json'));
-					res.end(JSON.stringify({'result': 'ok'}));
+					res.end(JSON.stringify({ result: 'ok' }));
 				} else {
 					res.setHeader('Content-Type', this.getContentType('html'));
 					res.end(this.index);
@@ -500,7 +560,9 @@ class Server {
 				message = e.message;
 			}
 			if (!this.ignore404.includes(url)) {
-				console.warn(`Error while serving ${url} - returning ${status} ${message}`);
+				console.warn(
+					`Error while serving ${url} - returning ${status} ${message}`,
+				);
 			}
 			res.statusCode = status;
 			res.setHeader('Content-Type', this.getContentType('txt'));
@@ -539,7 +601,9 @@ class Server {
 		const addr = this.server.address();
 		if (typeof addr !== 'object') {
 			await this.close();
-			throw new Exception(`Server.address unexpectedly returned ${addr}; aborting`);
+			throw new Exception(
+				`Server.address unexpectedly returned ${addr}; aborting`,
+			);
 		}
 		this.address = addr;
 	}
@@ -562,7 +626,10 @@ Server.directory = (base, dir, preprocessor) => async (server, url, res) => {
 	if (!path.startsWith(dir)) {
 		throw new HttpError(400, 'Invalid resource path');
 	}
-	const fullPath = await (preprocessor ?? fileLoader).resolve(path, dir + '/index.htm');
+	const fullPath = await (preprocessor ?? fileLoader).resolve(
+		path,
+		dir + '/index.htm',
+	);
 	if (!fullPath) {
 		throw new HttpError(404, `Not Found: ${dir + '/index.htm'} from ${path}`);
 	}
@@ -577,7 +644,10 @@ Server.directory = (base, dir, preprocessor) => async (server, url, res) => {
 
 const fileLoader = {
 	resolve: (path) => path,
-	load: async (path) => ({ path, content: await readFile(path).catch(() => null) }),
+	load: async (path) => ({
+		path,
+		content: await readFile(path).catch(() => null),
+	}),
 };
 
 class HttpError extends Error {
@@ -599,7 +669,9 @@ class ImportMap {
 
 	async buildImportMap() {
 		if (this.importMap === null) {
-			this.importMap = await buildNodeModulesImportMap(scanNodeModules(this.basePath, '/'));
+			this.importMap = await buildNodeModulesImportMap(
+				scanNodeModules(this.basePath, '/'),
+			);
 		}
 		return this.importMap;
 	}
@@ -618,7 +690,9 @@ class ImportMap {
 
 async function loadPackage(base) {
 	try {
-		return JSON.parse(await readFile(join(base, 'package.json'), { encoding: 'utf-8' }));
+		return JSON.parse(
+			await readFile(join(base, 'package.json'), { encoding: 'utf-8' }),
+		);
 	} catch (ignore) {
 		return {};
 	}
@@ -627,7 +701,8 @@ async function loadPackage(base) {
 async function resolveInPackage(base, path) {
 	let suffix = path;
 	const pkg = await loadPackage(base);
-	if (!path.length) { // TODO: non-default paths
+	if (!path.length) {
+		// TODO: non-default paths
 		suffix = [pkg['module'] ?? pkg['main'] ?? 'index.js'];
 	}
 	return join(base, ...suffix);
@@ -635,7 +710,9 @@ async function resolveInPackage(base, path) {
 
 async function* scanNodeModules(dir, scope) {
 	const nodeModules = join(dir, 'node_modules');
-	const entries = await readdir(nodeModules, { withFileTypes: true }).catch(() => null);
+	const entries = await readdir(nodeModules, { withFileTypes: true }).catch(
+		() => null,
+	);
 	if (!entries) {
 		return;
 	}
@@ -689,15 +766,18 @@ const handleMappedImport = (importMap) => async (server, url, res) => {
 };
 
 class HttpServerRunner extends ExternalRunner {
-	constructor({
-		port,
-		host,
-		preprocessor,
-		parallelDiscovery,
-		parallelSuites,
-		orderingRandomSeed,
-		importMap,
-	}, paths) {
+	constructor(
+		{
+			port,
+			host,
+			preprocessor,
+			parallelDiscovery,
+			parallelSuites,
+			orderingRandomSeed,
+			importMap,
+		},
+		paths,
+	) {
 		super({
 			initialConnectTimeout: 30_000,
 			pingTimeout: 2_000,
@@ -705,7 +785,12 @@ class HttpServerRunner extends ExternalRunner {
 		this.port = port;
 		this.host = host;
 		this.preprocessor = preprocessor;
-		this.browserConfig = { parallelDiscovery, parallelSuites, orderingRandomSeed, importMap };
+		this.browserConfig = {
+			parallelDiscovery,
+			parallelSuites,
+			orderingRandomSeed,
+			importMap,
+		};
 		this.paths = paths;
 		this.browserID = null;
 	}
@@ -720,13 +805,24 @@ class HttpServerRunner extends ExternalRunner {
 		const selfPath = dirname(await realpath(process$1.argv[1]));
 		const basePath = process$1.cwd();
 
-		const importMap = this.browserConfig.importMap ? new ImportMap(basePath) : null;
-		const index = await buildIndex(this.browserConfig, this.paths, basePath, importMap);
-		const server = new Server(index, sharedState[HttpServerRunner.POST_LISTENER].handle, [
-			Server.directory('/.lean-test/', resolve(selfPath, '..')),
-			importMap && handleMappedImport(importMap),
-			Server.directory('/', basePath, this.preprocessor),
-		]);
+		const importMap = this.browserConfig.importMap
+			? new ImportMap(basePath)
+			: null;
+		const index = await buildIndex(
+			this.browserConfig,
+			this.paths,
+			basePath,
+			importMap,
+		);
+		const server = new Server(
+			index,
+			sharedState[HttpServerRunner.POST_LISTENER].handle,
+			[
+				Server.directory('/.lean-test/', resolve(selfPath, '..')),
+				importMap && handleMappedImport(importMap),
+				Server.directory('/', basePath, this.preprocessor),
+			],
+		);
 		await server.listen(Number(this.port), this.host);
 		sharedState[HttpServerRunner.SERVER] = server;
 	}
@@ -789,15 +885,17 @@ run(id, /*CONFIG*/, /*SUITES*/).then(() => window.close());
 async function buildIndex(config, paths, basePath, importMap) {
 	const suites = [];
 	for await (const path of paths) {
-		suites.push({ path: '/' + relative(basePath, path.path), relative: path.relative });
+		suites.push({
+			path: '/' + relative(basePath, path.path),
+			relative: path.relative,
+		});
 	}
-	const importMapScript = importMap ? (
-		'<script type="importmap">' +
-		JSON.stringify(await importMap.buildImportMap()) +
-		'</script>'
-	) : '';
-	return INDEX
-		.replace('/*IMPORT_MAP*/', importMapScript)
+	const importMapScript = importMap
+		? '<script type="importmap">' +
+			JSON.stringify(await importMap.buildImportMap()) +
+			'</script>'
+		: '';
+	return INDEX.replace('/*IMPORT_MAP*/', importMapScript)
 		.replace('/*CONFIG*/', JSON.stringify(config))
 		.replace('/*SUITES*/', JSON.stringify(suites));
 }
@@ -822,13 +920,17 @@ class BrowserProcessRunner extends HttpServerRunner {
 	}
 
 	registerEventListener(listener, sharedState) {
-		this.launched.proc.once('error', (error) => listener({ type: 'runner-internal-error', error }));
+		this.launched.proc.once('error', (error) =>
+			listener({ type: 'runner-internal-error', error }),
+		);
 		super.registerEventListener(listener, sharedState);
 	}
 
 	async invoke(listener, sharedState) {
 		const { browserID, url } = this.makeUniqueTarget(sharedState);
-		this.launched = await this.browserLauncher(url, { stdio: ['ignore', 'pipe', 'pipe'] });
+		this.launched = await this.browserLauncher(url, {
+			stdio: ['ignore', 'pipe', 'pipe'],
+		});
 		this.stdout = addDataListener(this.launched.proc.stdout);
 		this.stderr = addDataListener(this.launched.proc.stderr);
 		this.setBrowserID(browserID);
@@ -854,7 +956,7 @@ class WebdriverSession {
 			`Session ${this.sessionBase} initialised with:`,
 			`${JSON.stringify(this.initRequest, null, 2)}`,
 			'response:',
-			`${JSON.stringify(this.initResponse, null, 2)}`
+			`${JSON.stringify(this.initResponse, null, 2)}`,
 		].join('\n');
 	}
 
@@ -875,7 +977,7 @@ class WebdriverSession {
 	}
 }
 
-WebdriverSession.create = function(host, browser, requiredCapabilities = {}) {
+WebdriverSession.create = function (host, browser, requiredCapabilities = {}) {
 	const request = {
 		capabilities: {
 			alwaysMatch: {
@@ -884,15 +986,26 @@ WebdriverSession.create = function(host, browser, requiredCapabilities = {}) {
 			},
 		},
 	};
-	const promise = withRetry(() => sendJSON('POST', `${host}/session`, request), 20000);
+	const promise = withRetry(
+		() => sendJSON('POST', `${host}/session`, request),
+		20000,
+	);
 	const fin = new ExitHook(async () => {
 		const response = await promise;
-		const session = new WebdriverSession(`${host}/session/${encodeURIComponent(response.value.sessionId)}`, request, response);
+		const session = new WebdriverSession(
+			`${host}/session/${encodeURIComponent(response.value.sessionId)}`,
+			request,
+			response,
+		);
 		return session.close();
 	});
 	return fin.ifExitDuring(async () => {
 		const response = await promise;
-		return new WebdriverSession(`${host}/session/${encodeURIComponent(response.value.sessionId)}`, request, response);
+		return new WebdriverSession(
+			`${host}/session/${encodeURIComponent(response.value.sessionId)}`,
+			request,
+			response,
+		);
 	});
 };
 
@@ -917,7 +1030,15 @@ function sendJSON(method, path, data) {
 	const errorInfo = `WebDriver error for ${method} ${path}: `;
 	const content = new TextEncoder().encode(JSON.stringify(data));
 	return new Promise((resolve, reject) => {
-		let timeout = setTimeout(() => reject(new Error(`${errorInfo}timeout waiting for session (does this runner support the requested browser?)`)), 30000);
+		let timeout = setTimeout(
+			() =>
+				reject(
+					new Error(
+						`${errorInfo}timeout waiting for session (does this runner support the requested browser?)`,
+					),
+				),
+			30000,
+		);
 		const url = new URL(path.includes('://') ? path : `http://${path}`);
 		const opts = {
 			hostname: url.hostname,
@@ -931,13 +1052,23 @@ function sendJSON(method, path, data) {
 		};
 		const req = request(opts, (res) => {
 			clearTimeout(timeout);
-			timeout = setTimeout(() => reject(new Error(`${errorInfo}timeout receiving data (got HTTP ${res.statusCode})`)), 10000);
+			timeout = setTimeout(
+				() =>
+					reject(
+						new Error(
+							`${errorInfo}timeout receiving data (got HTTP ${res.statusCode})`,
+						),
+					),
+				10000,
+			);
 			const resultData = addDataListener(res);
 			res.addListener('close', () => {
 				clearTimeout(timeout);
 				const dataString = resultData().toString('utf-8');
 				if (res.statusCode >= 300) {
-					const error = new Error(`${errorInfo}${res.statusCode}\n\n${dataString}`);
+					const error = new Error(
+						`${errorInfo}${res.statusCode}\n\n${dataString}`,
+					);
 					try {
 						error.json = JSON.parse(dataString);
 					} catch (ignore) {}
@@ -998,7 +1129,11 @@ class WebdriverRunner extends HttpServerRunner {
 		const server = sharedState[HttpServerRunner.SERVER];
 		const postListener = sharedState[HttpServerRunner.POST_LISTENER];
 
-		const { url, browserID } = await makeConnection(this.session, server, postListener);
+		const { url, browserID } = await makeConnection(
+			this.session,
+			server,
+			postListener,
+		);
 		this.hostURL = url;
 		this.setBrowserID(browserID);
 		return super.invoke(listener, sharedState);
@@ -1013,7 +1148,8 @@ class WebdriverRunner extends HttpServerRunner {
 			const title = await this.session.getTitle();
 			return `URL='${url}' Title='${title}'\n${this.session.debug()}`;
 		} catch (e) {
-			const cause = typeof e === 'object' ? (e.json?.value?.message ?? e.message ?? e) : e;
+			const cause =
+				typeof e === 'object' ? (e.json?.value?.message ?? e.message ?? e) : e;
 			return `Failed to communicate with browser session: ${cause}\n${this.session.debug()}`;
 		}
 	}
@@ -1032,16 +1168,18 @@ class WebdriverRunner extends HttpServerRunner {
 
 async function makeConnection(session, server, postListener) {
 	// try various URLs until something works, because we don't know what environment we're in
-	const urls = [...new Set([
-		server.baseurl(process$1.env.WEBDRIVER_TESTRUNNER_HOST),
-		server.baseurl(),
-		server.baseurl('host.docker.internal'), // See https://stackoverflow.com/a/43541732/1180785
-		server.baseurl(hostname()),
-		...Object.values(networkInterfaces())
-			.flatMap((i) => i)
-			.filter((i) => !i.internal)
-			.map((i) => server.baseurl(i)),
-	])];
+	const urls = [
+		...new Set([
+			server.baseurl(process$1.env.WEBDRIVER_TESTRUNNER_HOST),
+			server.baseurl(),
+			server.baseurl('host.docker.internal'), // See https://stackoverflow.com/a/43541732/1180785
+			server.baseurl(hostname()),
+			...Object.values(networkInterfaces())
+				.flatMap((i) => i)
+				.filter((i) => !i.internal)
+				.map((i) => server.baseurl(i)),
+		]),
+	];
 
 	let lastError = null;
 	for (const url of urls) {
@@ -1065,16 +1203,20 @@ async function makeConnection(session, server, postListener) {
 		}
 	}
 	if (!lastError) {
-		throw new Error(`unable to access test server\n(tried ${urls.join(', ')})`)
+		throw new Error(`unable to access test server\n(tried ${urls.join(', ')})`);
 	}
-	throw new Error(`error accessing test server ${lastError}\n(tried ${urls.join(', ')})`);
+	throw new Error(
+		`error accessing test server ${lastError}\n(tried ${urls.join(', ')})`,
+	);
 }
 
-const manualBrowserRunner = (config, paths) => new HttpServerRunner(config, paths);
+const manualBrowserRunner = (config, paths) =>
+	new HttpServerRunner(config, paths);
 
 const autoBrowserRunner = (browser, launcher) => (config, paths) => {
 	const webdriverEnv = browser.toUpperCase().replace(/[^A-Z]+/g, '_');
-	const webdriverHost = env[`WEBDRIVER_HOST_${webdriverEnv}`] || env.WEBDRIVER_HOST || null;
+	const webdriverHost =
+		env[`WEBDRIVER_HOST_${webdriverEnv}`] || env.WEBDRIVER_HOST || null;
 	if (webdriverHost) {
 		const capabilities = {};
 		if (env.WEBDRIVER_DISABLE_SHM === 'true') {
@@ -1082,14 +1224,23 @@ const autoBrowserRunner = (browser, launcher) => (config, paths) => {
 				args: ['--disable-dev-shm-usage'],
 			};
 		}
-		return new WebdriverRunner(config, paths, browser, webdriverHost, capabilities);
+		return new WebdriverRunner(
+			config,
+			paths,
+			browser,
+			webdriverHost,
+			capabilities,
+		);
 	} else {
 		return new BrowserProcessRunner(config, paths, launcher);
 	}
 };
 
 class ProcessRunner extends ExternalRunner {
-	constructor({ preprocessorRaw, parallelDiscovery, parallelSuites, orderingRandomSeed }, paths) {
+	constructor(
+		{ preprocessorRaw, parallelDiscovery, parallelSuites, orderingRandomSeed },
+		paths,
+	) {
 		super({
 			// NodeJS loader runs in same thread as execution,
 			// so long compilation times will prevent pings
@@ -1132,14 +1283,22 @@ class ProcessRunner extends ExternalRunner {
 	registerEventListener(listener) {
 		this.launched.stdio[3].addListener(
 			'data',
-			splitStream(0x1E, (item) => listener(JSON.parse(item.toString('utf-8')))),
+			splitStream(0x1e, (item) => listener(JSON.parse(item.toString('utf-8')))),
 		);
-		this.launched.once('error', (error) => listener({ type: 'runner-internal-error', error }));
+		this.launched.once('error', (error) =>
+			listener({ type: 'runner-internal-error', error }),
+		);
 		this.launched.once('exit', (code, signal) => {
 			if (signal) {
-				listener({ type: 'runner-disconnect', message: `killed by signal ${signal}` });
+				listener({
+					type: 'runner-disconnect',
+					message: `killed by signal ${signal}`,
+				});
 			} else if (code !== 0) {
-				listener({ type: 'runner-internal-error', error: `exited with code ${code}` });
+				listener({
+					type: 'runner-internal-error',
+					error: `exited with code ${code}`,
+				});
 			}
 		});
 	}
@@ -1187,7 +1346,9 @@ async function nodeRunner(config, paths) {
 		.useParallelSuites(config.parallelSuites);
 
 	if (config.orderingRandomSeed) {
-		builder.useExecutionOrderer(new orderers.SeededRandom(config.orderingRandomSeed));
+		builder.useExecutionOrderer(
+			new orderers.SeededRandom(config.orderingRandomSeed),
+		);
 	}
 
 	for await (const { path, relative } of paths) {
@@ -1204,25 +1365,83 @@ async function nodeRunner(config, paths) {
 const targets = new Map([
 	['node', { name: 'Node.js', make: nodeRunner }],
 	['url', { name: 'Custom Browser', make: manualBrowserRunner }],
-	['chrome', { name: 'Google Chrome', make: autoBrowserRunner('chrome', launchChrome) }],
-	['firefox', { name: 'Mozilla Firefox', make: autoBrowserRunner('firefox', launchFirefox) }],
+	[
+		'chrome',
+		{ name: 'Google Chrome', make: autoBrowserRunner('chrome', launchChrome) },
+	],
+	[
+		'firefox',
+		{
+			name: 'Mozilla Firefox',
+			make: autoBrowserRunner('firefox', launchFirefox),
+		},
+	],
 ]);
 
 const preprocs = new Map([['none', null], ...Object.entries(preprocessors)]);
 
 const argparse = new ArgumentParser({
-	parallelDiscovery: { names: ['parallel-discovery', 'P'], env: 'PARALLEL_DISCOVERY', type: 'boolean', default: false },
-	parallelSuites: { names: ['parallel-suites', 'parallel', 'p'], env: 'PARALLEL_SUITES', type: 'boolean', default: false },
-	orderingRandomSeed: { names: ['random-seed', 's'], env: 'RANDOM_SEED', type: 'string', default: '' },
-	pathsInclude: { names: ['include', 'i'], type: 'set', default: ['**/*.{spec|test}.*'] },
+	parallelDiscovery: {
+		names: ['parallel-discovery', 'P'],
+		env: 'PARALLEL_DISCOVERY',
+		type: 'boolean',
+		default: false,
+	},
+	parallelSuites: {
+		names: ['parallel-suites', 'parallel', 'p'],
+		env: 'PARALLEL_SUITES',
+		type: 'boolean',
+		default: false,
+	},
+	orderingRandomSeed: {
+		names: ['random-seed', 's'],
+		env: 'RANDOM_SEED',
+		type: 'string',
+		default: '',
+	},
+	pathsInclude: {
+		names: ['include', 'i'],
+		type: 'set',
+		default: ['**/*.{spec|test}.*'],
+	},
 	pathsExclude: { names: ['exclude', 'x'], type: 'set', default: [] },
-	preprocessor: { names: ['preprocess', 'c'], type: 'string', default: 'none', mapping: preprocs },
-	noDefaultExclude: { names: ['no-default-exclude'], type: 'boolean', default: false },
-	target: { names: ['target', 't'], env: 'TARGET', type: 'set', default: ['node'], mapping: targets },
-	colour: { names: ['colour', 'color'], env: 'OUTPUT_COLOUR', type: 'boolean', default: null },
-	importMap: { names: ['import-map', 'm'], env: 'IMPORT_MAP', type: 'boolean', default: false },
+	preprocessor: {
+		names: ['preprocess', 'c'],
+		type: 'string',
+		default: 'none',
+		mapping: preprocs,
+	},
+	noDefaultExclude: {
+		names: ['no-default-exclude'],
+		type: 'boolean',
+		default: false,
+	},
+	target: {
+		names: ['target', 't'],
+		env: 'TARGET',
+		type: 'set',
+		default: ['node'],
+		mapping: targets,
+	},
+	colour: {
+		names: ['colour', 'color'],
+		env: 'OUTPUT_COLOUR',
+		type: 'boolean',
+		default: null,
+	},
+	importMap: {
+		names: ['import-map', 'm'],
+		env: 'IMPORT_MAP',
+		type: 'boolean',
+		default: false,
+	},
 	port: { names: ['port'], env: 'TESTRUNNER_PORT', type: 'int', default: 0 },
-	host: { names: ['host'], env: 'TESTRUNNER_HOST', type: 'string', default: '127.0.0.1' },
+	host: {
+		names: ['host'],
+		env: 'TESTRUNNER_HOST',
+		type: 'string',
+		default: '127.0.0.1',
+	},
 	scan: { names: ['scan', null], type: 'set', default: ['.'] },
 });
 
@@ -1232,22 +1451,30 @@ try {
 	if (config.orderingRandomSeed === 'random') {
 		config.orderingRandomSeed = new orderers.SeededRandom().getSeed();
 	} else if (config.orderingRandomSeed) {
-		config.orderingRandomSeed = new orderers.SeededRandom(config.orderingRandomSeed).getSeed();
+		config.orderingRandomSeed = new orderers.SeededRandom(
+			config.orderingRandomSeed,
+		).getSeed();
 	}
 
-	const exclusion = [...config.pathsExclude, ...(config.noDefaultExclude ? [] : ['**/node_modules', '**/.*'])];
+	const exclusion = [
+		...config.pathsExclude,
+		...(config.noDefaultExclude ? [] : ['**/node_modules', '**/.*']),
+	];
 	const scanDirs = config.scan.map((path) => resolve(process$1.cwd(), path));
-	const paths = await asyncListToSync(findPathsMatching(scanDirs, config.pathsInclude, exclusion));
+	const paths = await asyncListToSync(
+		findPathsMatching(scanDirs, config.pathsInclude, exclusion),
+	);
 	try {
 		config.preprocessor = await config.preprocessor?.();
 	} catch (e) {
-		throw new Error(`Failed to configure ${config.preprocessorRaw} preprocessor for testing: ${e}`);
+		throw new Error(
+			`Failed to configure ${config.preprocessorRaw} preprocessor for testing: ${e}`,
+		);
 	}
 
-	const forceTTY = (
+	const forceTTY =
 		config.colour ??
-		(Boolean(process$1.env.CI || process$1.env.CONTINUOUS_INTEGRATION) || null)
-	);
+		(Boolean(process$1.env.CI || process$1.env.CONTINUOUS_INTEGRATION) || null);
 	const stdout = new outputs.Writer(process$1.stdout, forceTTY);
 	const stderr = new outputs.Writer(process$1.stderr, forceTTY);
 	const liveReporter = new reporters.Dots(stderr);
@@ -1268,9 +1495,15 @@ try {
 
 	if (config.orderingRandomSeed) {
 		stdout.write('');
-		stdout.write(`To re-run with the same test order: --random-seed=${stdout.bold(config.orderingRandomSeed)}`);
+		stdout.write(
+			`To re-run with the same test order: --random-seed=${stdout.bold(config.orderingRandomSeed)}`,
+		);
 		if (config.parallelSuites) {
-			stdout.write(stdout.yellow('WARNING: test order is not fully repeatable due to use of --parallel'));
+			stdout.write(
+				stdout.yellow(
+					'WARNING: test order is not fully repeatable due to use of --parallel',
+				),
+			);
 		}
 	}
 

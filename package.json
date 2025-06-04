@@ -1,33 +1,45 @@
 {
-  "name": "lean-test",
-  "version": "2.4.5",
-  "description": "a tiny, extensible test runner",
-  "bin": "./build/bin/run.mjs",
-  "main": "build/lean-test.mjs",
-  "module": "build/lean-test.mjs",
-  "types": "index.d.ts",
-  "files": [
-    "build/**/*",
-    "index.d.ts"
-  ],
-  "scripts": {
-    "test": "./src/bin/run.mjs --parallel src && rollup --config rollup.config.mjs && ./test/run-integration.mjs && ./test/run-package.sh"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/davidje13/lean-test.git"
-  },
-  "keywords": [
-    "test",
-    "unit-test"
-  ],
-  "author": "David Evans",
-  "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/davidje13/lean-test/issues"
-  },
-  "homepage": "https://github.com/davidje13/lean-test#readme",
-  "devDependencies": {
-    "rollup": "4.x"
-  }
+	"name": "lean-test",
+	"version": "3.0.0",
+	"description": "a tiny, extensible test runner",
+	"private": true,
+	"bin": "./cli.mjs",
+	"main": "index.mjs",
+	"types": "index.d.ts",
+	"exports": {
+		".": {
+			"types": "./index.d.ts",
+			"default": "./index.mjs"
+		},
+		"./matchers": {
+			"types": "./matchers.d.ts",
+			"default": "./matchers.mjs"
+		}
+	},
+	"scripts": {
+		"format": "prettier --write .",
+		"test": "./src/cli/index.mjs src && rollup --config rollup.config.mjs && ./test/run-integration.mjs && ./test/run-package.sh",
+		"dopublish": "./tools/build.sh && npm publish package.tgz"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/davidje13/lean-test.git"
+	},
+	"keywords": [
+		"test",
+		"unit-test"
+	],
+	"author": "David Evans",
+	"license": "MIT",
+	"bugs": {
+		"url": "https://github.com/davidje13/lean-test/issues"
+	},
+	"homepage": "https://github.com/davidje13/lean-test#readme",
+	"devDependencies": {
+		"@rollup/plugin-typescript": "12.x",
+		"@types/node": "22.x",
+		"prettier": "3.5.3",
+		"rollup": "4.x",
+		"typescript": "5.8.x"
+	}
 }

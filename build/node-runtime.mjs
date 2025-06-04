@@ -18,7 +18,9 @@ async function run(config, suites) {
 			.useParallelSuites(config.parallelSuites);
 
 		if (config.orderingRandomSeed) {
-			builder.useExecutionOrderer(new orderers.SeededRandom(config.orderingRandomSeed));
+			builder.useExecutionOrderer(
+				new orderers.SeededRandom(config.orderingRandomSeed),
+			);
 		}
 
 		suites.forEach(({ path, relative }) => {
@@ -42,7 +44,4 @@ async function run(config, suites) {
 	}
 }
 
-run(
-	JSON.parse(env.__LEAN_TEST_CONFIG),
-	JSON.parse(env.__LEAN_TEST_PATHS),
-);
+run(JSON.parse(env.__LEAN_TEST_CONFIG), JSON.parse(env.__LEAN_TEST_PATHS));

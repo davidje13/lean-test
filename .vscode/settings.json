@@ -1,10 +1,13 @@
 {
-  "editor.tabSize": 2,
-  "editor.insertSpaces": false,
-  "files.exclude": {
-    "build": true,
-    "node_modules": true
-  },
-  "javascript.preferences.quoteStyle": "single",
-  "typescript.preferences.quoteStyle": "single"
+	"editor.defaultFormatter": "esbenp.prettier-vscode",
+	"prettier.configPath": "./.prettierrc.json",
+	"editor.formatOnSave": true,
+	"editor.tabSize": 2,
+	"editor.insertSpaces": false,
+	"files.exclude": {
+		"build": true,
+		"node_modules": true
+	},
+	"javascript.preferences.quoteStyle": "single",
+	"typescript.preferences.quoteStyle": "single"
 }
